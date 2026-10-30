@@ -109,10 +109,11 @@ that agent in Buzz; they do not notify the external app through this connection.
 
 ## Conversations and communities
 
-- Each reaction emoji has its own capsule. Hover or focus it to see everyone
-  who reacted. Large lists scroll within the preview. With a keyboard, Tab into
-  the list to scroll it; Escape dismisses the preview. Clicking the emoji adds
-  or removes your reaction.
+- Each reaction emoji has its own capsule. Hover or focus it to see who
+  reacted. When more than three people reacted, choose **and N others** to list
+  everyone, and choose a person to open their profile. With a keyboard, Tab from
+  the emoji to **and N others**; Escape closes the list, then the preview.
+  Clicking the emoji adds or removes your reaction.
 - With **Voice Notes** enabled, use the microphone in the composer to record
   and attach a voice note. Sending requires ffmpeg on the host computer. Sent
   notes support playback and seeking; a note's duration appears once it
