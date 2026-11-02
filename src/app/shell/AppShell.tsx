@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
   type ReactNode,
   type Ref,
@@ -26,6 +27,7 @@ import { ProfileButton } from "./ProfileButton";
 import { CommunityShortcuts } from "./CommunityShortcuts";
 import { MarkAllReadShortcut } from "./MarkAllReadShortcut";
 import type { Appearance } from "../../shared/theme/service";
+import { frameScope } from "../../shared/theme/themes";
 import { PageSearch, type SearchServices } from "./PageSearch";
 import { headerPageSelection, pagePlacement, orderPages } from "./presentation";
 import { PageNavigation } from "./PageNavigation";
@@ -43,6 +45,10 @@ import { hasIntegratedWindowControls, WindowControls } from "./WindowControls";
 
 const macDesktop = isTauri() && /Mac/i.test(navigator.platform);
 const titleBarDragProps = macDesktop ? macTitleBarDragHandlers : {};
+const DARK_FRAME = {
+  "data-color-mode": "dark",
+  "data-theme-frame": "",
+} as const;
 
 export function AppShell(props: ComponentProps<typeof AppShellContent>) {
   return (
@@ -122,6 +128,10 @@ function AppShellContent({
   children: ReactNode;
 }) {
   const fillsWorkspace = workspace || selected === "settings";
+  const framed = useSyncExternalStore(appearance.subscribe, () => {
+    const { theme, mode } = appearance.snapshot();
+    return frameScope(theme, mode) === "dark";
+  });
   const [creationContainer, setCreationContainer] =
     useState<HTMLDivElement | null>(null);
   const [creationOpen, setCreationOpen] = useState(false);
@@ -207,7 +217,7 @@ function AppShellContent({
       )
     ) : (
       <div className="shell-sidebar-default">
-        <Panel as="aside" aria-label="Page sidebar">
+        <Panel as="aside" aria-label="Page sidebar" data-sidebar="">
           <div className="p-2">{pageNavigation}</div>
         </Panel>
       </div>
@@ -355,7 +365,8 @@ function AppShellContent({
         data-compact-pages={compactPages || undefined}
         data-tauri-drag-region={macDesktop ? undefined : true}
         {...titleBarDragProps}
-        className={`shell-header ${macDesktop ? "shell-header-mac" : ""}`}
+        {...(framed ? DARK_FRAME : undefined)}
+        className={`shell-header ${macDesktop ? "shell-header-mac" : ""} ${framed ? "dark" : ""}`}
       >
         <div
           ref={historyRef}
@@ -530,7 +541,8 @@ function AppShellContent({
             <div className="shell-content">
               <div
                 id="shell-navigation"
-                className="shell-navigation"
+                {...(framed ? DARK_FRAME : undefined)}
+                className={`shell-navigation ${framed ? "dark" : ""}`}
                 data-sidebar-collapsible={
                   (collapsibleSidebar && !narrow) || undefined
                 }
