@@ -419,10 +419,7 @@ confirmation.
   when Attention is off; turning Attention on does not grant new access. An
   event watch hears the channels its agent may read, including public channels
   the agent has not joined. A watch's delivery channel must be one the agent is
-  a member of; the relay decides where the agent may post. On macOS and Linux,
-  watched commands stop when their Buzz process exits. During a handoff between
-  Buzz builds, the new copy waits for the previous command to stop, then
-  continues the watch.
+  a member of; the relay decides where the agent may post. Agents cannot enable a watch for an unreadable listening channel or a delivery channel without confirmed membership. On macOS and Linux, watched commands stop when their Buzz process exits. During a handoff between Buzz builds, the new copy waits for the previous command to stop, then continues the watch.
 - **Solo workers**: where a plugin offers it, an owner can authorize one agent to
   start, message, read, stop, and archive the owner's workers in Solo chats. The
   agent asks the owner's Buzz in a private channel with only the two of them;
