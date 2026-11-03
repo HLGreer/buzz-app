@@ -555,5 +555,6 @@ On desktop, **Connect [agent name]** may appear inside a DM with an old agent yo
 In **Workflows → Owner → All channel workflows**, open the workflow’s actions
 menu and choose **Delete workflow**. You can delete workflows you authored or
 workflows authored by an agent whose ownership Buzz has verified belongs to you.
+This also works when your channel role is Guest.
 Confirm the deletion; pending or uncertain results remain in the workflow notices.
 Owning the agent does not grant permission to edit or run its workflow.
