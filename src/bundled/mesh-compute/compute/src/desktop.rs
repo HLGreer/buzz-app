@@ -10,7 +10,6 @@ mod inference;
 mod preferences;
 mod publisher;
 pub mod sharing;
-pub mod usb_display;
 pub mod widget;
 
 /// Quit must finish even when the embedded node does not acknowledge Stop.
@@ -37,6 +36,11 @@ impl MeshHost {
             prefs.initialize(path);
         }
     }
+    /// Whether the embedded Mesh runtime (and its native libraries) ever started.
+    pub fn runtime_started(&self) -> bool {
+        self.lifecycle.launched()
+    }
+
     pub fn shutdown(&self) {
         if let Ok(mut task) = self.coordinator.lock() {
             if let Some(task) = task.take() {

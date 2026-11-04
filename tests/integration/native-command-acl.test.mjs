@@ -20,9 +20,6 @@ const widget = JSON.parse(read("src-tauri/capabilities/compute-widget.json"));
 const huddle = JSON.parse(read("src-tauri/capabilities/huddle.json"));
 const windowScoped = new Map([
   ["mesh_compute_widget_status", widget],
-  ["mesh_compute_widget_usb_connect", widget],
-  ["mesh_compute_widget_usb_frame", widget],
-  ["mesh_compute_widget_usb_disconnect", widget],
   ["huddle_window_watch", huddle],
   ["huddle_window_action", huddle],
 ]);
@@ -98,8 +95,8 @@ test("every declared app command has a main-window permission, including host st
 // calls must not be swallowed by the general handler.
 test("Mesh prefix dispatch includes every declared Mesh command", () => {
   const source = read("src-tauri/src/lib.rs");
-  const handler = source.match(
-    /let mesh_commands:[\s\S]*?tauri::generate_handler!\[([\s\S]*?)\];/,
+  const handler = read("src-tauri/src/mesh_compute.rs").match(
+    /fn commands\(\)[\s\S]*?tauri::generate_handler!\[([\s\S]*?)\]/,
   )?.[1];
   assert.ok(handler, "Mesh native handler must exist");
   const registered = new Set(handler.match(/mesh_compute_[a-z_]+/g));
@@ -109,6 +106,6 @@ test("Mesh prefix dispatch includes every declared Mesh command", () => {
   assert.deepEqual(registered, declared);
   assert.match(
     source,
-    /if request\.message\.command\(\)\.starts_with\("mesh_compute_"\)/,
+    /let mesh_commands = mesh_compute::commands\(\);[\s\S]*?if request\.message\.command\(\)\.starts_with\("mesh_compute_"\)/,
   );
 });

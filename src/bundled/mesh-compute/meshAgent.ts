@@ -11,6 +11,7 @@ import type {
 import type { EventData } from "../../features/relay/events";
 import { threadReference } from "../../features/relay/thread-reference";
 import type { Memories } from "../../buzz-mcp/client";
+import { watchPrompt } from "../../features/agent-harness/attention-prompt";
 import { coreMemorySection } from "../../features/agent-harness/core-memory";
 import { MESH_AGENT_PRESETS } from "./meshAgentPresets";
 
@@ -130,6 +131,32 @@ export function turnText(
     `Latest message from [${label(event)}]:`,
     event.content,
   ].join("\n");
+}
+
+/** Agent mode's request. A watch turn uses the shared watch framing, so its
+ * Interest instructions apply and the watched message stays data, last. */
+export function agentPrompt(
+  event: EventData,
+  earlier: readonly EventData[],
+  trigger?: Delivery["trigger"],
+): string {
+  if (trigger?.type !== "watch") return turnText(event, earlier);
+  const lines = earlier.map((item) => `[${label(item)}] ${item.content}`);
+  return [
+    ...(lines.length
+      ? [["Earlier in this conversation:", ...lines].join("\n")]
+      : []),
+    watchPrompt({
+      id: trigger.slug.replace(/^watch\//, ""),
+      interest: trigger.watch.interest_id,
+      ...(trigger.interest
+        ? { instructions: trigger.interest.instructions }
+        : {}),
+      conversation: true,
+      event,
+      ...(trigger.classifier ? { classifier: trigger.classifier } : {}),
+    }),
+  ].join("\n\n");
 }
 
 /** goose needs an absolute working directory; `~/…` is resolved natively by
@@ -371,7 +398,7 @@ export class MeshAgentRuntime {
           context: { channel: channelId, ...(dm ? {} : { root }) },
           sessionKey: `${agent.pubkey}\n${config.mode}\n${conversation}`,
           system: instructions(config, memory),
-          prompt: turnText(event, earlier),
+          prompt: agentPrompt(event, earlier, delivery.trigger),
         });
         // A Buzz tool already answered where people see it.
         if (result.answered) return;

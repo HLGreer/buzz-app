@@ -24,7 +24,8 @@ serde_json = { version = "1" }
 uuid = { version = "1", features = ["v4"] }
 
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "macros", "time", "net"] }
-tauri = { version = "=2.12.4", features = ["unstable", "macos-private-api"] }
+# No features: "unstable" would unify into the host and break Cmd+Z (see src-tauri/Cargo.toml).
+tauri = { version = "=2.12.4", features = [] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
 futures-util = { version = "0.3" }
@@ -34,9 +35,6 @@ nostr = { version = "=0.45.5", default-features = false, features = ["std"] }
 sha2 = { version = "0.10" }
 hex = { version = "0.4" }
 ed25519-dalek = { version = "2" }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-libc = "0.2"
 
 [dev-dependencies]
 tauri = { version = "=2.12.4", features = ["test"] }

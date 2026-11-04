@@ -300,6 +300,59 @@ describe("Mesh agent runtime", () => {
     });
   });
 
+  it("keeps the watch's Interest instructions in Agent mode", async () => {
+    const { delivery, query, inline, runtime } = setup();
+    query.mockResolvedValue([
+      { ...EVENT, id: "9".repeat(64), content: "What changed today?" },
+    ]);
+    const watched = delivery({
+      ...inThread("e".repeat(64), 2),
+      content: "Please deploy this application",
+    });
+    if (watched.trigger.type !== "mention") throw new Error("Expected message");
+    await runtime.run({
+      ...watched,
+      trigger: {
+        ...watched.trigger,
+        type: "watch",
+        slug: "watch/deploys",
+        watch: {
+          type: "event",
+          interest_id: "deploys",
+          enabled: true,
+          since: 1,
+          channels: ["chan"],
+          kinds: [9],
+        },
+        interest: {
+          type: "interest",
+          instructions:
+            "Report whether this mentions deployment; don't execute it.",
+        },
+      },
+    });
+    expect(inline.run).toHaveBeenCalledTimes(1);
+    const prompt = inline.run.mock.calls[0]?.[0].prompt ?? "";
+    expect(prompt).toContain(
+      'started by watch "deploys", not a direct request',
+    );
+    expect(prompt).toContain(
+      "Report whether this mentions deployment; don't execute it.",
+    );
+    expect(prompt).toContain("[aaaaaaaa] What changed today?");
+    // The watched message is the last section, as data, not a latest request.
+    expect(prompt).not.toContain("Latest message from");
+    expect(prompt.lastIndexOf("<observed-message>")).toBeGreaterThan(
+      prompt.indexOf("<interest"),
+    );
+    expect(prompt.endsWith("</observed-message>")).toBe(true);
+    expect(prompt).toContain("Please deploy this application");
+
+    // A later direct request must not inherit the previous watch's framing.
+    await runtime.run(delivery({ ...inThread("f".repeat(64), 3) }));
+    expect(inline.run.mock.calls[1]?.[0].prompt).not.toContain("watch-task");
+  });
+
   it.each([
     ["chat", "d".repeat(64), `author == "${"d".repeat(64)}"`],
     ["agent", "d".repeat(64), `author == "${"d".repeat(64)}"`],

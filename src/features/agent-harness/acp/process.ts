@@ -11,7 +11,7 @@ import type {
   AcpHooks,
   Choice,
   McpServer,
-  PlatformExtension,
+  PlatformTools,
   ServeMcp,
   Spawn,
   ToolServer,
@@ -224,7 +224,7 @@ export class AcpProcess {
       tools?: ToolServer;
       choice?: () => Choice;
       /** Built-ins beside the Buzz tools, for harnesses that take them. */
-      platform?: readonly PlatformExtension[];
+      platform?: PlatformTools;
       /** Replaces the harness's own base prompt with `systemPrompt` instead
        * of appending it, for small models that a long prompt throws off. */
       replacePrompt?: boolean;

@@ -2222,8 +2222,9 @@ fn media_type(value: Option<&str>) -> (String, bool) {
 #[cfg(test)]
 mod tests;
 
-/// Mesh uses the same bounded, authenticated HTTP client as other native relay reads.
-pub(crate) async fn mesh_read(
+/// A native plugin's relay read (NIP-11, or one filter), on the same bounded,
+/// authenticated HTTP client as other native relay reads.
+pub(crate) async fn plugin_read(
     host: &IdentityHost,
     community: &str,
     filter: Option<serde_json::Value>,
@@ -2246,13 +2247,14 @@ pub(crate) async fn mesh_read(
     )
     .await?;
     if !(200..300).contains(&response.status) {
-        return Err("Mesh relay read failed".into());
+        return Err("Relay read failed".into());
     }
-    serde_json::from_str(&response.body).map_err(|_| "Invalid Mesh relay response".into())
+    serde_json::from_str(&response.body).map_err(|_| "Invalid relay response".into())
 }
 
-/// Native Mesh coordinator only; never exposes arbitrary signing/publication to plugins.
-pub(crate) async fn mesh_publish(
+/// Publishes an event the signed-in identity already signed, for a native
+/// plugin's host adapter; it never signs or publishes arbitrary events.
+pub(crate) async fn plugin_publish(
     host: &IdentityHost,
     community: &str,
     event: serde_json::Value,
@@ -2270,12 +2272,12 @@ pub(crate) async fn mesh_publish(
     )
     .await?;
     let receipt: serde_json::Value =
-        serde_json::from_str(&response.body).map_err(|_| "Invalid Mesh publication receipt")?;
+        serde_json::from_str(&response.body).map_err(|_| "Invalid publication receipt")?;
     if !(200..300).contains(&response.status)
         || receipt["accepted"] != true
         || receipt["event_id"] != event["id"]
     {
-        return Err("Mesh status publication was not accepted".into());
+        return Err("Relay did not accept the publication".into());
     }
     Ok(())
 }

@@ -1635,7 +1635,7 @@ const settingsToggle = document.getElementById("settings-toggle");
 function showSettings(open) {
   settings.hidden = !open;
   settingsToggle.setAttribute("aria-expanded", String(open));
-  if (open) document.getElementById("usb-connect").focus();
+  if (open) document.getElementById("close").focus();
   else settingsToggle.focus();
 }
 settingsToggle.addEventListener("click", () => showSettings(settings.hidden));

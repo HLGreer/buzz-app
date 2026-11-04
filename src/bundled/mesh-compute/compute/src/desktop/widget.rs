@@ -19,7 +19,7 @@ pub async fn mesh_compute_widget_open<R: tauri::Runtime>(
         window.show().map_err(|e| e.to_string())?;
         return window.set_focus().map_err(|e| e.to_string());
     }
-    let window = WebviewWindowBuilder::new(
+    WebviewWindowBuilder::new(
         &app,
         "compute-widget",
         WebviewUrl::App("compute-widget.html".into()),
@@ -29,21 +29,12 @@ pub async fn mesh_compute_widget_open<R: tauri::Runtime>(
     .min_inner_size(96.0, 96.0)
     .max_inner_size(320.0, 320.0)
     .resizable(true)
+    // Opaque: a transparent window needs Tauri's app-wide macOS private API.
     .decorations(false)
-    .transparent(true)
-    .background_color(tauri::window::Color(0, 0, 0, 0))
     .always_on_top(true)
     .build()
-    .map_err(|e| e.to_string())?;
-    let handle = app.clone();
-    window.on_window_event(move |event| {
-        if matches!(event, tauri::WindowEvent::Destroyed) {
-            handle
-                .state::<super::usb_display::UsbDisplay>()
-                .disconnect();
-        }
-    });
-    Ok(())
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

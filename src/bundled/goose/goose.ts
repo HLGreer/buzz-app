@@ -24,7 +24,6 @@ export { stepLabel } from "../../features/agent-harness/acp/steps";
 export type {
   ActivityReceipt,
   Choice,
-  PlatformExtension,
   ServeMcp,
   Settled,
   Spawn,
@@ -39,7 +38,15 @@ export type GooseHost = Readonly<{
   resolveDirectory(path: string): Promise<string>;
 }>;
 
-const DEVELOPER = { type: "platform", name: "developer" };
+/** A goose built-in extension for `session/new`; `available_tools` limits it
+ * to the listed tools. */
+export type PlatformExtension = Readonly<{
+  type: "platform";
+  name: string;
+  available_tools?: readonly string[];
+}>;
+
+const DEVELOPER: PlatformExtension = { type: "platform", name: "developer" };
 /** goose's provider id for the provider and model its config picks. */
 const CONFIGURED = "goose";
 

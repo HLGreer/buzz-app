@@ -101,11 +101,14 @@ fn mesh_runtime() -> std::io::Result<tokio::runtime::Handle> {
 pub struct Lifecycle {
     slot: Arc<Mutex<Slot>>,
     progress: crate::progress::Progress,
+    /// Set by the first launch; native libraries stay loaded for the process.
+    launched: std::sync::atomic::AtomicBool,
 }
 impl Default for Lifecycle {
     fn default() -> Self {
         Self {
             progress: crate::progress::Progress::default(),
+            launched: std::sync::atomic::AtomicBool::new(false),
             slot: Arc::new(Mutex::new(Slot {
                 phase: Phase::Stopped,
                 generation: 0,
@@ -121,6 +124,11 @@ impl Default for Lifecycle {
     }
 }
 impl Lifecycle {
+    /// Whether this process has ever started the embedded Mesh node.
+    pub fn launched(&self) -> bool {
+        self.launched.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub fn phase(&self) -> Phase {
         self.slot.lock().expect("mesh slot poisoned").phase.clone()
     }
@@ -234,6 +242,8 @@ impl Lifecycle {
             anyhow::bail!("Previous Mesh runtime shutdown is not confirmed");
         }
         let runtime = mesh_runtime()?;
+        self.launched
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         self.progress.clear();
         let (dial, mut pending) = mpsc::channel::<String>(64);
         let (status, mut reads) =

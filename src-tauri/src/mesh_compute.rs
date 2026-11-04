@@ -28,17 +28,50 @@ impl AppIdentity for AppHost {
         community: &'a str,
         filter: Option<serde_json::Value>,
     ) -> BoxFuture<'a, Result<serde_json::Value, String>> {
-        Box::pin(relay::mesh_read(&self.0, community, filter))
+        Box::pin(relay::plugin_read(&self.0, community, filter))
     }
     fn relay_publish<'a>(
         &'a self,
         community: &'a str,
         event: serde_json::Value,
     ) -> BoxFuture<'a, Result<(), String>> {
-        Box::pin(relay::mesh_publish(&self.0, community, event))
+        Box::pin(relay::plugin_publish(&self.0, community, event))
     }
 }
 
 pub(crate) fn identity(host: identity::IdentityHost) -> Identity {
     std::sync::Arc::new(AppHost(host))
+}
+
+/// Loads saved sharing preferences from app data.
+pub(crate) fn setup<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::Manager;
+    app.state::<MeshHost>().initialize_preferences(
+        app.path()
+            .app_data_dir()
+            .map(|root| root.join("mesh-sharing.json"))
+            .map_err(|error| error.to_string()),
+    );
+}
+
+/// The plugin's `mesh_compute_*` commands, routed by prefix in `lib.rs`.
+pub(crate) fn commands() -> fn(tauri::ipc::Invoke<tauri::Wry>) -> bool {
+    use buzz_mesh_compute::desktop::{self as mesh, agent, sharing, widget};
+    tauri::generate_handler![
+        mesh::mesh_compute_inventory,
+        mesh::mesh_compute_status,
+        mesh::mesh_compute_stop,
+        mesh::mesh_compute_catalog,
+        mesh::mesh_compute_start,
+        mesh::mesh_compute_select,
+        mesh::mesh_compute_release,
+        mesh::mesh_compute_disarm,
+        widget::mesh_compute_widget_open,
+        widget::mesh_compute_widget_close,
+        widget::mesh_compute_widget_status,
+        sharing::mesh_compute_share,
+        agent::mesh_compute_prepare_inference,
+        agent::mesh_compute_inference_current,
+        agent::mesh_compute_chat
+    ]
 }

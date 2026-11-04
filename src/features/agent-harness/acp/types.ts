@@ -16,13 +16,9 @@ export type ServeMcp = (handler: McpHandler) => Promise<HostMcpServer>;
 /** The host's absolute path for a directory, resolving `~/…`. */
 export type ResolveDirectory = (path: string) => Promise<string>;
 
-/** A built-in extension entry for `session/new`; `available_tools` limits
- * it to the listed tools. */
-export type PlatformExtension = Readonly<{
-  type: "platform";
-  name: string;
-  available_tools?: readonly string[];
-}>;
+/** Harness-specific built-in tool entries for `session/new`, opaque here and
+ * interpreted only by the harness's `newSessionMeta`. */
+export type PlatformTools = readonly unknown[];
 
 /** How a burst of work ended: every message sent so far has been answered,
  * or the session or its process is gone. One message of the burst owns its
@@ -104,7 +100,7 @@ export type AcpHooks = Readonly<{
     open: Readonly<{
       title?: string;
       provider: string;
-      platform?: readonly PlatformExtension[];
+      platform?: PlatformTools;
     }>,
   ): Record<string, unknown>;
   /** Appends `text` to a new session's system prompt; a throw closes it.

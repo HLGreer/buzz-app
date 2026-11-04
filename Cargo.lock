@@ -1105,7 +1105,6 @@ dependencies = [
  "futures-util",
  "hex",
  "iroh",
- "libc",
  "mesh-llm-events",
  "mesh-llm-host-runtime",
  "mesh-llm-sdk",
