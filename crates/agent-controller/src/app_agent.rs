@@ -24,8 +24,20 @@ const KINDS: [u16; 17] = [
     45010,
 ];
 
-fn bounded(content: &str, tags: &[Vec<String>]) -> Result<()> {
-    if content.len() > 64 * 1024
+/// Content of a live channel Canvas (40100), in UTF-8 bytes. Mirrors
+/// `LIVE_CANVAS_BYTES` in `canvas-limits.ts`.
+pub const LIVE_CANVAS_BYTES: usize = 256 * 1024;
+/// The largest complete signed Canvas event: the relay's 512 KiB frame less
+/// the `["EVENT",…]` wrapper. Mirrors `CANVAS_MAX_EVENT_BYTES`.
+pub const CANVAS_MAX_EVENT_BYTES: usize = 512 * 1024 - 16;
+
+fn bounded(kind: u16, content: &str, tags: &[Vec<String>]) -> Result<()> {
+    let content_limit = if kind == 40100 {
+        LIVE_CANVAS_BYTES
+    } else {
+        64 * 1024
+    };
+    if content.len() > content_limit
         || tags.len() > 256
         || tags
             .iter()
@@ -34,6 +46,20 @@ fn bounded(content: &str, tags: &[Vec<String>]) -> Result<()> {
         return Err("Agent event is too large".into());
     }
     Ok(())
+}
+
+/// Escaping can carry Canvas content within its limit past the relay's
+/// frame, so check the complete event once every tag is present.
+fn framed(kind: u16, event: serde_json::Value) -> Result<serde_json::Value> {
+    if kind == 40100
+        && serde_json::to_vec(&event)
+            .map_err(|_| "Invalid agent event")?
+            .len()
+            > CANVAS_MAX_EVENT_BYTES
+    {
+        return Err("Agent event is too large".into());
+    }
+    Ok(event)
 }
 
 /// One saved identity. The key itself stays in the OS credential store.
@@ -188,9 +214,9 @@ impl AppAgent {
                     .into(),
             );
         }
-        bounded(&content, &tags)?;
+        bounded(kind, &content, &tags)?;
         let tags = self.attested(key, tags)?;
-        key.signed(kind, content, tags)
+        framed(kind, key.signed(kind, content, tags)?)
     }
     /// Signs an event a local caller built, unchanged, as this agent. The
     /// caller's credential service has already classified its kind; this keeps
@@ -206,8 +232,8 @@ impl AppAgent {
         if key.pubkey() != self.pubkey {
             return Err("Agent identity changed".into());
         }
-        bounded(&content, &tags)?;
-        key.sign_event_at(kind, content, tags, created_at)
+        bounded(kind, &content, &tags)?;
+        framed(kind, key.sign_event_at(kind, content, tags, created_at)?)
     }
     /// Whether the community accepted this row's current public metadata.
     pub fn profile_is_current(&self) -> bool {
