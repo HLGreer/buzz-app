@@ -1512,90 +1512,129 @@ it("registers the Mesh agent type with the desktop host", () => {
   for (const cleanup of cleanups) cleanup();
 });
 
-it("prepares a background agent against its own community, not the foreground", async () => {
-  const owner = "a".repeat(64);
-  const agent = "b".repeat(64);
-  const snapshot = {
-    status: "ready",
-    origin: "https://b.example",
-    viewer: owner,
-    scope: `https://b.example:${owner}`,
-  };
-  let run!: (
-    delivery: import("../../features/agents/service").Delivery,
-  ) => Promise<void>;
-  const cleanups: (() => void)[] = [];
-  const publish = vi.fn(async () => ({}));
-  native.invoke.mockImplementation(async (command) => {
-    if (command === "mesh_compute_prepare_inference")
-      return { baseUrl: "http://127.0.0.1:1/A/v1", model: "mesh", lease: "A" };
-    if (command === "mesh_compute_chat") return "A answer";
-    if (command === "mesh_compute_inference_current") return true;
-    return { lifecycle: { state: "stopped" } };
-  });
-  apply({
-    relay: { snapshot: () => snapshot, subscribe: () => () => {} },
-    host: { spawn: vi.fn(), resolveDirectory: vi.fn(), serveMcp: vi.fn() },
-    agents: {
-      relay: (pubkey: string) => {
-        expect(pubkey).toBe(agent);
+it.each(["chat", "agent"])(
+  "prepares a background %s agent against its own membership, not the foreground",
+  async (mode) => {
+    const owner = "a".repeat(64);
+    const agent = "b".repeat(64);
+    const membership = `${agent}@a.example`;
+    const memoryRead = vi.fn(async () => ({
+      entries: [{ slug: "core", body: "A private memory" }],
+      partial: false,
+    }));
+    const memberSnapshot = {
+      origin: "https://a.example",
+      status: "ready",
+      session: {
+        channels: { list: () => ({ channels: [] }) },
+        agentMemories: { read: memoryRead },
+      },
+    };
+    const { MeshGoose } = await import("./meshGoose");
+    const inline = vi
+      .spyOn(MeshGoose.prototype, "run")
+      .mockResolvedValue({ text: "A answer", answered: false });
+    const snapshot = {
+      status: "ready",
+      origin: "https://b.example",
+      viewer: owner,
+      scope: `https://b.example:${owner}`,
+    };
+    let run!: (
+      delivery: import("../../features/agents/service").Delivery,
+    ) => Promise<void>;
+    const cleanups: (() => void)[] = [];
+    const publish = vi.fn(async () => ({}));
+    native.invoke.mockImplementation(async (command) => {
+      if (command === "mesh_compute_prepare_inference")
         return {
-          snapshot: () => ({
-            origin: "https://a.example",
-            status: "ready",
-            session: { channels: { list: () => ({ channels: [] }) } },
-          }),
+          baseUrl: "http://127.0.0.1:1/A/v1",
+          model: "mesh",
+          lease: "A",
         };
+      if (command === "mesh_compute_chat") return "A answer";
+      if (command === "mesh_compute_inference_current") return true;
+      return { lifecycle: { state: "stopped" } };
+    });
+    apply({
+      relay: { snapshot: () => snapshot, subscribe: () => () => {} },
+      host: {
+        spawn: vi.fn(),
+        resolveDirectory: vi.fn(async () => "/work"),
+        serveMcp: vi.fn(),
       },
-      register: (type: { run: typeof run }) => {
-        run = type.run;
-      },
-    },
-    effect: (setup: () => () => void) => {
-      cleanups.push(setup());
-    },
-    settingsCards: { register: () => {} },
-  } as unknown as Parameters<PluginModule["apply"]>[0]);
-  await flushRegistration();
-  try {
-    await run({
-      channelId: "channel-a",
-      config: { mode: "chat", prompt: "Be brief" },
-      signal: new AbortController().signal,
-      trigger: {
-        type: "mention",
-        event: {
-          id: "c".repeat(64),
-          pubkey: owner,
-          kind: 9,
-          created_at: 1,
-          tags: [["h", "channel-a"]],
-          content: "A private question",
-          sig: "",
+      agents: {
+        relay: (pubkey: string) => {
+          expect(pubkey).toBe(membership);
+          return {
+            snapshot: () => memberSnapshot,
+          };
+        },
+        register: (type: { run: typeof run }) => {
+          run = type.run;
         },
       },
-      agent: {
-        pubkey: agent,
-        owner,
-        name: "A helper",
-        publish,
-        query: async () => [],
+      effect: (setup: () => () => void) => {
+        cleanups.push(setup());
       },
-    } as unknown as import("../../features/agents/service").Delivery);
-    expect(native.invoke).toHaveBeenCalledWith(
-      "mesh_compute_prepare_inference",
-      {
-        relay: "https://a.example",
-        model: "auto",
-      },
-    );
-    expect(publish).toHaveBeenCalledWith(
-      expect.objectContaining({ content: "A answer" }),
-    );
-  } finally {
-    for (const cleanup of cleanups.reverse()) cleanup();
-  }
-});
+      settingsCards: { register: () => {} },
+    } as unknown as Parameters<PluginModule["apply"]>[0]);
+    await flushRegistration();
+    try {
+      await run({
+        channelId: "channel-a",
+        config: { mode, prompt: "Be brief" },
+        signal: new AbortController().signal,
+        trigger: {
+          type: "mention",
+          event: {
+            id: "c".repeat(64),
+            pubkey: owner,
+            kind: 9,
+            created_at: 1,
+            tags: [["h", "channel-a"]],
+            content: "A private question",
+            sig: "",
+          },
+        },
+        agent: {
+          key: membership,
+          pubkey: agent,
+          owner,
+          name: "A helper",
+          publish,
+          query: async () => [],
+        },
+      } as unknown as import("../../features/agents/service").Delivery);
+      expect(native.invoke).toHaveBeenCalledWith(
+        "mesh_compute_prepare_inference",
+        {
+          relay: "https://a.example",
+          model: "auto",
+        },
+      );
+      if (mode === "agent") {
+        expect(memoryRead).toHaveBeenCalledWith(
+          agent,
+          expect.any(AbortSignal),
+          undefined,
+        );
+        expect(inline).toHaveBeenCalledWith(
+          expect.objectContaining({
+            system: expect.stringContaining("A private memory"),
+          }),
+        );
+      }
+      expect(publish).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "A answer" }),
+        expect.any(Function),
+      );
+    } finally {
+      inline.mockRestore();
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  },
+);
 
 it("holds the host queue until Agent and Chat work completes", async () => {
   const { MeshAgentRuntime } = await import("./meshAgent");

@@ -248,10 +248,10 @@ export class MeshAgentRuntime {
     // Both modes retain owner-only admission; watches do not grant authority.
     if (event.pubkey === agent.pubkey || event.pubkey !== agent.owner)
       return Promise.resolve();
-    const dm = this.deps.dm?.(agent.pubkey, channelId) ?? false;
+    const dm = this.deps.dm?.(agent.key, channelId) ?? false;
     // A Me chat routes like a DM: one channel conversation, top-level posts.
     // Frozen at admission so key, history, tool context and posts agree.
-    const key = `${agent.pubkey}\n${channelId}`;
+    const key = `${agent.key}\n${channelId}`;
     const flat = (this.admissions.get(key) ?? Promise.resolve())
       .catch(() => {})
       .then(
@@ -274,7 +274,7 @@ export class MeshAgentRuntime {
         config.scope,
       );
       return this.enqueue(
-        `${agent.pubkey}\n${conversation}`,
+        `${agent.key}\n${conversation}`,
         delivery,
         event,
         channelId,
@@ -350,7 +350,7 @@ export class MeshAgentRuntime {
         (delivery.current && !delivery.current())
       )
         return;
-      const origin = this.deps.origin(agent.pubkey);
+      const origin = this.deps.origin(agent.key);
       if (!origin) throw new Error("No community is connected");
       const inference = await untilAborted(this.deps.prepare(origin), signal);
       lease = inference.lease;
@@ -383,10 +383,7 @@ export class MeshAgentRuntime {
           signal,
         );
         const memory = this.deps.coreMemory
-          ? await untilAborted(
-              this.deps.coreMemory(agent.pubkey, signal),
-              signal,
-            )
+          ? await untilAborted(this.deps.coreMemory(agent.key, signal), signal)
           : undefined;
         const earlier = await untilAborted(read(), signal);
         signal.throwIfAborted();
@@ -396,7 +393,7 @@ export class MeshAgentRuntime {
           inference,
           cwd,
           context: { channel: channelId, ...(dm ? {} : { root }) },
-          sessionKey: `${agent.pubkey}\n${config.mode}\n${conversation}`,
+          sessionKey: `${agent.key}\n${config.mode}\n${conversation}`,
           system: instructions(config, memory),
           prompt: agentPrompt(event, earlier, delivery.trigger),
         });
@@ -424,13 +421,18 @@ export class MeshAgentRuntime {
           : String(error);
       content = `⚠️ Mesh agent couldn't answer: ${reason.slice(0, 500)}`;
     }
-    if (
-      (signal.aborted && !reportingTimeout) ||
-      this.disposed ||
-      (delivery.current && !delivery.current())
-    )
-      return;
-    await agent.publish({ kind: 9, content, tags });
+    const live = () =>
+      !(signal.aborted && !reportingTimeout) &&
+      !this.disposed &&
+      (!delivery.current || delivery.current());
+    if (!live()) return;
+    try {
+      await agent.publish({ kind: 9, content, tags }, () => {
+        if (!live()) throw new Error("Agent turn ended");
+      });
+    } catch (error) {
+      if (live()) throw error;
+    }
   }
 }
 

@@ -33,7 +33,7 @@ export function createMeshTranscriptTab(
       setTranscript(undefined);
       setError(undefined);
       setLoading(true);
-      void history.recent(agent.pubkey, workspace, abort.signal).then(
+      void history.recent(agent.key, workspace, abort.signal).then(
         (found) => {
           if (abort.signal.aborted) return;
           setRows(found);
@@ -53,7 +53,7 @@ export function createMeshTranscriptTab(
       );
       return () => abort.abort();
     }, [
-      agent.pubkey,
+      agent.key,
       workspace,
       conversation?.channelId,
       conversation?.rootId,
@@ -66,7 +66,7 @@ export function createMeshTranscriptTab(
       setLoading(true);
       setTranscript(undefined);
       setError(undefined);
-      void history.transcript(agent.pubkey, workspace, row, abort.signal).then(
+      void history.transcript(agent.key, workspace, row, abort.signal).then(
         (found) => {
           if (abort.signal.aborted) return;
           setTranscript(found);
@@ -79,7 +79,7 @@ export function createMeshTranscriptTab(
         },
       );
       return () => abort.abort();
-    }, [rows, selected, agent.pubkey, workspace]);
+    }, [rows, selected, agent.key, workspace]);
     return (
       <div className="grid gap-4">
         <div>

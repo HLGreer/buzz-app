@@ -32,7 +32,10 @@ function setup(
     run: vi.fn(async (_input: InlineTurn) => ({ text: "hi from mesh" })),
     dispose: vi.fn(),
   };
-  const publish = vi.fn(async (event: object) => event);
+  const publish = vi.fn(async (event: object, check?: () => void) => {
+    check?.();
+    return event;
+  });
   const query = vi.fn(async (_filters: unknown) => [] as object[]);
   const deps: MeshAgentDeps = {
     inline,
@@ -54,7 +57,14 @@ function setup(
     ({
       trigger: { type: "mention", event: { ...EVENT, pubkey: from, ...event } },
       channelId: "chan",
-      agent: { pubkey: AGENT, name: "M", owner: OWNER, publish, query },
+      agent: {
+        key: AGENT,
+        pubkey: AGENT,
+        name: "M",
+        owner: OWNER,
+        publish,
+        query,
+      },
       config,
       signal: new AbortController().signal,
     }) as unknown as Delivery<MeshAgentConfig>;
@@ -79,6 +89,83 @@ function deferred<T>() {
 }
 
 describe("Mesh agent runtime", () => {
+  it.each(["chat", "agent"])(
+    "uses the delivering membership for %s inference and memory",
+    async (mode) => {
+      const member = `${AGENT}@community-b.example`;
+      const origin = vi.fn((key: string) =>
+        key === member ? "https://b.example" : "https://a.example",
+      );
+      const prepare = vi.fn(async () => ({
+        baseUrl: "http://127.0.0.1/B/v1",
+        model: "B",
+        lease: "B",
+      }));
+      const coreMemory = vi.fn(async () => "B private memory");
+      const dm = vi.fn(() => false);
+      const { runtime, delivery, inline } = setup(
+        { origin, prepare, coreMemory, dm },
+        OWNER,
+        { mode },
+      );
+      const input = delivery();
+      await runtime.run({ ...input, agent: { ...input.agent, key: member } });
+      expect(origin).toHaveBeenCalledExactlyOnceWith(member);
+      expect(prepare).toHaveBeenCalledExactlyOnceWith("https://b.example");
+      expect(dm).toHaveBeenCalledWith(member, "chan");
+      if (mode === "agent") {
+        expect(coreMemory).toHaveBeenCalledWith(member, input.signal);
+        expect(inline.run).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionKey: expect.stringContaining(member),
+            system: expect.stringContaining("B private memory"),
+          }),
+        );
+      }
+    },
+  );
+
+  it.each(["abort", "retire", "dispose"])(
+    "drops automatic prose when %s happens during channel startup",
+    async (ending) => {
+      const entered = deferred<void>();
+      const release = deferred<void>();
+      const published = vi.fn();
+      const controller = new AbortController();
+      let current = true;
+      const { runtime, delivery } = setup({}, OWNER, { mode: "chat" });
+      const input = delivery();
+      const done = runtime.run({
+        ...input,
+        signal: controller.signal,
+        current: () => current,
+        agent: {
+          ...input.agent,
+          publish: async (event, check) => {
+            entered.resolve();
+            await release.promise;
+            check?.();
+            published(event);
+            return event as never;
+          },
+        },
+      });
+      try {
+        await entered.promise;
+        if (ending === "abort") controller.abort();
+        if (ending === "retire") current = false;
+        if (ending === "dispose") runtime.dispose();
+        release.resolve();
+        await done;
+        expect(published).not.toHaveBeenCalled();
+      } finally {
+        release.resolve();
+        runtime.dispose();
+        await done;
+      }
+    },
+  );
+
   it.each(["live", "retired", "disposed"])(
     "reports a deadline only for a %s turn",
     async (state) => {
@@ -110,6 +197,7 @@ describe("Mesh agent runtime", () => {
             expect.objectContaining({
               content: expect.stringContaining("five-minute deadline"),
             }),
+            expect.any(Function),
           );
           gate.resolve();
           await runtime.run(delivery());
@@ -129,6 +217,7 @@ describe("Mesh agent runtime", () => {
         content:
           "⚠️ Mesh agent couldn't answer: The mesh model returned no text",
       }),
+      expect.any(Function),
     );
   });
 
@@ -289,6 +378,7 @@ describe("Mesh agent runtime", () => {
           ["p", sender],
         ],
       }),
+      expect.any(Function),
     );
     // A later direct request must not inherit the previous watch's instructions.
     await runtime.run(
@@ -533,14 +623,17 @@ describe("Mesh agent runtime", () => {
     await runtime.run(delivery());
     await runtime.run(delivery());
     expect(meChat).toHaveBeenCalledTimes(2);
-    expect(publish).toHaveBeenLastCalledWith({
-      kind: 9,
-      content: "done",
-      tags: [
-        ["h", "chan"],
-        ["p", OWNER],
-      ],
-    });
+    expect(publish).toHaveBeenLastCalledWith(
+      {
+        kind: 9,
+        content: "done",
+        tags: [
+          ["h", "chan"],
+          ["p", OWNER],
+        ],
+      },
+      expect.any(Function),
+    );
   });
 
   it("keeps the admitted Me decision when placement changes while queued", async () => {
@@ -562,14 +655,17 @@ describe("Mesh agent runtime", () => {
     await first;
     expect(meChat).toHaveBeenCalledTimes(1);
     expect(inline.run.mock.calls[0]?.[0].context).toEqual({ channel: "chan" });
-    expect(publish).toHaveBeenLastCalledWith({
-      kind: 9,
-      content: "done",
-      tags: [
-        ["h", "chan"],
-        ["p", OWNER],
-      ],
-    });
+    expect(publish).toHaveBeenLastCalledWith(
+      {
+        kind: 9,
+        content: "done",
+        tags: [
+          ["h", "chan"],
+          ["p", OWNER],
+        ],
+      },
+      expect.any(Function),
+    );
   });
 
   it("does not answer when the Me placement can't be read", async () => {
@@ -594,6 +690,7 @@ describe("Mesh agent runtime", () => {
         content:
           "⚠️ Mesh agent couldn't answer: The mesh model returned no text",
       }),
+      expect.any(Function),
     );
   });
 

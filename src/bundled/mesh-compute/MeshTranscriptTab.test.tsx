@@ -10,7 +10,12 @@ import { createMeshTranscriptTab } from "./MeshTranscriptTab";
 
 afterEach(cleanup);
 const props = {
-  agent: { pubkey: "agent", name: "Mesh helper", config: meshAgentConfig({}) },
+  agent: {
+    key: "agent",
+    pubkey: "agent",
+    name: "Mesh helper",
+    config: meshAgentConfig({}),
+  },
   save: vi.fn(),
 } as unknown as AgentViewProps<MeshAgentConfig>;
 const row = {
@@ -98,7 +103,7 @@ it("does not display a late result after the viewed agent changes", async () => 
     await waitFor(() => expect(history.transcript).toHaveBeenCalled());
     await started;
     mounted.rerender(
-      <Tab {...props} agent={{ ...props.agent, pubkey: "other" }} />,
+      <Tab {...props} agent={{ ...props.agent, key: "other" }} />,
     );
     await screen.findByText(/No matching Mesh sessions/);
     await act(async () => {

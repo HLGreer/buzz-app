@@ -81,19 +81,25 @@ export class MeshGoose {
     const controller = new AbortController();
     this.active.add(controller);
     const signal = AbortSignal.any([delivery.signal, controller.signal]);
-    const check = async () => {
+    const live = () => {
       signal.throwIfAborted();
       if (delivery.current && !delivery.current())
         throw new Error("Agent turn ended");
+    };
+    const check = async () => {
+      live();
       if (!(await this.deps.current(inference.lease)))
         throw new Error("Mesh selection retired");
-      signal.throwIfAborted();
+      live();
     };
     const guarded: AgentHandle = {
       ...delivery.agent,
-      publish: async (event) => {
+      publish: async (event, beforeSign) => {
         await check();
-        return delivery.agent.publish(event);
+        return delivery.agent.publish(event, () => {
+          live();
+          beforeSign?.();
+        });
       },
       query: async (filters) => {
         await check();
@@ -120,16 +126,16 @@ export class MeshGoose {
           throw new Error("Agent turn ended");
       },
       memories: (slug) =>
-        this.deps.memories?.(delivery.agent.pubkey, signal, slug) ??
+        this.deps.memories?.(delivery.agent.key, signal, slug) ??
         Promise.resolve({ entries: [], partial: false }),
-      remembered: () => this.deps.remembered?.(delivery.agent.pubkey),
+      remembered: () => this.deps.remembered?.(delivery.agent.key),
     });
     const tools: ToolServer = (_conversation, message) =>
       respond(client, context, message);
 
     const id = crypto.randomUUID();
     const saved: Saved = {
-      agent: delivery.agent.pubkey,
+      agent: delivery.agent.key,
       row: {
         sessionId: id,
         title: "goose on shared compute (this app session)",
@@ -148,6 +154,10 @@ export class MeshGoose {
     this.remember(id, saved);
 
     let goose: GooseProcess | undefined;
+    const stop = () => {
+      void goose?.kill().catch(() => undefined);
+    };
+    signal.addEventListener("abort", stop, { once: true });
     try {
       await check();
       const root = `${await resolveWorkspace(this.deps, "~")}/${GOOSE_ROOT}`;
@@ -155,6 +165,7 @@ export class MeshGoose {
         cwd,
         env: meshGooseEnv(inference.baseUrl, root),
         serve: this.deps.serve,
+        signal,
       });
       signal.throwIfAborted();
       const session = await goose.open({
@@ -167,30 +178,24 @@ export class MeshGoose {
         replacePrompt: true,
         choice: () => ({ provider: "openai", model: inference.model }),
       });
-      const stop = () => session.interrupt();
-      signal.addEventListener("abort", stop, { once: true });
-      try {
-        const settled = await session.send(prompt);
-        signal.throwIfAborted();
-        if (!settled.ok)
-          throw new Error(settled.error || "goose ended the turn");
-        const text = settled.text?.trim() ?? "";
-        saved.messages.push({
-          role: "assistant",
-          created: Math.floor(Date.now() / 1000),
-          content: [
-            {
-              type: "text",
-              text: text || "(answered with Buzz tools)",
-            },
-          ],
-        });
-        await check();
-        // Empty model output alone is not evidence of a Buzz answer.
-        return { text, answered: settled.answered === true };
-      } finally {
-        signal.removeEventListener("abort", stop);
-      }
+      await check();
+      const settled = await session.send(prompt);
+      signal.throwIfAborted();
+      if (!settled.ok) throw new Error(settled.error || "goose ended the turn");
+      const text = settled.text?.trim() ?? "";
+      saved.messages.push({
+        role: "assistant",
+        created: Math.floor(Date.now() / 1000),
+        content: [
+          {
+            type: "text",
+            text: text || "(answered with Buzz tools)",
+          },
+        ],
+      });
+      await check();
+      // Empty model output alone is not evidence of a Buzz answer.
+      return { text, answered: settled.answered === true };
     } catch (error) {
       saved.messages.push({
         role: "assistant",
@@ -204,7 +209,8 @@ export class MeshGoose {
       });
       throw error;
     } finally {
-      goose?.kill();
+      signal.removeEventListener("abort", stop);
+      stop();
       controller.abort();
       this.active.delete(controller);
     }

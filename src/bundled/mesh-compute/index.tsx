@@ -1,3 +1,4 @@
+import { pubkeyOf } from "../../features/agents/membership";
 import { ownerReads } from "../../features/agents/reads";
 import { MeshGoose } from "./meshGoose";
 import { createMeshTranscriptTab } from "./MeshTranscriptTab";
@@ -176,7 +177,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
       const snapshot = agents.relay(agent)?.snapshot();
       if (snapshot?.status !== "ready")
         throw new Error("Buzz is not connected to this community");
-      const source = ownerReads(agents.relay(agent), agent);
+      const source = ownerReads(agents.relay(agent), pubkeyOf(agent));
       if (!source) throw new Error("Buzz is not connected to this community");
       const listing = await memoryReads.read(source, agent, signal, slug);
       if (agents.relay(agent)?.snapshot() !== snapshot)
@@ -215,12 +216,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
           messages,
         }),
       meChat: (agent, channelId, signal) =>
-        soloChat(
-          () => agents.relay(agent.pubkey),
-          agent.owner,
-          channelId,
-          signal,
-        ),
+        soloChat(() => agents.relay(agent.key), agent.owner, channelId, signal),
       dm: (agent, channelId) => {
         const snapshot = agents.relay(agent)?.snapshot();
         return (
