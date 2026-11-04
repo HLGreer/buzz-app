@@ -91,6 +91,8 @@ export type AttachmentRenderer = Readonly<{
   id: string;
   title: string;
   matches(attachment: Attachment): boolean;
+  /** Claim strength when several renderers match an attachment; see `MatchOrder`. */
+  order?: MatchOrder<Attachment> | undefined;
   component: ComponentType<AttachmentRendererProps>;
 }>;
 export type ReactionToolProps = Readonly<{
@@ -166,6 +168,10 @@ export type ComposerAccessoryProps = Readonly<{
   threadRootId?: string | undefined;
   /** Present only for message-placed accessories; the exact triggering row. */
   message?: ChannelMessage;
+  /** Agents already represented by subsequent content in this request's visible run. */
+  representedAgents?: readonly string[] | undefined;
+  /** Host geometry for response-side accessories. */
+  messageLayout?: "timeline" | "thread" | "continuation" | undefined;
   /** A single selected decorator may wrap the host summary with its preview.
    * Render without activity when idle; the host owns reply counts/navigation. */
   renderMessageSummary?:
@@ -178,12 +184,15 @@ export type ComposerAccessoryProps = Readonly<{
   onFocusedRemoval?: (() => void) | undefined;
   /** Presentation only; the host re-resolves targets. No editor or access grant. */
   canOpen(target: string): boolean;
-  /** False after contribution removal or the originating composer retires. */
+  /** False after contribution removal or the originating composer retires.
+   * A message-placed accessory's target opens in that message's thread, like
+   * a link in its body. */
   open(target: string): boolean;
 }>;
 export type ComposerAccessory = Readonly<{
-  /** Defaults to the composer. Message accessories render beside reactions. */
-  placement?: "composer" | "message";
+  /** Defaults to the composer. Message accessories sit beside reactions;
+   * response accessories occupy an incoming row after the triggering message. */
+  placement?: "composer" | "message" | "response";
   /** Opt into decorating the message summary; only the first ordered owner wins. */
   decoratesMessageSummary?: boolean;
   id: string;

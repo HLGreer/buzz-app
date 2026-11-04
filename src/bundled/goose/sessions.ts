@@ -4,7 +4,8 @@ import {
   AgentSessions as AcpAgentSessions,
   type SessionsOptions as AcpSessionsOptions,
 } from "../../features/agent-harness/acp/agent-sessions";
-import type { AcpProcess } from "../../features/agent-harness/acp/process";
+import type { AgentProtection } from "../../features/agent-protection/service";
+import { nativeProtectionBridge } from "../../features/agent-protection/native-bridge";
 import { GooseProcess, type GooseHost, type ServeMcp } from "./goose";
 import type {
   SavedConversation,
@@ -26,11 +27,15 @@ export {
  * when a session first needs it, and again after it exits. Its own process,
  * so its environment carries only this agent's Buzz credential. */
 export class AgentProcess {
-  private ready: Promise<AcpProcess> | undefined;
+  private ready: Promise<GooseProcess> | undefined;
+  /** The process `ready` started, kept until it exits, even when its start
+   * failed. */
+  private process: GooseProcess | undefined;
   constructor(
     private readonly host: GooseHost,
     /** Starts a session's MCP server for its agent's tools. */
     private readonly serve: ServeMcp,
+    private readonly protection?: AgentProtection,
     /** The agent as its latest delivery named it, once known. */
     private readonly agent: () =>
       | Readonly<{ pubkey: string; relay: string }>
@@ -38,28 +43,74 @@ export class AgentProcess {
   ) {}
 
   /** The running process. One that failed to start is started again on the
-   * next call. */
-  get(): Promise<AcpProcess> {
+   * next call once it has exited. */
+  get(): Promise<GooseProcess> {
+    this.protection?.assertAvailable();
     if (this.ready) return this.ready;
     const agent = this.agent();
-    const ready = (async () =>
-      GooseProcess.start(this.host.spawn, {
-        cwd: await this.host.resolveDirectory("~"),
-        serve: this.serve,
-        ...(agent && { agent: { pubkey: agent.pubkey, relay: agent.relay } }),
-      }))();
+    const ready = (async () => {
+      const bridge =
+        this.protection &&
+        (await nativeProtectionBridge(this.serve, this.protection));
+      try {
+        const goose = await GooseProcess.start(
+          (id, options) =>
+            this.protection
+              ? this.protection.spawn(options ?? {})
+              : this.host.spawn(id, options),
+          {
+            cwd: await this.host.resolveDirectory("~"),
+            serve: this.serve,
+            onProcess: (goose) => (this.process = goose),
+            ...(agent && {
+              agent: { pubkey: agent.pubkey, relay: agent.relay },
+            }),
+            ...(bridge && {
+              protected: true,
+              env: {
+                ...bridge.env,
+                BASH_ENV: null,
+                ENV: null,
+                DYLD_INSERT_LIBRARIES: null,
+                DYLD_LIBRARY_PATH: null,
+                DYLD_FRAMEWORK_PATH: null,
+                LD_PRELOAD: null,
+                LD_LIBRARY_PATH: null,
+              },
+            }),
+          },
+        );
+        void goose.exited.finally(() => bridge?.close());
+        return goose;
+      } catch (error) {
+        await bridge?.close();
+        throw error;
+      }
+    })();
     const forget = () => {
-      if (this.ready === ready) this.ready = undefined;
+      if (this.ready !== ready) return;
+      this.ready = undefined;
+      this.process = undefined;
     };
-    void ready.then((goose) => goose.exited.then(forget), forget);
+    // `process` is still this start's: only `forget` lets another begin.
+    void ready.then(
+      (goose) => goose.exited.then(forget),
+      () => (this.process ? this.process.exited.then(forget) : forget()),
+    );
     this.ready = ready;
     return ready;
   }
   /** Stops it, failing every session in it. */
   stop() {
-    const ready = this.ready;
-    this.ready = undefined;
-    void ready?.then((goose) => goose.kill()).catch(() => undefined);
+    void this.shutdown().catch(() => undefined);
+  }
+  /** Stops it and resolves once it has exited, whether or not its start
+   * succeeded. It stays here until then, so a failed stop is repeated. */
+  async shutdown() {
+    await this.ready?.catch(() => undefined);
+    const goose = this.process;
+    await goose?.kill();
+    await goose?.exited;
   }
 }
 
