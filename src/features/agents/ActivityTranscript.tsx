@@ -29,6 +29,7 @@ import {
   CaretRightIcon,
   DotsThreeIcon,
   EyeIcon,
+  FileTextIcon,
   GlobeIcon,
   ListChecksIcon,
   MagnifyingGlassIcon,
@@ -86,15 +87,32 @@ const time = (at: number) => formatTime(at / 1000);
 const known = (at: number) => !!at && !Number.isNaN(new Date(at).getTime());
 /** Quiet trailing metadata; the turn header already dates the prompt. */
 function Stamp({ item }: { item: TranscriptItem }) {
-  if (item.type === "prompt" || !known(item.at)) return null;
+  const elapsed =
+    item.type === "tool" && item.completedAt !== undefined
+      ? item.completedAt - item.at
+      : undefined;
+  if (item.type === "prompt" || (!known(item.at) && elapsed === undefined))
+    return null;
   return (
-    <time
-      className={`text-body ${styles.at}`}
-      dateTime={new Date(item.at).toISOString()}
-      title={formatFullTimestamp(item.at / 1000)}
-    >
-      {time(item.at)}
-    </time>
+    <span className={`text-body ${styles.at}`}>
+      {elapsed !== undefined && <span>{duration(elapsed)}</span>}
+      {elapsed !== undefined && known(item.at) && (
+        <span
+          className={`text-caption ${styles.metaSeparator}`}
+          aria-hidden="true"
+        >
+          •
+        </span>
+      )}
+      {known(item.at) && (
+        <time
+          dateTime={new Date(item.at).toISOString()}
+          title={formatFullTimestamp(item.at / 1000)}
+        >
+          {time(item.at)}
+        </time>
+      )}
+    </span>
   );
 }
 export function duration(ms: number) {
@@ -347,19 +365,20 @@ function Sections({
   return (
     <details className={styles.context}>
       <summary className="text-body text-subtle">
+        <FileTextIcon size="1rem" aria-hidden="true" />
+        <span>
+          {title} · {sections.length} sections
+        </span>
         <CaretRightIcon
           className={styles.chevron}
           size={14}
           aria-hidden="true"
         />
-        <span>
-          {title} · {sections.length} sections
-        </span>
       </summary>
       {sections.map((section, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: sections are a positional, immutable parse of one prompt.
-        <section key={index} className={styles.section}>
-          <h3 className={`text-body text-secondary ${styles.sectionHeading}`}>
+        <section key={index} className={styles.codePanel}>
+          <h3 className={`text-body text-secondary ${styles.codePanelHeading}`}>
             {sectionTitle(section.tag)}
           </h3>
           <pre className={styles.pre}>{section.body}</pre>
@@ -375,22 +394,30 @@ function Disclosure({
   icon,
   label,
   preview,
+  metadata,
+  footer,
   children,
 }: {
   item: TranscriptItem;
   icon: ReactNode;
   label: ReactNode;
   preview?: string;
+  metadata?: ReactNode;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <details className={styles.tool} data-narrative="">
+    <details
+      className={styles.tool}
+      data-status={item.type === "tool" ? item.status : undefined}
+    >
       <summary className={styles.row}>
         {icon}
         <span className={styles.summary}>
-          <span className={styles.subject}>{label}</span>
+          {label}
           {preview && <span className={styles.preview}> {preview}</span>}
         </span>
+        {metadata}
         <CaretRightIcon
           className={styles.chevron}
           size={14}
@@ -399,6 +426,7 @@ function Disclosure({
         <Stamp item={item} />
       </summary>
       {children && <div className={styles.toolBody}>{children}</div>}
+      {footer}
     </details>
   );
 }
@@ -447,7 +475,7 @@ function Item({
         <Disclosure
           item={item}
           icon={<PersonAvatar name={name} pubkey={item.authorPubkey} />}
-          label={name}
+          label={<span className={styles.subject}>{name}</span>}
           preview={line(item.text)}
         >
           <p className={styles.text}>
@@ -473,7 +501,7 @@ function Item({
         <Disclosure
           item={item}
           icon={<BulbIcon size={16} aria-label="Thought" />}
-          label={heading}
+          label={<span className={styles.subject}>{heading}</span>}
         >
           {body && <Reply text={body} />}
         </Disclosure>
@@ -495,12 +523,12 @@ function Item({
             </span>
           }
           label={
-            <>
+            <span className={styles.subject}>
               {agentName}
               {item.posted && (
                 <span className="text-body text-secondary"> · Posted</span>
               )}
-            </>
+            </span>
           }
           preview={line(item.text)}
         >
@@ -518,7 +546,7 @@ function Item({
         <Disclosure
           item={item}
           icon={<ListChecksIcon size={16} aria-hidden="true" />}
-          label="Plan"
+          label={<span className={styles.subject}>Plan</span>}
           preview={`${item.entries.length} steps`}
         >
           <ul className={styles.plan} aria-label="Plan">
@@ -536,7 +564,7 @@ function Item({
         <Disclosure
           item={item}
           icon={<DotsThreeIcon size={16} aria-hidden="true" />}
-          label={line(item.text)}
+          label={<span className={styles.subject}>{line(item.text)}</span>}
         >
           <p className={styles.text}>{item.text}</p>
         </Disclosure>
@@ -645,10 +673,11 @@ function Tool({ item, agentName }: { item: ToolItem; agentName: string }) {
       (child) => child.type === "tool" && child.status === "failed",
     ).length ?? 0;
   return (
-    <details className={styles.tool} data-status={item.status}>
-      <summary className={styles.row}>
-        <Icon size="1rem" aria-hidden="true" />
-        <span className={styles.summary}>
+    <Disclosure
+      item={item}
+      icon={<Icon size="1rem" aria-hidden="true" />}
+      label={
+        <>
           {status && <span className={styles.status}>{status} </span>}
           <span className={`text-body ${styles.subject}`}>{label.action}</span>
           {label.detail && <span className={styles.path}> {label.detail}</span>}
@@ -660,8 +689,10 @@ function Tool({ item, agentName }: { item: ToolItem; agentName: string }) {
             </span>
           )}
           {path && <span className={`text-body ${styles.path}`}> {path}</span>}
-        </span>
-        {item.permission && (
+        </>
+      }
+      metadata={
+        item.permission && (
           <span
             className={`text-body text-secondary ${styles.badge}`}
             title={`Permission options: ${item.permission.options.join(", ")}`}
@@ -669,64 +700,49 @@ function Tool({ item, agentName }: { item: ToolItem; agentName: string }) {
             <ShieldIcon size={14} aria-hidden="true" />
             {item.permission.outcome ?? "Permission requested"}
           </span>
-        )}
-        {item.completedAt !== undefined && (
-          <span className={`text-body text-secondary ${styles.duration}`}>
-            <span aria-hidden="true">• </span>
-            {duration(item.completedAt - item.at)}
-          </span>
-        )}
-        <CaretRightIcon
-          className={styles.chevron}
-          size={14}
-          aria-hidden="true"
-        />
-        <Stamp item={item} />
-      </summary>
-      <div className={styles.toolBody}>
-        {item.title.includes("\n") && (
-          <pre className={styles.pre}>{item.title}</pre>
-        )}
-        {item.input && (
-          <section className={styles.codePanel}>
-            <h3
-              className={`text-body text-secondary ${styles.codePanelHeading}`}
-            >
-              Input
-            </h3>
-            <ToolInput text={item.input} />
-          </section>
-        )}
-        {item.diffs.map((diff, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: diffs are positional tool content.
-          <Diff key={index} diff={diff} />
-        ))}
-        {item.output && (
-          <section className={styles.codePanel}>
-            <h3
-              className={`text-body text-secondary ${styles.codePanelHeading}`}
-            >
-              Output
-            </h3>
-            <pre className={styles.pre}>{item.output}</pre>
-          </section>
-        )}
-        {item.children?.length ? (
-          <div className={styles.section}>
-            <p className="text-body text-secondary">
-              Calls recorded during this script
-            </p>
-            {item.children.map((child) => (
-              <Entry key={child.id} item={child} agentName={agentName} />
-            ))}
-          </div>
-        ) : null}
-      </div>
-      {item.truncated && (
-        <p className="text-body text-secondary">
-          Part of this tool call was too large and was elided by the agent.
-        </p>
+        )
+      }
+      footer={
+        item.truncated && (
+          <p className="text-body text-secondary">
+            Part of this tool call was too large and was elided by the agent.
+          </p>
+        )
+      }
+    >
+      {item.title.includes("\n") && (
+        <pre className={styles.pre}>{item.title}</pre>
       )}
-    </details>
+      {item.input && (
+        <section className={styles.codePanel}>
+          <h3 className={`text-body text-secondary ${styles.codePanelHeading}`}>
+            Input
+          </h3>
+          <ToolInput text={item.input} />
+        </section>
+      )}
+      {item.diffs.map((diff, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: diffs are positional tool content.
+        <Diff key={index} diff={diff} />
+      ))}
+      {item.output && (
+        <section className={styles.codePanel}>
+          <h3 className={`text-body text-secondary ${styles.codePanelHeading}`}>
+            Output
+          </h3>
+          <pre className={styles.pre}>{item.output}</pre>
+        </section>
+      )}
+      {item.children?.length ? (
+        <div className={styles.section}>
+          <p className="text-body text-secondary">
+            Calls recorded during this script
+          </p>
+          {item.children.map((child) => (
+            <Entry key={child.id} item={child} agentName={agentName} />
+          ))}
+        </div>
+      ) : null}
+    </Disclosure>
   );
 }

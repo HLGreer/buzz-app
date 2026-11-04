@@ -33,7 +33,9 @@
   min-width: 0;
 }
 .at {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   color: var(--text-subtle);
   font-variant-numeric: tabular-nums;
@@ -84,19 +86,13 @@
   }
 }
 
-.context {
-  margin-block-start: var(--space-1);
-  margin-inline-start: calc(var(--space-4) + var(--space-2));
-}
-.toolBody > .context {
-  margin-inline-start: 0;
-}
 .context summary {
+  min-height: var(--space-7);
   margin-inline: calc(-1 * var(--space-2));
   padding-inline: var(--space-2);
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   cursor: pointer;
   list-style: none;
 }
@@ -106,14 +102,8 @@
 .context summary > svg {
   flex-shrink: 0;
 }
-.context[open] > summary > svg {
-  transform: rotate(90deg);
-}
 .section {
   margin-block-start: var(--space-1);
-}
-.sectionHeading {
-  margin: 0 0 var(--space-1);
 }
 .toolBody {
   display: flex;
@@ -164,13 +154,13 @@
 .tool[data-status="terminated"] .subject {
   color: var(--text-danger);
 }
-.duration {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+.metaSeparator {
+  flex-shrink: 0;
 }
 .chevron {
   color: var(--text-subtle);
 }
+.context[open] > summary > .chevron,
 .tool[open] > summary > .chevron {
   transform: rotate(90deg);
 }
@@ -295,14 +285,11 @@ html[data-keyboard-navigation] .context summary:focus-visible {
 }
 @media (hover: hover) and (pointer: fine) {
   .at,
-  .duration,
   .chevron {
     opacity: 0;
   }
   summary:hover > .at,
   summary:focus-visible > .at,
-  summary:hover > .duration,
-  summary:focus-visible > .duration,
   summary:hover > .chevron,
   summary:focus-visible > .chevron {
     opacity: 1;
@@ -375,4 +362,28 @@ html[data-keyboard-navigation] .context summary:focus-visible {
   margin: 0;
   border: 0;
   border-radius: 0;
+}
+
+.context > .codePanel {
+  margin-block-start: var(--space-1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-keyboard-navigation]) .chevron {
+    transition: transform var(--duration-fast) var(--easing-enter);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) and (
+    prefers-reduced-motion: no-preference
+  ) {
+  html:not([data-keyboard-navigation]) .at,
+  html:not([data-keyboard-navigation]) .statusMeta {
+    transition: opacity var(--duration-fast) var(--easing-enter);
+  }
+  html:not([data-keyboard-navigation]) .chevron {
+    transition:
+      transform var(--duration-fast) var(--easing-enter),
+      opacity var(--duration-fast) var(--easing-enter);
+  }
 }
