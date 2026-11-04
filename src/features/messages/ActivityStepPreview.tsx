@@ -13,9 +13,8 @@ export function ActivityStepPreview({
   const label = activityStepLabel(text);
   return (
     <span className={styles.stepPreview}>
-      {!label ? (
-        <TypingDots size="message" state={state} />
-      ) : (
+      <TypingDots size="message" state={state} />
+      {label && (
         <span className={styles.stepText}>
           <ShimmerText active={state === "working"}>{label}</ShimmerText>
         </span>

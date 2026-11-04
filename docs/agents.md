@@ -1076,22 +1076,25 @@ There is no agent-global sequence gate: producer sequences reset, skip and inter
 
 ### Activity updates in the conversation
 
-Conversation visibility is separate from execution status. Activity updates use
-explicit immediate reply IDs and activity message IDs to select request lifecycle
-evidence; a nearby human message or a shared thread root is not proof of a turn.
-Consecutive updates from different requests or threads remain separate groups.
-Known waiting, working, failed, or uncertain work stays visible even after a public
-reply. Once every represented agent has settled successfully, stopped, or been
-superseded, the updates leave the conversation flow. History and exact message
-links remain available.
+The live conversation indicator remains visible while agents work, even when
+recorded activity is collapsed or expanded. It keeps dots beside current tool
+labels; reduced motion leaves the dots static. Activity text may shimmer too,
+but does not replace that persistent working cue.
+When local request evidence is available, old activity does not inherit the
+working/thinking state of a different request in the same thread.
 
-When lifecycle evidence is missing (including historical conversations after a
-reload), the next public reply can retire older updates from the same request
-if its author participated in the exchange or received the helper's last update.
-This is a display fallback, not a claim that execution completed. It never
-overrides available pending, failed, or uncertain lifecycle evidence. Durable
-cross-host completion would require retained request/turn relationships and
-terminal events; the current live-only feed does not provide that guarantee.
+Agent-to-agent coordination messages remain in the conversation as collapsed,
+expandable history, including after completion, stopping, steering, or reload.
+A dispatch remains readable while its recipient starts work, even if its sender
+has finished. A public reply never removes that history. Expanding a group keeps
+its messages in their original order; exact message links open the matching group.
+
+Live work is separate from this history. Explicit immediate reply IDs and activity
+message IDs select request lifecycle evidence; a nearby human message or shared
+thread root is not proof of a turn. Finishing a request retires its live treatment,
+not its messages. When lifecycle evidence is missing, a related public reply can
+retire the old live treatment without claiming that execution completed. Current
+work continues to appear in the conversation indicator.
 
 ### Try with an existing owner account
 

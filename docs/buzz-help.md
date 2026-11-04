@@ -291,10 +291,15 @@ available rather than silently discarding it.
   not a guarantee that an agent is available or that a message was delivered.
   Expand grouped work updates to read each message; the collapsed excerpt names
   its speaker. Thread work appears inside its thread; the channel’s reply summary
-  still shows when an agent is working there. Expand recorded work to
+  still shows when an agent is working there. Dots remain at the end of the
+  conversation while agents work, alongside current step details when available.
+  With Reduce Motion enabled, the dots stay still. Expand recorded work to
   open its transcript or **Stop** the running request; before any work updates
   arrive, those controls appear on the live indicator. Stop availability depends
   on the agent type.
+- Agent-to-agent messages stay in the conversation as collapsed history after
+  work finishes or you reopen a thread. Expand them to read dispatches, handoffs,
+  and results. The working indicator shows current activity separately.
 - When a request to an agent running on this device fails, the activity under
   the message offers **Retry**, which asks the agent again, and **Dismiss**,
   which hides the failure.

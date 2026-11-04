@@ -203,7 +203,8 @@ export function useConversationAgents(
     getDetails,
     getDetails,
   );
-  const agents = [...details.keys()].filter((key) => !replaced.has(key)).sort();
+  // A message may own the step details, but the conversation keeps its busy cue.
+  const agents = [...details.keys()].sort();
   return {
     activity: (session.agentActivity?.snapshot ?? noActivity)(),
     details,
@@ -438,7 +439,10 @@ export function TypingIndicator({
         )}${humans.length > 2 ? ` and ${humans.length - 2} others` : ""}${humans.length === 1 ? " is typing" : " are typing"}`
     : "";
   const firstStep = firstAgent ? details.get(firstAgent)?.label : undefined;
+  const represented =
+    agents.length > 0 && agents.every((agent) => replaced.has(agent));
   const previewText =
+    (firstAgent && replaced.has(firstAgent)) ||
     firstStep === "Working" ||
     firstStep === "Received · waiting to start" ||
     firstStep === "Starting"
@@ -468,7 +472,7 @@ export function TypingIndicator({
         >
           {firstAgent && (
             <AgentResponsePreview
-              stackPrevious={previousAuthor === firstAgent}
+              stackPrevious={represented || previousAuthor === firstAgent}
               name={name(firstAgent)}
               participants={agents.map((id) => ({
                 id,

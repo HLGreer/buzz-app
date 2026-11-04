@@ -46,11 +46,11 @@ export function ActivityGroupPreview({
   const disclosure = useRef<HTMLButtonElement>(null);
   const resolveName = useChannelIdentityNames(session, group.latest.channelId);
   useActivityFocusHandoff(container);
-  const { latest: row, history, participants, hidden, working } = group;
+  const { latest: row, history, participants, retired, working } = group;
   const live = useActivityIndicator(
     session,
     row,
-    !hidden && (working || !group.followingMessage),
+    !retired && (working || !group.followingMessage),
     participants,
     group.requestId,
   );
@@ -64,10 +64,9 @@ export function ActivityGroupPreview({
           requestId: group.requestId,
         }
       : undefined,
-    !hidden && !!group.requestId,
+    !retired && !!group.requestId,
     participants,
   );
-  if (hidden && !group.retained) return null;
   const primary = history[0]?.authorId ?? row.authorId;
   const profile = profiles.get(primary);
   const named = (id: string) =>

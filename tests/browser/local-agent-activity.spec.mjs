@@ -92,12 +92,29 @@ test("local agent receipt, work and failure agree across sidebar, thread and exa
   ).toHaveCount(0);
   await page.evaluate((id) => window.localAgentFixture.handover(id), second.id);
   await expect(waiting).toContainText("Reading notes.txt");
+  // The real thread tail keeps dots when a message owns the tool details,
+  // including without shimmer. jsdom cannot prove CSS visibility.
+  const liveStep = thread.getByRole("button", {
+    name: "Activity: Local tester working",
+    exact: true,
+  });
+  const dots = liveStep.locator('[data-state="working"] > span');
+  await expect(liveStep).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(dots).toHaveCount(3);
+  await expect(dots.first()).toBeVisible();
+  await expect(dots.first()).toHaveCSS("animation-name", "none");
+  await page.screenshot({
+    path: testInfo.outputPath("local-working-reduced-motion.png"),
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   // Work remains after run() returns; only actual completion settles it.
   await page.evaluate(
     (id) => window.localAgentFixture.finish(id, false),
     second.id,
   );
   await expect(waiting).toContainText("1 failed");
+  await expect(liveStep).toHaveCount(0);
   await expect(waiting).toHaveAccessibleName(
     /Local tester, Fixture provider unavailable/,
   );

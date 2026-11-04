@@ -281,7 +281,7 @@ it("reveals an older folded message for an exact visit, then permits folding it 
 });
 
 it.each([1, 4])(
-  "hides a %i-step completed run while keeping subsequent work in channels",
+  "keeps a %i-step historical run expandable alongside subsequent work in channels",
   (count) => {
     const { owner, updates, content } = activityFixture();
     try {
@@ -299,7 +299,8 @@ it.each([1, 4])(
           ...rows.slice(count + 1),
         ]),
       );
-      expect(screen.queryByText("Update 0")).toBeNull();
+      if (count === 1) expect(screen.getByText("Update 0")).toBeVisible();
+      else expect(screen.queryByText("Update 0")).toBeNull();
       const label = `${count} completed ${count === 1 ? "step" : "steps"}`;
       expect(screen.queryByText(label)).toBeNull();
       const reply = screen.getByText("Main reply");
@@ -307,7 +308,7 @@ it.each([1, 4])(
       expect(screen.getByText(`Update ${count * 2}`)).toBeVisible();
       expect(
         screen.getAllByRole("button", { name: /Show activity history/ }),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
     } finally {
       owner.dispose();
     }
@@ -946,7 +947,7 @@ it.each([
   }
 });
 
-it("hides historical steps after the agent returns to a public reply without live completion state", () => {
+it("keeps historical steps expandable after a public reply without live completion state", () => {
   const { owner, updates, content } = activityFixture();
   try {
     const rows = updates(3);
@@ -963,14 +964,18 @@ it("hides historical steps after the agent returns to a public reply without liv
     expect(screen.queryByText("3 completed steps")).toBeNull();
     view.rerender(content([...rows, response]));
     expect(screen.queryByText("3 completed steps")).toBeNull();
-    expect(screen.queryByText("Update 2")).toBeNull();
+    expect(screen.getByText("Update 2")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Show activity history/ }),
+    );
+    expect(screen.getByText("Update 0")).toBeVisible();
     expect(screen.getByText("Here is the result.")).toBeVisible();
   } finally {
     owner.dispose();
   }
 });
 
-it("reveals a directly linked completed step without restoring the completed summary", () => {
+it("opens the preserved history for a directly linked completed step", () => {
   const f = activityFixture();
   const steps = f.updates(2);
   const first = steps[0];
@@ -986,7 +991,9 @@ it("reveals a directly linked completed step without restoring the completed sum
     },
   ];
   const view = render(f.content(rows));
-  expect(screen.queryByText("Update 1")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: /Show activity history/ }),
+  ).toBeVisible();
   view.rerender(
     f.content(rows, {
       messageId: "activity-1",
@@ -994,8 +1001,10 @@ it("reveals a directly linked completed step without restoring the completed sum
     }),
   );
   expect(screen.getByText("Update 1")).toBeVisible();
-  expect(screen.queryByText("Update 0")).toBeNull();
-  expect(screen.queryByRole("button", { name: /activity history/ })).toBeNull();
+  expect(screen.getByText("Update 0")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: /Collapse activity history/ }),
+  ).toBeVisible();
   view.unmount();
   f.owner.dispose();
 });
