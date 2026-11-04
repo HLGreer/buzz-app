@@ -35,7 +35,13 @@ the interface unless an available tool actually supports that action.
   if backup fails temporarily, retry to complete setup. If backup is not supported
   by the build or account, choose **Continue without backup** to finish setup.
   Independent-community key imports
-  without Builderlab sign-in do not upload a backup. Existing community profiles
+  without Builderlab sign-in do not upload a backup. After signing in to the
+  public Builderlab, **Connect to a community** also offers **Create a
+  community** when that account is linked to this device’s key and may create one.
+  Choose an available address, then **Create community** joins it right away,
+  with no **Join Community** confirmation. Other Builderlab deployments do not
+  offer it during setup.
+  Existing community profiles
   are preserved and skip setup. A new profile needs a name; an avatar is optional. A returning account may restore
   its backed-up key where the build and account allow it. If the older Buzz app
   was used on this computer, a **Continue with your Buzz identity?** dialog
@@ -331,6 +337,13 @@ available rather than silently discarding it.
   no setup or token. Without such a plugin there are no tools to
   offer; do not promise them.
 - Some desktop plugins can upload images you provide to services they declare.
+- Agents running on this computer can write plugins while the **Plugin
+  development** plugin is on (it is by default). It gives them
+  `plugin_authoring_guide`, `plugin_status` and `plugin_reload`. The person
+  installs a new plugin first: **Manage plugins → Add → Browse** under Add from
+  folder. After that the agent can reload it from that folder. A reload that
+  fails to start restores the previous version. Changed host access still needs
+  the person's review through the plugin's **Update**.
 - **Focus**, when its optional plugin is on, is in the profile menu. For a
   chosen time it shows only Solo chats in the sidebar and lets only Solo chats
   in the selected community show banners, play sounds or light the Dock dot. Links and search still open
