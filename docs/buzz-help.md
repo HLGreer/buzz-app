@@ -227,6 +227,10 @@ that agent in Buzz; they do not notify the external app through this connection.
   and Linux) an HTTP(S) link in a message to open it in your default browser
   instead of a side panel. You can also right-click the link and choose
   **Open in browser**.
+- **Close tabs or the window (macOS)**: ⌘W closes the active tab. With no tab
+  to close, it closes the window while Buzz and running agents stay open.
+  Reopen Buzz from the Dock. ⌘⇧W clears the current channel's tabs without
+  closing the window. These tab shortcuts do nothing while a modal is open.
 - **Sidebar width**: drag the sidebar's right edge, or focus its resize handle
   and use the Left/Right arrow keys. Double-click the handle to reset the width.
   Messages and plugin pages share the saved width within the same community

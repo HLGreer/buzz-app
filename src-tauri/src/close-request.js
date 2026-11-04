@@ -1,6 +1,6 @@
-// Evaluated only in the trusted main webview by the macOS Close Tab/Close All Tabs menus.
+// Evaluated only in the trusted main webview by the macOS Close/Close All Tabs menus.
 // Native code binds `tabEvent` to the requested close action.
-// The status is informational: the window never closes when unhandled.
+// An unhandled Close request lets native code close the window; Close All Tabs never does.
 (() => {
   if (document.querySelector('dialog[open], [aria-modal="true"]'))
     return "handled";
