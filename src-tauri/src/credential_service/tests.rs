@@ -363,6 +363,56 @@ async fn a_protection_change_revokes_a_launched_token() {
     }
 }
 
+/// A launched token's request that is held reading the key while the
+/// agent's protection changes returns nothing: the check after it ran
+/// revokes it on its own, past the one before.
+#[tokio::test(flavor = "multi_thread")]
+// The held key lock is the gate that pauses the request.
+#[allow(clippy::await_holding_lock)]
+async fn a_protection_change_mid_request_withholds_the_result() {
+    for provider in [GUARD, "other"] {
+        let fixture = protected_fixture();
+        let pubkey = fixture.agent.pubkey.clone();
+        let launch = fixture
+            .service
+            .protected_launch(GUARD, pubkey.clone(), RELAY.into())
+            .await
+            .unwrap();
+        let (held, token) = issued(&fixture).await;
+        fixture
+            .service
+            .bind(&held, GUARD, Some(&launch), pubkey, RELAY.into())
+            .await
+            .unwrap();
+        let key = digest(&token);
+        let keys = fixture.host.hold_keys_for_test();
+        let (service, waiting) = (fixture.service.clone(), token.clone());
+        let body =
+            json!({ "id": "1", "method": "sign_event", "params": [unsigned(9, json!([]), now())] })
+                .to_string();
+        let request = tokio::spawn(async move {
+            respond(&service, Some(&waiting), Some(1), body.as_bytes()).await
+        });
+        // Admitted, then past the check before it runs: it waits for the key.
+        while !fixture.service.callers()[&key].spent() {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(!request.is_finished());
+        reprotect(&fixture, provider);
+        drop(keys);
+        let reply = request.await.unwrap();
+        assert_eq!(
+            error(&reply),
+            (StatusCode::UNAUTHORIZED, "revoked"),
+            "provider={provider}"
+        );
+        assert_eq!(reply.1["result"], "", "provider={provider}");
+        let after = ask(&fixture, &token, "get_public_key", &[]).await;
+        assert_eq!(after.0, StatusCode::UNAUTHORIZED, "provider={provider}");
+    }
+}
+
 #[tokio::test]
 async fn a_plugin_binds_only_agents_of_its_own_type() {
     let fixture = fixture();
