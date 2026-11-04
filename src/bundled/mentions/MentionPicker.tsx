@@ -389,7 +389,7 @@ export function MentionPicker({
                   agent,
                   elsewhere,
                   disabled: reason,
-                  fullName,
+                  otherName,
                 }) => {
                   const managedBy = model.managedBy.get(recipient.pubkey);
                   // Each addressed agent's row shows a check; fill is only
@@ -433,13 +433,13 @@ export function MentionPicker({
                             {agent && <span className="sr-only"> Agent</span>}
                           </span>
                           {reason && <small>{reason}</small>}
-                          {((fullName && fullName !== label) ||
+                          {(otherName ||
                             managedBy ||
                             !members?.includes(recipient.pubkey)) && (
                             <small className="text-caption text-subtle">
-                              {/* A verified full name sits beside the detail. */}
+                              {/* The other verified name sits beside the detail. */}
                               {[
-                                fullName !== label ? fullName : undefined,
+                                otherName,
                                 managedBy,
                                 members?.includes(recipient.pubkey)
                                   ? undefined

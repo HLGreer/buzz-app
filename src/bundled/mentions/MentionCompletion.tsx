@@ -209,12 +209,12 @@ export function MentionCompletion({
     const memberKeys = new Set(members);
     const available = [
       ...matching.map(
-        ({ recipient, label, elsewhere, disabled, fullName, agent }) => {
+        ({ recipient, label, elsewhere, disabled, otherName, agent }) => {
           const detail =
             disabled ??
-            // A verified full name sits beside the detail.
+            // The other verified name sits beside the detail.
             ([
-              fullName !== label ? fullName : undefined,
+              otherName,
               model.managedBy.get(recipient.pubkey),
               memberKeys.has(recipient.pubkey)
                 ? undefined
