@@ -21,12 +21,11 @@ export function createActivityTab(
   relay: RelayData,
   openSettings?: (section: string) => void,
 ): ComponentType<AgentViewProps> {
-  return function PublishedActivity({ agent, openConversation }) {
+  return function PublishedActivity({ agent }) {
     const connection = useRelayConnection(relay);
     return (
       <ActivityPanel
         agent={agent}
-        openConversation={openConversation}
         activity={
           connection.status === "ready"
             ? connection.session.agentActivity
@@ -42,13 +41,11 @@ export function ActivityPanel({
   agent,
   activity,
   openSettings,
-  openConversation,
 }: {
   agent: Agent;
   /** Absent while the owner's session connects. */
   activity: AgentActivity | undefined;
   openSettings?: ((section: string) => void) | undefined;
-  openConversation?: AgentViewProps["openConversation"];
 }) {
   if (!activity) return <Note>Activity shows once Buzz is connected.</Note>;
   return (
@@ -56,7 +53,6 @@ export function ActivityPanel({
       agent={agent}
       activity={activity}
       openSettings={openSettings}
-      openConversation={openConversation}
     />
   );
 }
@@ -67,12 +63,10 @@ function ActivityFeed({
   agent,
   activity,
   openSettings,
-  openConversation,
 }: {
   agent: Agent;
   activity: AgentActivity;
   openSettings: ((section: string) => void) | undefined;
-  openConversation: AgentViewProps["openConversation"];
 }) {
   // The Agent Activity plugin owns the feed's lease; this only reads it.
   const snapshot = useSyncExternalStore(
@@ -110,9 +104,11 @@ function ActivityFeed({
     <ActivityTranscript
       transcript={transcript}
       agentName={agent.name}
+      agentKey={agent.key}
+      agentPicture={agent.picture}
+      community={agent.relay}
       state={(turnId) => state.get(turnId)}
       follow={false}
-      openConversation={openConversation}
       before={
         <>
           <Note>

@@ -1,3 +1,4 @@
+import { requestWork } from "../agents/request-work";
 import { AgentResponsePreview } from "./AgentResponsePreview";
 import { useActivityIndicator } from "./use-activity-indicator";
 import type { ActivityRowPresentation } from "./activity-presentation";
@@ -52,7 +53,12 @@ import type { RelaySession } from "../relay/session";
 import type { UnreadCapability } from "../relay/unread";
 import { MediaAttachment, type MediaPlayback } from "./MediaAttachment";
 import { parseMediaTimeReply } from "./media-timecode";
-import { profileTarget, profileActivityViewTarget } from "../profiles/target";
+import {
+  profileTarget,
+  profileActivityViewTarget,
+  openProfileTranscript,
+} from "../profiles/target";
+import referenceStyles from "../../shared/InlineReference.module.css";
 import { MessageCard, useMessageRenderer } from "../conversation/MessageBody";
 import { TargetOpenerProvider, WithTargetOpener } from "../conversation/opener";
 import { InlineText } from "../conversation/InlineText";
@@ -158,6 +164,39 @@ type MessageContentProps = MessageRowProps & {
     trigger: RefObject<HTMLButtonElement | null>,
   ) => ReactElement;
 };
+
+/** A reply is not completion evidence. Read the exact request's lifecycle. */
+function useCompletedMessageWork(
+  activity: RelaySession["agentActivity"] | undefined,
+  row: ChannelMessage,
+) {
+  const read = () => {
+    const snapshot = activity?.snapshot();
+    if (!snapshot) return false;
+    const published = (snapshot.local ?? []).filter(
+      (work) =>
+        work.agent === row.authorId &&
+        work.channelId === row.channelId &&
+        work.publishedMessageIds?.includes(row.id),
+    );
+    const ids = published.map((work) => work.messageId);
+    if (!ids.length) return false;
+    const work = requestWork(snapshot, row.channelId, ids);
+    return (
+      work.some((entry) => entry.agent === row.authorId) &&
+      work.every(
+        (entry) => entry.state === "done" || entry.state === "ended",
+      ) &&
+      !(snapshot.local ?? []).some(
+        (entry) =>
+          entry.channelId === row.channelId &&
+          ids.includes(entry.messageId) &&
+          !!entry.publishing,
+      )
+    );
+  };
+  return useSyncExternalStore(activity?.subscribe ?? noSubscribe, read, read);
+}
 
 const FullMessageRow = memo(function MessageRow(props: MessageContentProps) {
   return props.session && props.scope && props.extensions?.accessories ? (
@@ -297,6 +336,20 @@ function MessageRowContent({
     ) &&
     activityView &&
     canOpenLink?.(activityView);
+  const transcriptView = profileActivityViewTarget(row.authorId, {
+    transcript: true,
+  });
+  const canViewTranscript =
+    canViewActivity &&
+    transcriptView &&
+    row.audience !== "agents" &&
+    !row.membership &&
+    !row.huddle &&
+    canOpenLink?.(transcriptView);
+  const taskCompleted = useCompletedMessageWork(
+    canViewTranscript ? session?.agentActivity : undefined,
+    row,
+  );
   const activityItem = canViewActivity && (
     <MenuItem
       onClick={() => {
@@ -1015,6 +1068,20 @@ function MessageRowContent({
                 )}
                 {!stackPrevious && (
                   <MessageTimestamp createdAt={row.createdAt} />
+                )}
+                {!stackPrevious && canViewTranscript && taskCompleted && (
+                  <span className="text-caption">
+                    <button
+                      type="button"
+                      className={referenceStyles.link}
+                      onClick={() => {
+                        if (canOpenLink?.(transcriptView))
+                          openProfileTranscript(transcriptView, openLink);
+                      }}
+                    >
+                      View activity
+                    </button>
+                  </span>
                 )}
                 {session &&
                   actions.map(

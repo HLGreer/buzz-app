@@ -72,13 +72,14 @@ function prompt(id: string, at: number, raw: string, steered: boolean) {
   let sections = promptSections(raw);
   const steer = sections.find((section) => section.tag === STEER);
   if (steer) sections = promptSections(steer.body);
-  const { text, author } = promptMessage(sections);
+  const { text, author, authorPubkey } = promptMessage(sections);
   return {
     id,
     at,
     type: "prompt" as const,
     text: text || raw,
     ...(author ? { author } : {}),
+    ...(authorPubkey ? { authorPubkey } : {}),
     sections,
     steer: steered || !!steer,
   };

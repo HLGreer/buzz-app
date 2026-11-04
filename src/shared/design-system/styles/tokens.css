@@ -2286,3 +2286,14 @@
   --spacing-chip-inset: var(--space-chip-inset);
   --spacing-chip-gap: var(--space-chip-gap);
 }
+
+/* Terminal task status: solid Citrus for completion and red for failure,
+   each paired with accessible foreground ink in both modes. */
+:root {
+  --red-status-solid: #ce2c31;
+  --surface-status-success: var(--citrus-9);
+  --text-on-status-success: var(--citrus-ink-light);
+  --surface-status-danger: var(--red-status-solid);
+  --neutral-status-ink: #ffffff;
+  --text-on-status: var(--neutral-status-ink);
+}

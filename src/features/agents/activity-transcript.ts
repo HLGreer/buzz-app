@@ -38,6 +38,7 @@ export type TranscriptItem =
       type: "prompt";
       text: string;
       author?: string;
+      authorPubkey?: string;
       sections: PromptSection[];
       steer: boolean;
     })
@@ -147,6 +148,7 @@ export function promptMessage(sections: PromptSection[]) {
     (section) => section.tag === "buzz-event" || section.tag === "buzz-events",
   );
   const authors: string[] = [];
+  const authorKeys: string[] = [];
   const contents: string[] = [];
   for (const { body } of events) {
     // Current harnesses serialize the event as escaped JSON. Never parse its
@@ -159,6 +161,8 @@ export function promptMessage(sections: PromptSection[]) {
     }
     if (event && typeof event.content === "string") {
       contents.push(event.content);
+      const key = str(event.pubkey);
+      if (/^[0-9a-f]{64}$/.test(key)) authorKeys.push(key);
       const author = str(event.author) || str(event.npub) || str(event.pubkey);
       if (author) authors.push(author);
       continue;
@@ -177,6 +181,10 @@ export function promptMessage(sections: PromptSection[]) {
   return {
     text: contents.join("\n\n"),
     author: [...new Set(authors)].join(", ") || undefined,
+    authorPubkey:
+      contents.length === authorKeys.length && new Set(authorKeys).size === 1
+        ? authorKeys[0]
+        : undefined,
   };
 }
 
@@ -441,6 +449,9 @@ function buildTranscript(
             sections.find((section) => section.tag === "text")?.body ||
             text,
           ...(message.author ? { author: message.author } : {}),
+          ...(message.authorPubkey
+            ? { authorPubkey: message.authorPubkey }
+            : {}),
           sections,
           steer: method !== "session/prompt",
         });

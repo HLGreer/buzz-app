@@ -84,13 +84,14 @@ function prompt(id: string, at: number, raw: string): TranscriptItem {
   let sections = promptSections(raw);
   const steer = sections.find((section) => section.tag === STEER);
   if (steer) sections = promptSections(steer.body);
-  const { text, author } = promptMessage(sections);
+  const { text, author, authorPubkey } = promptMessage(sections);
   return {
     id,
     at,
     type: "prompt",
     text: text || raw,
     ...(author ? { author } : {}),
+    ...(authorPubkey ? { authorPubkey } : {}),
     sections,
     steer: !!steer,
   };
