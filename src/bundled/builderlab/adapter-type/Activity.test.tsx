@@ -99,7 +99,7 @@ function fakeActivity(overrides: Partial<Snapshot> = {}) {
   return { activity, update };
 }
 
-it("shows this agent's published turns, leaving the feed's lease to the plugin", () => {
+it("shows this agent's published turns, leaving the feed's lease to the plugin", async () => {
   const { activity } = fakeActivity({
     records: [
       record("t1", "Deployed the fix"),
@@ -115,7 +115,18 @@ it("shows this agent's published turns, leaving the feed's lease to the plugin",
       },
     ],
   });
-  render(<ActivityPanel agent={agent} activity={activity} />);
+  const openConversation = vi.fn();
+  render(
+    <ActivityPanel
+      agent={agent}
+      activity={activity}
+      openConversation={openConversation}
+    />,
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: `Thread ${root.slice(0, 8)}` }),
+  );
+  expect(openConversation).toHaveBeenCalledExactlyOnceWith("alpha", root);
   expect(
     screen.getByText("Deployed the fix", { selector: "summary span" }),
   ).toBeInTheDocument();

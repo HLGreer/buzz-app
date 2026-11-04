@@ -127,6 +127,7 @@
   padding-inline-start: calc(var(--space-4) + var(--space-2));
 }
 .tool > summary {
+  flex-wrap: wrap;
   min-height: var(--space-7);
   margin-inline-start: calc(-1 * (var(--space-4) + 2 * var(--space-2)));
   margin-inline-end: calc(-1 * var(--space-2));
@@ -141,7 +142,7 @@
 }
 .summary {
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: min(10rem, calc(100% - var(--space-8) - var(--space-4)));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

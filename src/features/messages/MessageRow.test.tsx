@@ -4227,6 +4227,8 @@ it.each([
   "agent",
   "failed",
   "failed publishing",
+  "stopped",
+  "superseded",
   "human",
   "disabled",
   "retired",
@@ -4310,7 +4312,11 @@ it.each([
               : [
                   {
                     ...local,
-                    state: mode.startsWith("failed") ? "error" : "done",
+                    state: mode.startsWith("failed")
+                      ? "error"
+                      : mode === "stopped" || mode === "superseded"
+                        ? mode
+                        : "done",
                     ...(mode.includes("publishing") ? { publishing: 1 } : {}),
                   },
                   ...(mode === "helper working"

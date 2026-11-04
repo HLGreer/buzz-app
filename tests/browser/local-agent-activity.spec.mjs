@@ -755,8 +755,51 @@ test("the published-activity tab shows turns its agent published", async ({
     page.getByRole("tab", { name: "Activity", selected: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Published reply", { exact: true }),
+    page.locator("summary").getByText("Published reply", { exact: true }),
   ).toBeVisible();
+  // Real browser layout is required: jsdom cannot catch flex min-content collapse.
+  const path = "src/features/agents/ActivityTranscript.tsx";
+  app.observer(
+    frame("acp_read", {
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId: "S",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "layout-tool",
+          kind: "read",
+          title: path,
+          status: "completed",
+          rawInput: { path },
+        },
+      },
+    }),
+    key,
+  );
+  const toolSummary = page.locator("summary").filter({ hasText: path });
+  await toolSummary.click();
+  await page.setViewportSize({ width: 390, height: 950 });
+  for (const size of ["150%", "200%"]) {
+    await page.evaluate((value) => {
+      document.documentElement.style.fontSize = value;
+    }, size);
+    await expect
+      .poll(async () => {
+        const label = await toolSummary
+          .getByText(path, { exact: true })
+          .boundingBox();
+        return label?.width ?? 0;
+      })
+      .toBeGreaterThan(100);
+    await expect
+      .poll(async () => (await toolSummary.boundingBox())?.height ?? Infinity)
+      .toBeLessThan(300);
+  }
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty("font-size");
+  });
+  await page.setViewportSize({ width: 1280, height: 950 });
   // A turn's thread label opens that thread.
   const root = app.histories
     .get("primary/alpha")

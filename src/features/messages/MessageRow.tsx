@@ -1,4 +1,4 @@
-import { requestWork } from "../agents/request-work";
+import { requestWork, isSettledWork } from "../agents/request-work";
 import { AgentResponsePreview } from "./AgentResponsePreview";
 import { useActivityIndicator } from "./use-activity-indicator";
 import type { ActivityRowPresentation } from "./activity-presentation";
@@ -184,12 +184,7 @@ function useCompletedMessageWork(
     const work = requestWork(snapshot, row.channelId, ids);
     return (
       work.some((entry) => entry.agent === row.authorId) &&
-      work.every(
-        (entry) =>
-          entry.state === "done" ||
-          entry.state === "ended" ||
-          entry.state === "error",
-      ) &&
+      work.every((entry) => isSettledWork(entry) || entry.state === "error") &&
       !(snapshot.local ?? []).some(
         (entry) =>
           entry.channelId === row.channelId &&

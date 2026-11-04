@@ -42,6 +42,8 @@ import {
 } from "../../shared/design-system/icons/index";
 import { formatFullTimestamp, formatTime } from "../../shared/datetime";
 import styles from "./ActivityTranscript.module.css";
+import referenceStyles from "../../shared/InlineReference.module.css";
+import type { AgentViewProps } from "./service";
 import messageStyles from "../messages/Messages.module.css";
 import { TypingDots } from "../../shared/design-system/ui/TypingDots";
 import { ShimmerText } from "../../shared/design-system/ui/ShimmerText";
@@ -182,6 +184,7 @@ export function ActivityTranscript({
   state,
   before,
   follow = true,
+  openConversation,
   agentPicture,
   agentKey,
   community,
@@ -194,6 +197,8 @@ export function ActivityTranscript({
   /** Scroll the host to the latest step; off where the transcript shares
    * its scroll with other content. */
   follow?: boolean;
+  /** Only aggregate feeds need per-turn conversation navigation. */
+  openConversation?: AgentViewProps["openConversation"];
   agentPicture?: string | undefined;
   agentKey?: string;
   community?: string | undefined;
@@ -243,6 +248,7 @@ export function ActivityTranscript({
                   turn.endedAt ? "ended" : (state(turn.turnId) ?? "unknown")
                 }
                 agentName={agentName}
+                openConversation={openConversation}
               />
             </Fragment>
           ))}
@@ -256,11 +262,18 @@ function Turn({
   turn,
   state,
   agentName,
+  openConversation,
 }: {
   turn: TranscriptTurn;
   state: TurnState;
   agentName: string;
+  openConversation?: AgentViewProps["openConversation"];
 }) {
+  const { channelId, threadRootId } = turn;
+  const openPlace =
+    openConversation && channelId && threadRootId !== undefined
+      ? () => openConversation(channelId, threadRootId ?? undefined)
+      : undefined;
   const status = turn.error
     ? "Failed"
     : state === "working"
@@ -298,6 +311,23 @@ function Turn({
             </span>
           )}
         </header>
+      )}
+      {openConversation && (
+        <div className="text-body text-secondary">
+          {openPlace ? (
+            <button
+              type="button"
+              className={referenceStyles.link}
+              onClick={openPlace}
+            >
+              {turn.threadRootId
+                ? `Thread ${turn.threadRootId.slice(0, 8)}`
+                : "Channel"}
+            </button>
+          ) : (
+            "Conversation unknown"
+          )}
+        </div>
       )}
       {turn.partial && (
         <p className="text-body text-secondary">
