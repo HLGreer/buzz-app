@@ -39,6 +39,7 @@
     "allow-federated-identity-snapshot",
     "allow-federated-identity-sign-in",
     "allow-federated-identity-cancel-sign-in",
+    "allow-federated-identity-sign-in-link",
     "allow-federated-identity-sign-out",
     "allow-federated-identity-register",
     "allow-federated-identity-unregister",

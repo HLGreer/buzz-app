@@ -43,6 +43,8 @@ export interface FederatedIdentity {
   subscribe(listener: () => void): () => void;
   signIn(): Promise<SessionSnapshot>;
   cancelSignIn(): Promise<void>;
+  /** The page the pending sign-in opened, to paste into a browser by hand. */
+  signInLink(): Promise<string | null>;
   signOut(): Promise<void>;
   request(input: AuthenticatedRequest): Promise<HostResponse>;
 }
@@ -160,6 +162,9 @@ export class FederatedIdentityService
       throw new Error("Federated identity requires Buzz desktop");
     await invoke("federated_identity_cancel_sign_in");
     await this.operation("federated_identity_snapshot");
+  }
+  signInLink() {
+    return invoke<string | null>("federated_identity_sign_in_link");
   }
   async request(request: AuthenticatedRequest): Promise<HostResponse> {
     const owner = this.ctx.pluginOwner;

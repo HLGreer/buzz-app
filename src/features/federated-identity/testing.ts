@@ -56,6 +56,7 @@ export function federatedFixture(
         email: null,
       });
     }),
+    signInLink: vi.fn(async () => "https://builderlab.example/v1/login/start"),
     signOut: vi.fn(async () => {
       publish({
         status: "signed-out",

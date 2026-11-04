@@ -53,6 +53,7 @@ the interface unless an available tool actually supports that action.
 - Some organization builds ask you to sign in to your organization when Buzz
   opens, and again when that sign-in ends. Before it ends, a notice offers
   **Sign in again** so Buzz stays open. Finish in the browser and Buzz opens.
+  If the browser doesn't open, **Copy sign-in link** and paste it into a browser.
   **Not now** opens Buzz anyway, but that organization's communities stay
   unavailable until you sign in. Sign-in, sign-out and when the current
   sign-in ends also live under

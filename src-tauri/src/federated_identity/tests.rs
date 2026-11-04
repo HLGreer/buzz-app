@@ -101,13 +101,26 @@ async fn cancel_releases_the_native_callback_before_a_replacement_login() {
         let mut state = owner.state();
         state.restored = true;
         state.snapshot.status = Status::SigningIn;
-        state.callback = Some(guard.clone());
+        state.callback = Some((guard.clone(), url.into()));
     }
+    assert_eq!(owner.sign_in_link().as_deref(), Some(url));
     owner.cancel_sign_in();
+    assert_eq!(owner.sign_in_link(), None);
     let replacement = callbacks.begin_federated(url.into(), |_| Ok(())).unwrap();
     drop(guard); // The old future's cleanup cannot cancel the replacement.
     assert!(callbacks.begin_federated(url.into(), |_| Ok(())).is_err());
     callbacks.cancel(&replacement.id).unwrap();
+}
+
+#[test]
+fn a_reported_browser_failure_stops_sign_in_but_a_hung_browser_does_not() {
+    let ample = std::time::Duration::from_secs(10);
+    assert_eq!(open_within(ample, || true), Ok(()));
+    assert_eq!(open_within(ample, || false), Err("browser-unavailable"));
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    let brief = std::time::Duration::from_millis(50);
+    assert_eq!(open_within(brief, move || held.recv().is_err()), Ok(()));
+    drop(release);
 }
 
 #[tokio::test]
