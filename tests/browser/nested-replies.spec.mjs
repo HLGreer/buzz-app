@@ -569,6 +569,17 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
   await expect(
     reacted.getByRole("button", { name: /👍/ }).last(),
   ).toBeVisible();
+  // The chip is optimistic. Keep the production subscription alive until the
+  // signed reaction reaches the relay, or its delivery faults after close.
+  await expect
+    .poll(() =>
+      app.report.publications.some(
+        ({ event }) =>
+          event.kind === 7 &&
+          event.tags.some(([name, id]) => name === "e" && id === emojiReply.id),
+      ),
+    )
+    .toBe(true);
   await panel.getByRole("textbox", { name: "Reply to thread" }).focus();
   const hook = await hookFor(reacted);
   expect(hook.itemBottom - hook.avatar.center).toBeGreaterThan(30);
