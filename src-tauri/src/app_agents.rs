@@ -391,6 +391,13 @@ impl AppAgentHost {
         std::fs::write(path, serde_json::to_vec(agents).unwrap()).unwrap();
         self.keys().insert(key.pubkey().into(), Arc::new(key));
     }
+    /// This host reading keys from `credentials`, its key cache emptied.
+    #[cfg(test)]
+    pub(crate) fn with_credentials_for_test(mut self, credentials: Arc<dyn Credentials>) -> Self {
+        self.credentials = credentials;
+        self.keys().clear();
+        self
+    }
     pub(crate) fn forget_row_for_test(&self, pubkey: &str, relay: &str) {
         self.tokens.forget_row(pubkey, relay).unwrap();
     }
