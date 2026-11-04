@@ -2561,6 +2561,8 @@ it("groups a team's refusals with one reason into one alert whose Retry adds the
   expect(refusals()).toHaveLength(1);
   const retry = screen.getByRole("button", { name: "Retry adding Ada and Cy" });
   expect(retry).toHaveTextContent("Retry");
+  // Check the retry independently of the initial batch and its fallbacks.
+  t.publish.mockClear();
   t.fail("");
   await t.user.click(retry);
   expect(screen.getByRole("searchbox")).toHaveFocus();
@@ -2570,7 +2572,7 @@ it("groups a team's refusals with one reason into one alert whose Retry adds the
   const added = t.publish.mock.calls
     .map(([event]) => event.tags.find((tag) => tag[0] === "p")?.[1])
     .sort();
-  expect(added).toEqual([t.ada, t.ada, t.cy, t.cy].sort());
+  expect(added).toEqual([t.ada, t.cy].sort());
 });
 it("keeps only the still-refused member in the alert after a partial retry", async () => {
   const t = await teamSetup();
@@ -2617,8 +2619,14 @@ it("names three refused members and counts the rest", async () => {
 });
 it("shows a team's refusals with different reasons as separate alerts", async () => {
   const t = await teamSetup();
-  t.publish.mockRejectedValueOnce(new PublishRejected("Agent is archived"));
-  t.fail("Invitation denied");
+  t.publish.mockImplementation(async (event) => {
+    const recipients = event.tags.filter(([name]) => name === "p");
+    throw new PublishRejected(
+      recipients.length === 1 && recipients[0]?.[1] === t.ada
+        ? "Agent is archived"
+        : "Invitation denied",
+    );
+  });
   await t.user.click(screen.getByRole("button", { name: "Add team Crew" }));
   const refusals = () =>
     screen
@@ -2627,8 +2635,8 @@ it("shows a team's refusals with different reasons as separate alerts", async ()
       .filter((content) => /^(Ada|Cy): /.test(content));
   await vi.waitFor(() => expect(refusals()).toHaveLength(2));
   expect(refusals()).toEqual([
-    expect.stringMatching(/^(Ada|Cy): Agent is archived/),
-    expect.stringMatching(/^(Ada|Cy): Invitation denied/),
+    expect.stringMatching(/^Ada: Agent is archived/),
+    expect.stringMatching(/^Cy: Invitation denied/),
   ]);
   expect(
     screen.getAllByRole("button", { name: /^Retry adding (Ada|Cy)$/ }),
