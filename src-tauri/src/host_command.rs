@@ -679,9 +679,9 @@ mod tests {
         let path = directory.path().canonicalize().unwrap().join("status");
         crate::test_executable::write_executable(&path, "#!/bin/sh\nprintf verified\n");
         let sha256 = format!("{:x}", Sha256::digest(fs::read(&path).unwrap()));
-        // A PATH-resolved `env` would run its argument instead.
+        // A PATH-resolved `env` would print "fallback" instead.
         let command: super::HostCommand = serde_json::from_value(serde_json::json!({
-            "id": "status", "program": "env", "args": ["false"],
+            "id": "status", "program": "env", "args": ["printf", "fallback"],
             "artifact": {"path": path, "sha256": sha256},
         }))
         .unwrap();
