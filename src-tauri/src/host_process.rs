@@ -11,7 +11,7 @@ use artifact::verify_artifact;
 use claude_hooks::ClaudeHooks;
 use protection::ProcessProtection;
 
-use crate::credential_service::{CredentialService, Issued};
+use crate::credential_service::{CredentialService, Issued, ProtectedLaunch};
 use crate::host_command::{effective_path, load_login_shell_path, resolve_program};
 use crate::{with_manager, PluginManager};
 use buzzodz_plugins::HostProcess;
@@ -29,6 +29,14 @@ use tauri::Manager as _;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::{ChildStdin, Command};
 use tokio::sync::oneshot;
+
+/// The agent a protection provider launches a process for.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ProtectedAgent {
+    pubkey: String,
+    relay: String,
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -78,6 +86,8 @@ struct Entry {
     credential: Option<Arc<Issued>>,
     /// Tokens for its agents' tools, never its own environment; revoked with it.
     tools: Arc<ToolCredentials>,
+    /// The agent a protection provider launched it for, if one did.
+    launch: Option<ProtectedLaunch>,
 }
 
 /// One token per agent a shared host runs, each handed only to that agent's
@@ -146,7 +156,7 @@ impl HostProcesses {
         on_event: Channel<ProcessEvent>,
     ) -> Result<u64, String> {
         self.start_guarded(
-            page, plugin, program, command, credential, on_event, None, false,
+            page, plugin, program, command, credential, on_event, None, false, None,
         )
     }
     #[allow(clippy::too_many_arguments)]
@@ -160,6 +170,7 @@ impl HostProcesses {
         on_event: Channel<ProcessEvent>,
         read_lease: Option<crate::host_files::FileReadLease>,
         claude_hooks: bool,
+        launch: Option<ProtectedLaunch>,
     ) -> Result<u64, String> {
         let state = self.clone();
         let credential = credential.map(Arc::new);
@@ -206,6 +217,7 @@ impl HostProcesses {
                 stop: Some(stop),
                 credential: credential.clone(),
                 tools: tools.clone(),
+                launch,
             },
         );
         drop(registry);
@@ -393,6 +405,7 @@ pub(crate) async fn plugin_host_process_spawn<R: tauri::Runtime>(
     mcp: Option<ProcessMcpConnection>,
     protection: Option<ProcessProtection>,
     agent_credential: Option<bool>,
+    protected_agent: Option<ProtectedAgent>,
 ) -> Result<u64, String> {
     // Any plugin process with either ID conservatively blocks managed deletion
     // app-wide, regardless of program/path. Attachment adapters use these IDs.
@@ -534,6 +547,19 @@ pub(crate) async fn plugin_host_process_spawn<R: tauri::Runtime>(
             serde_json::to_string(&mcp).map_err(|error| error.to_string())?,
         );
     }
+    // Only a protected process may be launched for an agent, and only by the
+    // provider that agent's saved protection names.
+    let launch = match protected_agent {
+        Some(_) if !protected => {
+            return Err("Only a protected process is launched for an agent".into())
+        }
+        Some(agent) => Some(
+            app.state::<CredentialService>()
+                .protected_launch(&plugin, agent.pubkey, agent.relay)
+                .await?,
+        ),
+        None => None,
+    };
     // Acts for nobody until `plugin_host_process_bind_agent` names its agent.
     let credential = match agent_credential {
         Some(true) => app.state::<CredentialService>().issue().await?,
@@ -561,6 +587,7 @@ pub(crate) async fn plugin_host_process_spawn<R: tauri::Runtime>(
         on_event,
         read_lease,
         claude_hooks,
+        launch,
     )
 }
 
@@ -617,8 +644,15 @@ pub(crate) async fn plugin_host_process_bind_agent(
     relay: String,
 ) -> Result<(), String> {
     // None was issued where there is no transport (Windows): nothing to bind.
-    match processes.owned(&id, handle, |entry| entry.credential.clone())? {
-        Some(issued) => credentials.bind(&issued, &id, pubkey, relay).await,
+    let (credential, launch) = processes.owned(&id, handle, |entry| {
+        (entry.credential.clone(), entry.launch.clone())
+    })?;
+    match credential {
+        Some(issued) => {
+            credentials
+                .bind(&issued, &id, launch.as_ref(), pubkey, relay)
+                .await
+        }
         None => Ok(()),
     }
 }
@@ -664,7 +698,9 @@ impl HostProcesses {
         relay: String,
         after_miss: impl std::future::Future<Output = ()>,
     ) -> Result<Option<String>, String> {
-        let tools = self.owned(id, handle, |entry| entry.tools.clone())?;
+        let (tools, launch) = self.owned(id, handle, |entry| {
+            (entry.tools.clone(), entry.launch.clone())
+        })?;
         // This agent's token, if it still acts. One outlived by the agent's
         // removal and re-adding, or by a sign-out, is dropped, which revokes it
         // for good, so a fresh one is issued for the agent as it is now.
@@ -687,7 +723,7 @@ impl HostProcesses {
             return Ok(None);
         };
         credentials
-            .bind(&issued, id, pubkey.clone(), relay.clone())
+            .bind(&issued, id, launch.as_ref(), pubkey.clone(), relay.clone())
             .await
             .inspect_err(|_| issued.revoke())?;
         let mut guard = tools.0.lock().unwrap_or_else(|poison| poison.into_inner());

@@ -96,6 +96,9 @@ export type HostProcessOptions = Readonly<{
   /** Hand it a Buzz credential (`BUZZ_CREDENTIAL_PROVIDER`) that acts for no
    * one until `actAs` names one of the plugin's agents. Not on Windows. */
   agentCredential?: boolean;
+  /** Set by agent protection: the agent a protected engine is launched for.
+   * Native checks that the agent's saved protection names this plugin. */
+  protectedAgent?: Readonly<{ pubkey: string; relay: string }>;
   onStdout?(data: string): void;
   onStderr?(data: string): void;
 }>;
@@ -347,6 +350,7 @@ export class HostService extends Service implements Host {
       mcp: options.mcp ?? null,
       protection: options.protection ?? null,
       agentCredential: options.agentCredential ?? false,
+      protectedAgent: options.protectedAgent ?? null,
       onEvent,
     });
     // The host takes at most 1 MiB a write, so a longer one goes in pieces,

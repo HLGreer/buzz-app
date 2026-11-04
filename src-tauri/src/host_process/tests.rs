@@ -112,7 +112,7 @@ async fn its_buzz_credential_is_revoked_once_it_exits() {
         .unwrap();
     fixture
         .service
-        .bind(&held, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(&held, "p", None, fixture.agent.pubkey.clone(), RELAY.into())
         .await
         .unwrap();
     drop(held);
@@ -179,7 +179,7 @@ async fn its_buzz_credential_is_revoked_while_a_detached_descendant_holds_its_ou
         .unwrap();
     fixture
         .service
-        .bind(&held, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(&held, "p", None, fixture.agent.pubkey.clone(), RELAY.into())
         .await
         .unwrap();
     assert_eq!(
@@ -203,7 +203,7 @@ async fn its_buzz_credential_is_revoked_while_a_detached_descendant_holds_its_ou
     assert_eq!(error(&reply), (StatusCode::UNAUTHORIZED, "revoked"));
     assert!(fixture
         .service
-        .bind(&held, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(&held, "p", None, fixture.agent.pubkey.clone(), RELAY.into())
         .await
         .is_err());
     // Releasing the pipes lets the entry go.
@@ -516,6 +516,7 @@ async fn the_hook_guard_says_why_it_stopped_a_worker() {
             sender,
             None,
             true,
+            None,
         )
         .unwrap();
     let (stdout, stderr, _) = until_exit(&mut events).await;
@@ -570,6 +571,7 @@ async fn a_guarded_worker_s_last_frame_reaches_the_page_after_it_exits() {
             channel,
             None,
             true,
+            None,
         )
         .unwrap();
     let (stdout, stderr, exit) = until_exit(&mut events).await;
@@ -1036,4 +1038,65 @@ async fn concurrent_replacements_of_a_stale_token_keep_one() {
         ),
         first
     );
+}
+
+/// A protected Codex host's tool credential: only for the agent its
+/// protection provider launched it for, and only to that provider.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_protected_hosts_tool_credential_is_only_its_launched_agents() {
+    use crate::credential_service::tests::{ask, protected_fixture, second_agent, GUARD, RELAY};
+    let fixture = protected_fixture();
+    let pubkey = fixture.agent.pubkey.clone();
+    let other = second_agent(&fixture);
+    let launch = fixture
+        .service
+        .protected_launch(GUARD, pubkey.clone(), RELAY.into())
+        .await
+        .unwrap();
+    let processes = HostProcesses::default();
+    let start = |launch| {
+        let (channel, _events) = channel();
+        processes
+            .start_guarded(
+                0,
+                GUARD.into(),
+                "sh",
+                command("sh", &["-c", "read line"]),
+                None,
+                channel,
+                None,
+                false,
+                launch,
+            )
+            .unwrap()
+    };
+    let launched = start(Some(launch));
+    let unlaunched = start(None);
+    let env = processes
+        .tool_credential(
+            &fixture.service,
+            GUARD,
+            launched,
+            pubkey.clone(),
+            RELAY.into(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let token: serde_json::Value = serde_json::from_str(&env).unwrap();
+    let reply = ask(
+        &fixture,
+        token["token"].as_str().unwrap(),
+        "get_public_key",
+        &[],
+    )
+    .await;
+    assert_eq!(reply.1["result"], pubkey.as_str());
+    for (handle, agent) in [(launched, &other.pubkey), (unlaunched, &pubkey)] {
+        assert!(processes
+            .tool_credential(&fixture.service, GUARD, handle, agent.clone(), RELAY.into())
+            .await
+            .is_err());
+    }
 }

@@ -126,6 +126,23 @@ struct Bound {
     incarnation: Stamp,
 }
 
+/// A process a protection provider launched for one agent, recorded natively
+/// at spawn: the provider may bind that agent's credential, and no other.
+#[derive(Clone)]
+pub(crate) struct ProtectedLaunch {
+    pubkey: String,
+    relay: String,
+    /// The agent type's owner plugin when it was launched.
+    runtime: String,
+}
+
+fn protected_by(agent: &buzz_agent_controller::AppAgent, plugin: &str) -> bool {
+    agent
+        .protection
+        .as_ref()
+        .is_some_and(|binding| binding.provider == plugin)
+}
+
 /// One issued token, revoked when dropped: with the process it was issued to.
 pub(crate) struct Issued {
     service: CredentialService,
@@ -243,18 +260,47 @@ impl CredentialService {
         )))
     }
 
+    /// Records that `plugin`, the protection provider this agent is bound to,
+    /// is launching its engine, so [`Self::bind`] lets that process act as it.
+    pub(crate) async fn protected_launch(
+        &self,
+        plugin: &str,
+        pubkey: String,
+        relay: String,
+    ) -> Result<ProtectedLaunch, String> {
+        let (agent, _) = self.0.agents.caller_stamp(pubkey, relay).await?;
+        let runtime = agent.agent_type.split_once('/').map(|(owner, _)| owner);
+        match runtime {
+            Some(runtime) if protected_by(&agent, plugin) => Ok(ProtectedLaunch {
+                runtime: runtime.into(),
+                pubkey: agent.pubkey,
+                relay: agent.relay,
+            }),
+            _ => Err("The agent is not protected by this plugin".into()),
+        }
+    }
+
     /// Lets `issued`, held by a process of `plugin`, act as this agent from
     /// now on. A token is bound once, and only to an agent of the plugin's own
-    /// type, so no plugin can act as another's agents.
+    /// type, or the one agent its protection provider `launched` it for, so no
+    /// plugin can act as another's agents.
     pub(crate) async fn bind(
         &self,
         issued: &Issued,
         plugin: &str,
+        launched: Option<&ProtectedLaunch>,
         pubkey: String,
         relay: String,
     ) -> Result<(), String> {
         let (agent, incarnation) = self.0.agents.caller_stamp(pubkey, relay).await?;
-        if agent.agent_type.split_once('/').map(|(owner, _)| owner) != Some(plugin) {
+        let runtime = agent.agent_type.split_once('/').map(|(owner, _)| owner);
+        let launched_for_it = launched.is_some_and(|launch| {
+            launch.pubkey == agent.pubkey
+                && launch.relay == agent.relay
+                && Some(launch.runtime.as_str()) == runtime
+                && protected_by(&agent, plugin)
+        });
+        if runtime != Some(plugin) && !launched_for_it {
             return Err("The agent is not of this plugin's type".into());
         }
         let mut callers = self.callers();

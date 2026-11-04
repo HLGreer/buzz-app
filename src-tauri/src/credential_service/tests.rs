@@ -21,6 +21,38 @@ pub(crate) fn fixture() -> Fixture {
     fixture_signed_in(FederatedIdentity::unconfigured())
 }
 
+/// The protection provider of [`protected_fixture`]'s agents.
+pub(crate) const GUARD: &str = "guard";
+/// A fixture whose agent's saved protection names [`GUARD`].
+pub(crate) fn protected_fixture() -> Fixture {
+    let fixture = fixture();
+    protect(&fixture, &[&fixture.agent.pubkey]);
+    fixture
+}
+fn protect(fixture: &Fixture, pubkeys: &[&str]) {
+    let agents = fixture.host.agents().unwrap();
+    agents.upgrade_protection_storage().unwrap();
+    for pubkey in pubkeys {
+        agents
+            .set_protection(pubkey, 0, GUARD, Some(json!({})))
+            .unwrap();
+    }
+}
+
+/// A second agent of `fixture`'s type and protection, held beside it.
+pub(crate) fn second_agent(fixture: &Fixture) -> AppAgent {
+    let second = Secret::generate().unwrap();
+    let mut other = fixture.agent.clone();
+    other.pubkey = second.pubkey().into();
+    fixture.host.also_holding_for_test(
+        fixture._dir.path().join("identities.json"),
+        &[&fixture.agent, &other],
+        second,
+    );
+    protect(fixture, &[&fixture.agent.pubkey, &other.pubkey]);
+    other
+}
+
 /// A fixture whose NIP-FI session is `identity`.
 pub(crate) fn fixture_signed_in(identity: FederatedIdentity) -> Fixture {
     let key = Secret::generate().unwrap();
@@ -112,7 +144,13 @@ async fn bound(fixture: &Fixture) -> (Issued, String) {
     let (issued, token) = issued(fixture).await;
     fixture
         .service
-        .bind(&issued, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(
+            &issued,
+            "p",
+            None,
+            fixture.agent.pubkey.clone(),
+            RELAY.into(),
+        )
         .await
         .unwrap();
     (issued, token)
@@ -172,13 +210,19 @@ async fn a_bound_token_is_its_agent_and_never_another() {
     // Binding again to the same agent is harmless; to another is refused.
     fixture
         .service
-        .bind(&issued, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(
+            &issued,
+            "p",
+            None,
+            fixture.agent.pubkey.clone(),
+            RELAY.into(),
+        )
         .await
         .unwrap();
     let other = Secret::generate().unwrap();
     assert!(fixture
         .service
-        .bind(&issued, "p", other.pubkey().into(), RELAY.into())
+        .bind(&issued, "p", None, other.pubkey().into(), RELAY.into())
         .await
         .is_err());
     let described: Value = serde_json::from_str(
@@ -197,6 +241,68 @@ async fn a_bound_token_is_its_agent_and_never_another() {
         .contains(&json!("pair")));
 }
 
+/// A protection provider binds only the agent it launched a process for;
+/// the agent's own plugin binds it as before.
+#[tokio::test]
+async fn a_protection_provider_binds_only_the_agent_it_launched() {
+    let fixture = protected_fixture();
+    let pubkey = fixture.agent.pubkey.clone();
+    let other = second_agent(&fixture);
+    let launch = fixture
+        .service
+        .protected_launch(GUARD, pubkey.clone(), RELAY.into())
+        .await
+        .unwrap();
+    // Not for an unrelated plugin, nor for an agent it does not protect.
+    assert!(fixture
+        .service
+        .protected_launch("other", pubkey.clone(), RELAY.into())
+        .await
+        .is_err());
+    let unprotected = self::fixture();
+    assert!(unprotected
+        .service
+        .protected_launch(GUARD, unprotected.agent.pubkey.clone(), RELAY.into())
+        .await
+        .is_err());
+    let (held, token) = issued(&fixture).await;
+    // Its launch for this agent lends nothing for another of its agents, nor
+    // to another plugin, nor without the launch.
+    for (plugin, launched, agent) in [
+        (GUARD, Some(&launch), &other.pubkey),
+        ("other", Some(&launch), &pubkey),
+        (GUARD, None, &pubkey),
+    ] {
+        assert!(fixture
+            .service
+            .bind(&held, plugin, launched, agent.clone(), RELAY.into())
+            .await
+            .is_err());
+    }
+    assert_eq!(
+        error(&ask(&fixture, &token, "get_public_key", &[]).await),
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+    );
+    fixture
+        .service
+        .bind(&held, GUARD, Some(&launch), pubkey.clone(), RELAY.into())
+        .await
+        .unwrap();
+    let reply = ask(&fixture, &token, "get_public_key", &[]).await;
+    assert_eq!(reply.1["result"], pubkey.as_str());
+    // The agent's own plugin still binds it.
+    let (own, token) = issued(&fixture).await;
+    fixture
+        .service
+        .bind(&own, "p", None, pubkey.clone(), RELAY.into())
+        .await
+        .unwrap();
+    assert_eq!(
+        ask(&fixture, &token, "get_public_key", &[]).await.1["result"],
+        pubkey.as_str()
+    );
+}
+
 #[tokio::test]
 async fn a_plugin_binds_only_agents_of_its_own_type() {
     let fixture = fixture();
@@ -204,7 +310,13 @@ async fn a_plugin_binds_only_agents_of_its_own_type() {
     for plugin in ["other", "", "p/t"] {
         assert!(fixture
             .service
-            .bind(&issued, plugin, fixture.agent.pubkey.clone(), RELAY.into())
+            .bind(
+                &issued,
+                plugin,
+                None,
+                fixture.agent.pubkey.clone(),
+                RELAY.into()
+            )
             .await
             .is_err());
     }
@@ -241,7 +353,13 @@ async fn deleting_the_agent_revokes_its_tokens_for_good() {
     assert_eq!(error(&reply), (StatusCode::UNAUTHORIZED, "revoked"));
     assert!(fixture
         .service
-        .bind(&issued, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(
+            &issued,
+            "p",
+            None,
+            fixture.agent.pubkey.clone(),
+            RELAY.into()
+        )
         .await
         .is_err());
 }
@@ -266,12 +384,24 @@ async fn a_spare_issued_before_sign_out_never_acts() {
     assert_eq!(error(&reply), (StatusCode::UNAUTHORIZED, "revoked"));
     assert!(fixture
         .service
-        .bind(&asked, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(
+            &asked,
+            "p",
+            None,
+            fixture.agent.pubkey.clone(),
+            RELAY.into()
+        )
         .await
         .is_err());
     assert!(fixture
         .service
-        .bind(&taken, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(
+            &taken,
+            "p",
+            None,
+            fixture.agent.pubkey.clone(),
+            RELAY.into()
+        )
         .await
         .is_err());
     for token in [&asked_token, &taken_token] {
@@ -789,7 +919,13 @@ async fn a_closed_identity_issues_binds_and_acts_for_nobody() {
     assert!(fixture.service.issue().await.is_err());
     assert!(fixture
         .service
-        .bind(&spare, "p", fixture.agent.pubkey.clone(), RELAY.into())
+        .bind(
+            &spare,
+            "p",
+            None,
+            fixture.agent.pubkey.clone(),
+            RELAY.into()
+        )
         .await
         .is_err());
     let reply = ask(&fixture, &acting_token, "get_public_key", &[]).await;

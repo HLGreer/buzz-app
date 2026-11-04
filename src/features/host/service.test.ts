@@ -314,6 +314,7 @@ it("starts a declared process as the calling plugin and streams it", async () =>
     env: { CLAUDECODE: null },
     protection: null,
     agentCredential: false,
+    protectedAgent: null,
     onEvent: spawn.onEvent,
     mcp: {
       url: "http://127.0.0.1:1234/mcp",
