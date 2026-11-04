@@ -116,7 +116,9 @@ it("shows this agent's published turns, leaving the feed's lease to the plugin",
     ],
   });
   render(<ActivityPanel agent={agent} activity={activity} />);
-  expect(screen.getByText("Deployed the fix")).toBeInTheDocument();
+  expect(
+    screen.getByText("Deployed the fix", { selector: "summary span" }),
+  ).toBeInTheDocument();
   expect(screen.queryByText("Someone else's work")).not.toBeInTheDocument();
   expect(screen.getByText("Working")).toBeInTheDocument();
   expect(activity.activate).not.toHaveBeenCalled();
@@ -161,8 +163,12 @@ it("shows every conversation's turns, wherever it was opened from", () => {
     ] as unknown as Snapshot["records"],
   });
   render(<ActivityPanel agent={agent} activity={activity} />);
-  expect(screen.getByText("In the thread")).toBeInTheDocument();
-  expect(screen.getByText("In beta")).toBeInTheDocument();
+  expect(
+    screen.getByText("In the thread", { selector: "summary span" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("In beta", { selector: "summary span" }),
+  ).toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 

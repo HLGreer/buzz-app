@@ -185,7 +185,10 @@ function useCompletedMessageWork(
     return (
       work.some((entry) => entry.agent === row.authorId) &&
       work.every(
-        (entry) => entry.state === "done" || entry.state === "ended",
+        (entry) =>
+          entry.state === "done" ||
+          entry.state === "ended" ||
+          entry.state === "error",
       ) &&
       !(snapshot.local ?? []).some(
         (entry) =>

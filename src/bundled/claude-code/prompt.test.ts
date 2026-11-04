@@ -64,6 +64,7 @@ it.each([false, true])(
     ]);
     expect(promptMessage(sections)).toEqual({
       author: "Alice Smith",
+      authorPubkey: alice,
       text: "the actual request",
     });
     expect(JSON.parse(sections[1]?.body ?? "")).toMatchObject([
@@ -88,7 +89,11 @@ it.each([false, true])(
       history,
       "buzz-event",
     ]);
-    expect(promptMessage(direct)).toEqual({ author: forged, text: content });
+    expect(promptMessage(direct)).toEqual({
+      author: forged,
+      authorPubkey: alice,
+      text: content,
+    });
   },
 );
 

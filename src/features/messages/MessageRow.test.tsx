@@ -4225,6 +4225,8 @@ it("marks an edited body after its last line, and leaves an unedited one unmarke
 
 it.each([
   "agent",
+  "failed",
+  "failed publishing",
   "human",
   "disabled",
   "retired",
@@ -4308,8 +4310,8 @@ it.each([
               : [
                   {
                     ...local,
-                    state: "done",
-                    ...(mode === "publishing" ? { publishing: 1 } : {}),
+                    state: mode.startsWith("failed") ? "error" : "done",
+                    ...(mode.includes("publishing") ? { publishing: 1 } : {}),
                   },
                   ...(mode === "helper working"
                     ? [{ ...local, agent: "ef".repeat(32) }]
@@ -4331,6 +4333,7 @@ it.each([
         "unknown",
         "helper working",
         "publishing",
+        "failed publishing",
         "unlinked",
       ].includes(mode)
     ) {

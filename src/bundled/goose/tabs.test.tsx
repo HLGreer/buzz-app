@@ -758,7 +758,9 @@ it("lists the agent's goose sessions and shows one's transcript", async () => {
       name: "View transcript: #general · 11111111",
     }),
   );
-  expect(await screen.findByText("Hi from goose")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Hi from goose", { selector: "summary span" }),
+  ).toBeInTheDocument();
   expect(screen.getAllByText(/@Gander what's up\?/).length).toBeGreaterThan(0);
 });
 
@@ -844,7 +846,9 @@ it("opens a session transcript its history lookup finds after the profile shows"
       initialTranscript={{ opening: 1, done }}
     />,
   );
-  expect(await screen.findByText("Hi from goose")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Hi from goose", { selector: "summary span" }),
+  ).toBeInTheDocument();
   expect(done).toHaveBeenCalledTimes(1);
 });
 
