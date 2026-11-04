@@ -413,22 +413,25 @@ export function useMentionChoices(
   }, [attested, session.viewer]);
   // Naming qualifies a directory agent by its declared owner's name (`Wes’s
   // Sol`), so read those owners too: directory pages are not cached profiles.
-  const ownerKeys = [
+  // A directory agent that claims the viewer is read itself, so its signed
+  // profile can verify the claim; it leads once verified, from the next
+  // query, as installed rows never move.
+  const readKeys = [
     ...new Set([
       ...owners.values(),
       ...people.flatMap((person) =>
-        person.isAgent &&
-        person.ownerPubkey &&
-        person.ownerPubkey !== session.viewer
-          ? [person.ownerPubkey]
-          : [],
+        !person.isAgent || !person.ownerPubkey
+          ? []
+          : person.ownerPubkey !== session.viewer
+            ? [person.ownerPubkey]
+            : [person.pubkey],
       ),
     ]),
   ]
     .sort()
     .join(":");
-  // An access purge, an eviction or a cancelled read drops owner names, so
-  // ask again then too. Owners still loaded cost no read.
+  // An access purge, an eviction or a cancelled read drops these profiles,
+  // so ask again then too. Profiles still loaded cost no read.
   const profileGeneration = useProfileGeneration(session.profiles);
   const readEvictions = () => session.profiles.evictions?.() ?? 0;
   const evictions = useSyncExternalStore(
@@ -439,11 +442,11 @@ export function useMentionChoices(
   useEffect(() => {
     void profileGeneration;
     void evictions;
-    if (ownerKeys)
+    if (readKeys)
       void session.profiles
-        .ensure(ownerKeys.split(":"), "background")
+        .ensure(readKeys.split(":"), "background")
         .catch(() => {});
-  }, [session, ownerKeys, profileGeneration, evictions]);
+  }, [session, readKeys, profileGeneration, evictions]);
   const managedBy = useMemo(
     () =>
       new Map(
