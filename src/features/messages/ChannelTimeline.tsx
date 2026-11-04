@@ -290,6 +290,14 @@ function Timeline({
   );
   const activity = presentation.groups;
   const stableActivity = useStableRowActivity();
+  const rowsById = useMemo(
+    () => new Map(chronologicalRows.map((row) => [row.id, row])),
+    [chronologicalRows],
+  );
+  const stoppedRequest = (id: string) => {
+    const request = presentation.replyRequests.get(id);
+    return request ? rowsById.get(request) : undefined;
+  };
   const liveAgents = useLiveConversationAgents(
     queries,
     channelId,
@@ -1442,6 +1450,11 @@ function Timeline({
                     row.id,
                     presentation.representedAgents.get(row.id),
                   )}
+                  repliedAgents={stableActivity.agents(
+                    `replied:${row.id}`,
+                    presentation.repliedAgents.get(row.id),
+                  )}
+                  stoppedRequest={stoppedRequest(row.id)}
                   recordedActivity={stableActivity.activity(
                     row.id,
                     presentation.byRow.get(row.id),

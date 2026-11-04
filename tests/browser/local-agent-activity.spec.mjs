@@ -329,7 +329,7 @@ test("Stop in a message's activity ends its local work quietly", async ({
 test("Stop in a channel response activity stops its work", async ({
   page,
   app,
-}, testInfo) => {
+}) => {
   await open(page, app);
   await expect
     .poll(() => page.evaluate(() => !!window.localAgentFixture))
@@ -412,11 +412,7 @@ test("Stop in a channel response activity stops its work", async ({
   const live = page.locator(
     "[data-channel-timeline] [data-conversation-activity]",
   );
-  await live.scrollIntoViewIfNeeded();
   await expect(live.getByText("Local tester", { exact: true })).toBeVisible();
-  await page.screenshot({
-    path: testInfo.outputPath("byline-after-human-message.png"),
-  });
   await stop.click();
   await expect
     .poll(() => page.evaluate(() => window.localAgentFixture.stopped()))

@@ -72,14 +72,20 @@ vi.mock("./MessageRow", () => ({
     stackPrevious,
     stackNext,
     keepMounted,
+    repliedAgents,
+    stoppedRequest,
   }: {
     row: ChannelMessage;
     stackPrevious: boolean;
     stackNext: boolean;
     keepMounted: (id: string) => () => void;
+    repliedAgents?: readonly string[];
+    stoppedRequest?: ChannelMessage;
   }) => (
     <li
       data-message-id={row.id}
+      data-replied-agents={repliedAgents?.join(",")}
+      data-stopped-request={stoppedRequest?.id}
       data-stacked={stackPrevious}
       data-stack-next={stackNext}
     >
@@ -970,6 +976,37 @@ it("keeps historical steps expandable after a public reply without live completi
     );
     expect(screen.getByText("Update 0")).toBeVisible();
     expect(screen.getByText("Here is the result.")).toBeVisible();
+  } finally {
+    owner.dispose();
+  }
+});
+
+it("moves a request's stopped note to its agent's latest public reply", () => {
+  const { owner, updates, content } = activityFixture();
+  try {
+    const step = updates(1)[0];
+    if (!step) throw new Error("Missing fixture activity");
+    const { audience: _audience, ...base } = step;
+    const message = (id: string, authorId: string, createdAt: number) => ({
+      ...base,
+      id,
+      authorId,
+      createdAt,
+      content: id,
+    });
+    render(
+      content([
+        message("request", "human", 90),
+        message("first", "agent", 91),
+        step,
+        message("latest", "agent", 110),
+      ]),
+    );
+    const row = (id: string) =>
+      document.querySelector(`[data-message-id="${id}"]`);
+    expect(row("request")).toHaveAttribute("data-replied-agents", "agent");
+    expect(row("latest")).toHaveAttribute("data-stopped-request", "request");
+    expect(row("first")).not.toHaveAttribute("data-stopped-request");
   } finally {
     owner.dispose();
   }
