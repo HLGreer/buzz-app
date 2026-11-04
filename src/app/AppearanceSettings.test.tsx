@@ -521,3 +521,63 @@ it.each([
     ).toBe(shown);
   },
 );
+
+it("changes message width through the shared select and restores the saved choice", async () => {
+  const user = userEvent.setup();
+  const view = render(preferencesPage(), { wrapper: ToastProvider });
+  const choice = () => screen.getByRole("combobox", { name: "Message width" });
+  expect(choice()).toHaveTextContent("Narrow");
+  await user.click(choice());
+  await user.click(await screen.findByRole("option", { name: "Wide" }));
+  expect(choice()).toHaveTextContent("Wide");
+  expect(
+    document.documentElement.style.getPropertyValue("--buzz-message-width"),
+  ).toBe("78rem");
+  expect(localStorage.getItem("buzz-message-width.v1")).toBe("wide");
+  view.unmount();
+  render(preferencesPage(), { wrapper: ToastProvider });
+  expect(choice()).toHaveTextContent("Wide");
+  await user.click(choice());
+  await user.click(await screen.findByRole("option", { name: "Narrow" }));
+  expect(
+    document.documentElement.style.getPropertyValue("--buzz-message-width"),
+  ).toBe("52rem");
+});
+
+it("retries an unsaved message width when returning to Appearance", async () => {
+  const user = userEvent.setup();
+  const appearance = createAppearance();
+  preferenceAppearances.push(appearance);
+  const content = (active: boolean) => (
+    <ToastProvider>
+      <AppearanceSettings appearance={appearance} active={active} />
+    </ToastProvider>
+  );
+  const view = render(content(true));
+  const write = vi
+    .spyOn(Storage.prototype, "setItem")
+    .mockImplementation(() => {
+      throw new Error("denied");
+    });
+  await user.click(screen.getByRole("combobox", { name: "Message width" }));
+  await user.click(await screen.findByRole("option", { name: "Wide" }));
+  expect(await screen.findByRole("dialog")).toHaveTextContent(
+    "Message width wasn’t saved",
+  );
+  view.rerender(content(false));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  view.rerender(content(true));
+  expect(
+    screen.getByRole("combobox", { name: "Message width" }),
+  ).toHaveTextContent("Wide");
+  write.mockRestore();
+  await user.click(
+    await screen.findByRole("button", { name: "Retry saving message width" }),
+  );
+  expect(localStorage.getItem("buzz-message-width.v1")).toBe("wide");
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+});

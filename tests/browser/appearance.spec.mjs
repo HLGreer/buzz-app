@@ -606,3 +606,41 @@ test("compiled host preserves compatibility utility meanings", async ({
     await closeSettings(page);
   }
 });
+
+test("Message width defaults to Narrow, widens the conversation by 50%, and restores", async ({
+  page,
+  app,
+}) => {
+  await page.setViewportSize({ width: 2000, height: 1000 });
+  await open(page, app);
+  const row = page
+    .locator(
+      '[data-channel-timeline="alpha"] [data-message-id] > [data-layout]',
+    )
+    .first();
+  const rowWidth = () =>
+    row.evaluate((node) => node.getBoundingClientRect().width);
+  const narrow = await rowWidth();
+  await settings(page);
+  const choice = page.getByRole("combobox", {
+    name: "Message width",
+    exact: true,
+  });
+  await expect(choice).toHaveText("Narrow");
+  await choice.click();
+  await page.getByRole("option", { name: "Wide", exact: true }).click();
+  await expect(choice).toHaveText("Wide");
+  await closeSettings(page);
+  await expect.poll(rowWidth).toBe(narrow * 1.5);
+  await page.reload();
+  await expect(row).toBeVisible();
+  await expect.poll(rowWidth).toBe(narrow * 1.5);
+  await settings(page);
+  await expect(choice).toHaveText("Wide");
+  await closeSettings(page);
+  await page.setViewportSize({ width: 480, height: 900 });
+  await expect.poll(rowWidth).toBeLessThanOrEqual(480);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(480);
+});

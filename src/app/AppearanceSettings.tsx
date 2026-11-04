@@ -68,6 +68,8 @@ export function AppearanceSettings({
     preference,
     mode,
     error,
+    messageWidth,
+    messageWidthError,
     fontScale,
     fontError,
     accent,
@@ -239,6 +241,30 @@ export function AppearanceSettings({
         <InlineHeader title="Conversations" />
         <SettingsGroup>
           <PreferenceRow
+            title="Message width"
+            subtitle="Wide gives conversations 50% more room when space is available."
+            trailing={
+              <Select
+                variant="compact"
+                label="Message width"
+                value={messageWidth}
+                groups={[
+                  {
+                    label: "Width",
+                    options: [
+                      { value: "narrow", label: "Narrow" },
+                      { value: "wide", label: "Wide" },
+                    ],
+                  },
+                ]}
+                onValueChange={(value) => {
+                  if (value === "narrow" || value === "wide")
+                    appearance.setMessageWidth(value);
+                }}
+              />
+            }
+          />
+          <PreferenceRow
             title="Follow-up behavior"
             subtitle="In Solo, send follow-ups immediately or queue them until the agent finishes its previous response."
             trailing={
@@ -296,6 +322,19 @@ export function AppearanceSettings({
             />
           )}
         </SettingsGroup>
+        {active && messageWidthError && (
+          <ToastNotice
+            title="Message width wasn’t saved"
+            description={messageWidthError}
+          >
+            <Button
+              size="sm"
+              onClick={() => appearance.setMessageWidth(messageWidth)}
+            >
+              Retry saving message width
+            </Button>
+          </ToastNotice>
+        )}
         {active && followUp.unsaved && (
           <ToastNotice
             title="Follow-up preference wasn’t saved"
