@@ -80,7 +80,7 @@ export function AppearanceSettings({
   return (
     <section aria-labelledby="appearance-settings-title">
       <Header id="appearance-settings-title" title="Appearance" />
-      <AppearancePreview />
+      <AppearancePreview messageWidth={messageWidth} />
       <div>
         <InlineHeader title="Interface" />
         <SettingsGroup>
@@ -157,6 +157,29 @@ export function AppearanceSettings({
                   />
                 )}
               </fieldset>
+            }
+          />
+          <PreferenceRow
+            title="Message width"
+            trailing={
+              <Select
+                variant="compact"
+                label="Message width"
+                value={messageWidth}
+                groups={[
+                  {
+                    label: "Width",
+                    options: [
+                      { value: "narrow", label: "Narrow" },
+                      { value: "wide", label: "Wide" },
+                    ],
+                  },
+                ]}
+                onValueChange={(value) => {
+                  if (value === "narrow" || value === "wide")
+                    appearance.setMessageWidth(value);
+                }}
+              />
             }
           />
           <PreferenceRow
@@ -240,30 +263,6 @@ export function AppearanceSettings({
       <div className="mt-section-gap">
         <InlineHeader title="Conversations" />
         <SettingsGroup>
-          <PreferenceRow
-            title="Message width"
-            subtitle="Wide gives conversations 50% more room when space is available."
-            trailing={
-              <Select
-                variant="compact"
-                label="Message width"
-                value={messageWidth}
-                groups={[
-                  {
-                    label: "Width",
-                    options: [
-                      { value: "narrow", label: "Narrow" },
-                      { value: "wide", label: "Wide" },
-                    ],
-                  },
-                ]}
-                onValueChange={(value) => {
-                  if (value === "narrow" || value === "wide")
-                    appearance.setMessageWidth(value);
-                }}
-              />
-            }
-          />
           <PreferenceRow
             title="Follow-up behavior"
             subtitle="In Solo, send follow-ups immediately or queue them until the agent finishes its previous response."

@@ -627,9 +627,16 @@ test("Message width defaults to Narrow, widens the conversation by 50%, and rest
     exact: true,
   });
   await expect(choice).toHaveText("Narrow");
+  const previewColumn = page
+    .getByRole("figure", { name: "Appearance preview" })
+    .locator("[data-message-width]");
+  const previewWidth = () =>
+    previewColumn.evaluate((node) => node.getBoundingClientRect().width);
+  const narrowPreview = await previewWidth();
   await choice.click();
   await page.getByRole("option", { name: "Wide", exact: true }).click();
   await expect(choice).toHaveText("Wide");
+  await expect.poll(previewWidth).toBeCloseTo(narrowPreview * 1.5, 0);
   await closeSettings(page);
   await expect.poll(rowWidth).toBe(narrow * 1.5);
   await page.reload();

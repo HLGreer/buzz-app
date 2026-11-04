@@ -527,9 +527,23 @@ it("changes message width through the shared select and restores the saved choic
   const view = render(preferencesPage(), { wrapper: ToastProvider });
   const choice = () => screen.getByRole("combobox", { name: "Message width" });
   expect(choice()).toHaveTextContent("Narrow");
+  const preview = screen.getByRole("figure", { name: "Appearance preview" });
+  expect(preview.querySelector("[data-message-width]")).toHaveAttribute(
+    "data-message-width",
+    "narrow",
+  );
+  expect(
+    screen.queryByText(
+      "Wide gives conversations 50% more room when space is available.",
+    ),
+  ).not.toBeInTheDocument();
   await user.click(choice());
   await user.click(await screen.findByRole("option", { name: "Wide" }));
   expect(choice()).toHaveTextContent("Wide");
+  expect(preview.querySelector("[data-message-width]")).toHaveAttribute(
+    "data-message-width",
+    "wide",
+  );
   expect(
     document.documentElement.style.getPropertyValue("--buzz-message-width"),
   ).toBe("78rem");

@@ -195,7 +195,7 @@ that agent in Buzz; they do not notify the external app through this connection.
   the same key as another shortcut, Settings → Shortcuts marks it "Also used
   by"; change one of them to choose which fires.
 - **Message width**: choose **Narrow** or **Wide** in **Settings → Appearance →
-  Conversations**. Narrow is the default; Wide gives messages and the composer
+  Interface**. Narrow is the default; Wide gives messages and the composer
   50% more room when the pane is wide enough. The choice is saved on this device.
 - **Spelling**: in the Mac app or Safari, the message box underlines
   misspellings but does not correct them unless you turn on **Settings →
