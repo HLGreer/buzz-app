@@ -439,8 +439,6 @@ export function TypingIndicator({
         )}${humans.length > 2 ? ` and ${humans.length - 2} others` : ""}${humans.length === 1 ? " is typing" : " are typing"}`
     : "";
   const firstStep = firstAgent ? details.get(firstAgent)?.label : undefined;
-  const represented =
-    agents.length > 0 && agents.every((agent) => replaced.has(agent));
   const previewText =
     (firstAgent && replaced.has(firstAgent)) ||
     firstStep === "Working" ||
@@ -472,7 +470,7 @@ export function TypingIndicator({
         >
           {firstAgent && (
             <AgentResponsePreview
-              stackPrevious={represented || previousAuthor === firstAgent}
+              stackPrevious={previousAuthor === firstAgent}
               name={name(firstAgent)}
               participants={agents.map((id) => ({
                 id,

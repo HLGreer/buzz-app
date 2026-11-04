@@ -667,7 +667,7 @@ it.each([
       new Set([agent]),
     ).groups[0];
     if (!group) throw new Error("Missing activity group");
-    const renderFlow = (show: boolean) => (
+    const renderFlow = (show: boolean, previousAuthor = agent) => (
       <ActivityIndicatorPresentation>
         {show && (
           <ActivityGroupPreview
@@ -679,7 +679,11 @@ it.each([
             onToggle={() => {}}
           />
         )}
-        <TypingIndicator session={f.session} channelId="channel" />
+        <TypingIndicator
+          session={f.session}
+          channelId="channel"
+          previousAuthor={previousAuthor}
+        />
       </ActivityIndicatorPresentation>
     );
     const pulses = [
@@ -713,6 +717,14 @@ it.each([
         team ? `${agent.slice(0, 10)}: Checking the fix` : "Checking the fix",
       ),
     ).toHaveAttribute("data-active", "true");
+    // Recorded ownership does not make the indicator adjacent to its author.
+    view.rerender(renderFlow(true, human));
+    const tail = view.container.querySelector<HTMLElement>(
+      "[data-conversation-activity]",
+    );
+    if (!tail) throw new Error("Missing conversation activity");
+    expect(within(tail).getByText("Agent", { exact: true })).toBeVisible();
+    view.rerender(renderFlow(true));
     if (!local) {
       f.update([...pulses, entry(agent, secondRoot)]);
       expect(
