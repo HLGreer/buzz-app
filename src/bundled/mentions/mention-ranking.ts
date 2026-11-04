@@ -21,6 +21,26 @@ function baseMatch(choice: MentionChoice, query: string) {
     ...choice.aliases.map((name) => nameMatch(name, normalized(query))),
   );
 }
+/**
+ * README section 4 rule 3: a choice whose shown label matches the query leads
+ * when one of its names (aliases, never generated label parts) is the query,
+ * or, for the viewer's own agent, continues it with a new word (`Sol 6` for
+ * `sol`, not `Solana`).
+ */
+export function leadsMention(choice: MentionChoice, query: string) {
+  const needle = normalized(query);
+  if (
+    !needle ||
+    (choice.agent && !choice.owned) ||
+    !Number.isFinite(nameMatch(choice.label, needle))
+  )
+    return false;
+  return choice.aliases.some(
+    (name) =>
+      normalized(name) === needle ||
+      (choice.agent && extendsName(name, needle)),
+  );
+}
 export function mentionMatch(choice: MentionChoice, query: string) {
   const needle = normalized(query);
   if (!needle) return 0;
@@ -88,7 +108,9 @@ export function matchingMentions(
 }
 /**
  * Sorts by per-choice keys, so the order is transitive for any mix of people
- * and agents. Another community's agents follow everyone here. After match quality, your own agents come first. Agents that
+ * and agents. Another community's agents follow everyone here. An exact
+ * person and your own agents that start with the query's words lead; after
+ * match quality, your own agents come first. Agents that
  * share a name form one block at its first visible label; recency, managed,
  * and presence order only that block.
  */
@@ -104,6 +126,7 @@ export function rankMentions(
       const tier = [
         c.member ? 0 : 1,
         c.elsewhere ? 1 : 0,
+        leadsMention(c, query) ? 0 : 1,
         mentionMatch(c, query),
         baseMatch(c, query),
         c.agent && c.owned ? 0 : 1,
