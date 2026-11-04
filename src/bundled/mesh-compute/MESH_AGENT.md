@@ -16,9 +16,7 @@ Chat mode, native identity/community admission and the Mesh node live in
 ## Modes and admission
 
 - **Chat:** one leased chat completion, no local or Buzz tools. Normal host
-  delivery applies, without a sibling-watch exception. Matched Interest
-  instructions apply only to the owner's watched turn; direct mentions do not
-  inherit watch instructions.
+  delivery applies, without a sibling-watch exception.
 - **Agent (default):** goose runs with its `developer` extension limited to
   `shell`, plus `skills`, in the configured workspace (default `~/.buzz`). Local
   tools have the user’s filesystem authority, not a sandbox. No other goose
@@ -31,7 +29,10 @@ Chat mode, native identity/community admission and the Mesh node live in
   The retired `buzz` config flag is ignored.
 
 Both modes remain owner-only. Watches and non-owner mentions do not grant
-permission to trigger Mesh. No mode triggers itself.
+permission to trigger Mesh. No mode triggers itself. In both modes, matched
+Interest instructions apply only to the owner's watched turn; the watched message
+is data rather than a direct request. Later direct mentions do not inherit those
+instructions.
 
 ## Quick setup
 
@@ -83,8 +84,8 @@ hostile-plugin security boundary.
 
 ## Validation boundary
 
-`meshAgent.test.ts` exercises delivery policy, Chat watches, conversation history,
-queued follow-ups, final posting and cancellation using a stub adapter.
+`meshAgent.test.ts` exercises delivery policy, Chat and Agent watches, conversation
+history, queued follow-ups, final posting and cancellation using a stub adapter.
 `meshGoose.test.ts` covers the goose session setup and mesh route. Rust tests in
 `compute/` cover the node lifecycle, sharing, publication and inference gateway.
 These are not packaged GUI/live Mesh/real-relay acceptance.
