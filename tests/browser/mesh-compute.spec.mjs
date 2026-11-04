@@ -1,8 +1,8 @@
 import { selectSettingsSection, settingsSections } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 
-// Browser boundary: the default-on Mesh plugin and re-enabling it must expose its consumer view in Settings → Compute.
-test("Mesh compute is enabled by default and can be disabled and re-enabled", async ({
+// Browser boundary: the opt-in Mesh plugin, once enabled, must expose its consumer view in Settings → Compute.
+test("Mesh compute is off by default and can be enabled and disabled", async ({
   page,
   app,
 }) => {
@@ -12,7 +12,6 @@ test("Mesh compute is enabled by default and can be disabled and re-enabled", as
   await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   await selectSettingsSection(page, "Manage plugins");
   // Main's plugin manager exposes Enable/Disable action buttons rather than switches.
-  await button("Disable Shared compute").click();
   await expect(button("Enable Shared compute")).toBeVisible();
   await expect(
     settingsSections(page).getByRole("button", {
@@ -54,4 +53,13 @@ test("Mesh compute is enabled by default and can be disabled and re-enabled", as
   await expect(page.getByText(/Compute connected in/)).toHaveCount(0);
   await expect(button("Connect to community compute")).toHaveCount(0);
   await expect(page.getByText("This destination couldn’t open")).toHaveCount(0);
+  await selectSettingsSection(page, "Manage plugins");
+  await button("Disable Shared compute").click();
+  await expect(button("Enable Shared compute")).toBeVisible();
+  await expect(
+    settingsSections(page).getByRole("button", {
+      name: "Shared compute",
+      exact: true,
+    }),
+  ).toHaveCount(0);
 });

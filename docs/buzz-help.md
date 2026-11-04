@@ -329,7 +329,8 @@ available rather than silently discarding it.
   to follow work. Its tab in an agent's profile shows what that agent is watching
   and whether Attention is on for this device. A mention can still wake an agent
   when Attention is off; turning Attention on does not grant new access.
-- **Mesh agents**, when Shared compute is available, use saved Interest
+- **Shared compute** is off by default; enable it in Settings → Plugins, then
+  turn on sharing separately. **Mesh agents**, when it is enabled, use saved Interest
   instructions for watched turns in both Chat and Agent mode. Watched messages
   are context for that Interest; later direct requests do not inherit it. Mesh
   agents respond only to their owner.
