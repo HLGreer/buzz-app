@@ -195,6 +195,9 @@ export function createChannelStore(
         rosterChanged?(strong?: boolean): void;
         /** The relay advertises NIP-CL; label lookups are refused without it. */
         channelIdentity?: true | undefined;
+        /** An exact lookup of these channels read their metadata. `forAgents`
+         * as the lookup asked. */
+        resolved?(ids: readonly string[], forAgents: boolean): void;
       })
     | null,
   directory: ProfileDirectory,
@@ -1988,6 +1991,7 @@ export function createChannelStore(
       } else if (!discovery.named(id))
         throw new Error("Channel metadata capacity unavailable");
     }
+    transport.resolved?.(ids, settings?.forAgents === true);
     if (settings?.consistency === "strong")
       await readCreations(
         ids.flatMap((id) => {
