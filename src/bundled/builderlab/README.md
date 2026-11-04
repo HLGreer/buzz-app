@@ -209,7 +209,11 @@ On desktop, the plugin supplies `/v1/auth/login` with `type=cli` and
 `product=buzz` to the shared native
 [`oauth_callback` module](../../../src-tauri/src/oauth_callback/README.md).
 Every desktop sign-in starts and ends in Buzz, so the hosted login uses the Buzz
-branding. `product` only selects that branding; account access is unaffected.
+variant. Besides branding, that variant hides the secondary, social and
+enterprise connection buttons, and auto-checks "remember this browser" on the
+email MFA step, so the system browser is trusted for later email MFA. Builds
+for an origin whose users need an enterprise SSO button must rely on email
+domain discovery instead. `product` is not part of account access checks.
 Native code inserts a loopback `redirect_uri` address, opens the browser, and returns
 callback parameters to the plugin. Native code generates and validates OAuth
 state; the plugin also uses a random callback path.
