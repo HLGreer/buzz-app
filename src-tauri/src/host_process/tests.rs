@@ -1099,4 +1099,67 @@ async fn a_protected_hosts_tool_credential_is_only_its_launched_agents() {
             .await
             .is_err());
     }
+    // A protection change, or a switch of provider, revokes its token.
+    crate::credential_service::tests::reprotect(&fixture, "other");
+    let token = token["token"].as_str().unwrap();
+    assert_eq!(
+        ask(&fixture, token, "get_public_key", &[]).await.0,
+        hyper::StatusCode::UNAUTHORIZED
+    );
+    assert!(processes
+        .tool_credential(
+            &fixture.service,
+            GUARD,
+            launched,
+            pubkey.clone(),
+            RELAY.into()
+        )
+        .await
+        .is_err());
+}
+
+/// The same for a change of policy under the same provider.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_protection_change_revokes_a_protected_hosts_tool_credential() {
+    use crate::credential_service::tests::{ask, protected_fixture, reprotect, GUARD, RELAY};
+    let fixture = protected_fixture();
+    let pubkey = fixture.agent.pubkey.clone();
+    let launch = fixture
+        .service
+        .protected_launch(GUARD, pubkey.clone(), RELAY.into())
+        .await
+        .unwrap();
+    let processes = HostProcesses::default();
+    let (channel, _events) = channel();
+    let handle = processes
+        .start_guarded(
+            0,
+            GUARD.into(),
+            "sh",
+            command("sh", &["-c", "read line"]),
+            None,
+            channel,
+            None,
+            false,
+            Some(launch),
+        )
+        .unwrap();
+    let credential = || {
+        processes.tool_credential(
+            &fixture.service,
+            GUARD,
+            handle,
+            pubkey.clone(),
+            RELAY.into(),
+        )
+    };
+    let env = credential().await.unwrap().unwrap();
+    let token = env_token(&env);
+    reprotect(&fixture, GUARD);
+    assert!(credential().await.is_err());
+    assert_eq!(
+        ask(&fixture, &token, "get_public_key", &[]).await.0,
+        hyper::StatusCode::UNAUTHORIZED
+    );
 }

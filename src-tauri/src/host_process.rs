@@ -701,12 +701,20 @@ impl HostProcesses {
         let (tools, launch) = self.owned(id, handle, |entry| {
             (entry.tools.clone(), entry.launch.clone())
         })?;
+        // A protected host's tokens all act for the agent it was launched
+        // for, under its protection then: once that changes, none acts again.
+        let protection_current = match &launch {
+            Some(launch) => credentials.launch_current(launch).await,
+            None => true,
+        };
         // This agent's token, if it still acts. One outlived by the agent's
         // removal and re-adding, or by a sign-out, is dropped, which revokes it
         // for good, so a fresh one is issued for the agent as it is now.
         let current = |list: &mut Vec<ToolCredential>| {
             list.retain(|tool| {
-                tool.pubkey != pubkey || tool.relay != relay || credentials.acts(&tool.issued)
+                tool.pubkey != pubkey
+                    || tool.relay != relay
+                    || (protection_current && credentials.acts(&tool.issued))
             });
             list.iter()
                 .find(|tool| tool.pubkey == pubkey && tool.relay == relay)

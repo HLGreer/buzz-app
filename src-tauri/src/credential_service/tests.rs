@@ -29,6 +29,30 @@ pub(crate) fn protected_fixture() -> Fixture {
     protect(&fixture, &[&fixture.agent.pubkey]);
     fixture
 }
+/// Saves `provider`'s protection for the agent anew, at a new revision; a
+/// switch of provider removes the old one first, as the app requires.
+pub(crate) fn reprotect(fixture: &Fixture, provider: &str) {
+    let agents = fixture.host.agents().unwrap();
+    let current = || agents.get(&fixture.agent.pubkey, RELAY).unwrap();
+    if provider != GUARD {
+        agents
+            .set_protection(
+                &fixture.agent.pubkey,
+                current().protection_revision,
+                GUARD,
+                None,
+            )
+            .unwrap();
+    }
+    agents
+        .set_protection(
+            &fixture.agent.pubkey,
+            current().protection_revision,
+            provider,
+            Some(json!({"v": 2})),
+        )
+        .unwrap();
+}
 fn protect(fixture: &Fixture, pubkeys: &[&str]) {
     let agents = fixture.host.agents().unwrap();
     agents.upgrade_protection_storage().unwrap();
@@ -301,6 +325,42 @@ async fn a_protection_provider_binds_only_the_agent_it_launched() {
         ask(&fixture, &token, "get_public_key", &[]).await.1["result"],
         pubkey.as_str()
     );
+}
+
+/// A token bound through a protected launch stops acting for good once the
+/// agent's protection changes or names another provider; so does its launch.
+#[tokio::test]
+async fn a_protection_change_revokes_a_launched_token() {
+    for provider in [GUARD, "other"] {
+        let fixture = protected_fixture();
+        let pubkey = fixture.agent.pubkey.clone();
+        let launch = fixture
+            .service
+            .protected_launch(GUARD, pubkey.clone(), RELAY.into())
+            .await
+            .unwrap();
+        let (held, token) = issued(&fixture).await;
+        fixture
+            .service
+            .bind(&held, GUARD, Some(&launch), pubkey.clone(), RELAY.into())
+            .await
+            .unwrap();
+        assert_eq!(
+            ask(&fixture, &token, "get_public_key", &[]).await.0,
+            StatusCode::OK
+        );
+        reprotect(&fixture, provider);
+        let reply = ask(&fixture, &token, "get_public_key", &[]).await;
+        assert_eq!(reply.0, StatusCode::UNAUTHORIZED, "provider={provider}");
+        assert!(!fixture.service.acts(&held), "provider={provider}");
+        assert!(!fixture.service.launch_current(&launch).await);
+        let (fresh, _) = issued(&fixture).await;
+        assert!(fixture
+            .service
+            .bind(&fresh, GUARD, Some(&launch), pubkey.clone(), RELAY.into())
+            .await
+            .is_err());
+    }
 }
 
 #[tokio::test]

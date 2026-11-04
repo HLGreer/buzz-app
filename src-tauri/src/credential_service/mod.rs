@@ -124,6 +124,22 @@ struct Bound {
     relay: String,
     owner: String,
     incarnation: Stamp,
+    /// Bound through a protected launch: it acts only while the agent's saved
+    /// protection still names this provider at this revision.
+    protection: Option<Protection>,
+}
+#[derive(Clone, PartialEq)]
+struct Protection {
+    provider: String,
+    revision: u64,
+}
+impl Protection {
+    fn of(agent: &buzz_agent_controller::AppAgent) -> Option<Self> {
+        agent.protection.as_ref().map(|binding| Self {
+            provider: binding.provider.clone(),
+            revision: agent.protection_revision,
+        })
+    }
 }
 
 /// A process a protection provider launched for one agent, recorded natively
@@ -134,13 +150,8 @@ pub(crate) struct ProtectedLaunch {
     relay: String,
     /// The agent type's owner plugin when it was launched.
     runtime: String,
-}
-
-fn protected_by(agent: &buzz_agent_controller::AppAgent, plugin: &str) -> bool {
-    agent
-        .protection
-        .as_ref()
-        .is_some_and(|binding| binding.provider == plugin)
+    /// The agent's saved protection when it was launched.
+    protection: Protection,
 }
 
 /// One issued token, revoked when dropped: with the process it was issued to.
@@ -270,12 +281,15 @@ impl CredentialService {
     ) -> Result<ProtectedLaunch, String> {
         let (agent, _) = self.0.agents.caller_stamp(pubkey, relay).await?;
         let runtime = agent.agent_type.split_once('/').map(|(owner, _)| owner);
-        match runtime {
-            Some(runtime) if protected_by(&agent, plugin) => Ok(ProtectedLaunch {
-                runtime: runtime.into(),
-                pubkey: agent.pubkey,
-                relay: agent.relay,
-            }),
+        match (runtime, Protection::of(&agent)) {
+            (Some(runtime), Some(protection)) if protection.provider == plugin => {
+                Ok(ProtectedLaunch {
+                    runtime: runtime.into(),
+                    pubkey: agent.pubkey,
+                    relay: agent.relay,
+                    protection,
+                })
+            }
             _ => Err("The agent is not protected by this plugin".into()),
         }
     }
@@ -294,15 +308,23 @@ impl CredentialService {
     ) -> Result<(), String> {
         let (agent, incarnation) = self.0.agents.caller_stamp(pubkey, relay).await?;
         let runtime = agent.agent_type.split_once('/').map(|(owner, _)| owner);
-        let launched_for_it = launched.is_some_and(|launch| {
-            launch.pubkey == agent.pubkey
-                && launch.relay == agent.relay
-                && Some(launch.runtime.as_str()) == runtime
-                && protected_by(&agent, plugin)
-        });
-        if runtime != Some(plugin) && !launched_for_it {
-            return Err("The agent is not of this plugin's type".into());
-        }
+        // The agent's own plugin binds it as ever; a protection provider only
+        // the agent it launched, while that protection is still saved.
+        let protection = if runtime == Some(plugin) {
+            None
+        } else {
+            launched
+                .filter(|launch| {
+                    launch.pubkey == agent.pubkey
+                        && launch.relay == agent.relay
+                        && Some(launch.runtime.as_str()) == runtime
+                        && launch.protection.provider == plugin
+                        && Protection::of(&agent).as_ref() == Some(&launch.protection)
+                })
+                .map(|launch| launch.protection.clone())
+                .ok_or("The agent is not of this plugin's type")
+                .map(Some)?
+        };
         let mut callers = self.callers();
         let caller = callers
             .get_mut(&issued.key)
@@ -326,6 +348,7 @@ impl CredentialService {
                     relay: agent.relay,
                     owner: agent.owner,
                     incarnation,
+                    protection,
                 });
                 Ok(())
             }
@@ -346,6 +369,44 @@ impl CredentialService {
                     )
                 })
         })
+    }
+
+    /// Whether the agent's saved protection is still the one `launch` was
+    /// made under; every token bound through it acts only while it is.
+    pub(crate) async fn launch_current(&self, launch: &ProtectedLaunch) -> bool {
+        self.current_protection(&launch.pubkey, &launch.relay)
+            .await
+            .as_ref()
+            == Some(&launch.protection)
+    }
+    async fn current_protection(&self, pubkey: &str, relay: &str) -> Option<Protection> {
+        let (agent, _) = self
+            .0
+            .agents
+            .caller_stamp(pubkey.into(), relay.into())
+            .await
+            .ok()?;
+        Protection::of(&agent)
+    }
+
+    /// One bound through a protected launch is revoked for good once the
+    /// agent's saved protection no longer names its provider at its revision.
+    async fn still_protected(&self, key: &[u8; 32], bound: &Bound) -> Result<(), Failure> {
+        let Some(protection) = &bound.protection else {
+            return Ok(());
+        };
+        if self
+            .current_protection(&bound.pubkey, &bound.relay)
+            .await
+            .as_ref()
+            == Some(protection)
+        {
+            return Ok(());
+        }
+        if let Some(caller) = self.callers().get_mut(key) {
+            caller.revoked = true;
+        }
+        Err(Failure::revoked())
     }
 
     /// Starts the listener now, not at the first agent spawn, and advertises
@@ -745,12 +806,15 @@ async fn respond(
                 .await;
         }
         let caller = service.admit(token, &message.method)?;
+        service.still_protected(&digest(token), &caller).await?;
         let result = service
             .call(&caller, &message.method, &message.params)
             .await;
-        // Its process may have exited, or its agent or owner been retired,
-        // while the key was read: then it is revoked, whatever it made.
+        // Its process may have exited, or its agent or owner been retired, or
+        // its protection changed, while the key was read: then it is revoked,
+        // whatever it made.
         service.acting(&mut service.callers(), token)?;
+        service.still_protected(&digest(token), &caller).await?;
         result
     }
     .await;
