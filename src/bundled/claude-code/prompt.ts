@@ -7,7 +7,10 @@ import {
 } from "../../buzz-mcp/prompt";
 import type { EventData } from "../../features/relay/events";
 import { messageAuthor } from "../../features/relay/fold";
-import { BASE_PROMPT } from "../../features/agent-harness/base-prompt";
+import {
+  BASE_PROMPT,
+  MENTION_PROMPT,
+} from "../../features/agent-harness/base-prompt";
 import { coreMemorySection } from "../../features/agent-harness/core-memory";
 import {
   type ConversationWake,
@@ -195,13 +198,18 @@ export function turnPrompt(input: TurnInput) {
     ),
   );
   if (input.project) parts.push(input.project);
+  // A wake is not a mention, so only a delivered message says what the agent
+  // owes it. The event stays last.
   parts.push(
-    input.wake
-      ? wakeSection(input.wake)
-      : section(
-          EVENT,
-          eventBody(event, event.content, input.names?.(event.pubkey)),
-        ),
+    ...(input.wake
+      ? [wakeSection(input.wake)]
+      : [
+          MENTION_PROMPT,
+          section(
+            EVENT,
+            eventBody(event, event.content, input.names?.(event.pubkey)),
+          ),
+        ]),
   );
   return parts.join("\n\n");
 }
