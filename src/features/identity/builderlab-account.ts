@@ -12,6 +12,7 @@ import {
   type Reply,
 } from "../../bundled/builderlab/communities/api";
 import { enteredRelayOrigin, relayAddress } from "../communities/destination";
+import type { FederatedIdentity } from "../federated-identity/service";
 import type { Host, HostResponse } from "../host/service";
 import { BackupError, backUpWith } from "./backup";
 import type { BackupFailureKind } from "./backup-failure";
@@ -325,19 +326,74 @@ export function builderlabAccount(
   identity: BackupIdentity,
 ): FirstRunAccount {
   const target = oauthTarget();
-  const portal = new URL(target).origin;
+  return kgooseAccount(
+    (path, headers, body) =>
+      request({
+        url: `${target}${path}`,
+        method: "POST",
+        headers: { ...headers, "X-BB-Session-Credential": credential.value },
+        body,
+      }),
+    { credential: credential.value },
+    identity,
+  );
+}
+
+/**
+ * `builderlabAccount` for an FI build's sign-in (`firstRunCredential`): the
+ * same routes through the bundled plugin's NIP-FI forwarder, which sends the
+ * native session as a Bearer token, each fenced to the session that sign-in
+ * returned (`credential.value` is its revision).
+ */
+export function federatedBuilderlabAccount(
+  credential: Credential,
+  federated: Pick<FederatedIdentity, "snapshot" | "request">,
+  identity: BackupIdentity,
+): FirstRunAccount {
+  return kgooseAccount(
+    (path, headers, body) => {
+      const session = federated.snapshot();
+      if (
+        session.status !== "signed-in" ||
+        session.revision !== credential.value ||
+        !session.authority
+      )
+        return Promise.reject(new Error(SIGNED_OUT));
+      return federated.request({
+        path: `${session.authority.apiBasePath}${path.slice(1)}`,
+        method: "POST",
+        headers,
+        body,
+      });
+    },
+    { federated: credential.value },
+    identity,
+  );
+}
+
+/** One JSON POST under the Builderlab API root; `path` starts with `/`. */
+type Post = (
+  path: string,
+  headers: Readonly<Record<string, string>>,
+  body: string,
+) => Promise<HostResponse>;
+
+function kgooseAccount(
+  send: Post,
+  session: Parameters<typeof backUpWith>[2],
+  identity: BackupIdentity,
+): FirstRunAccount {
+  const portal = new URL(oauthTarget()).origin;
   const post = (path: string, body: object = {}) =>
-    request({
-      url: `${target}${path}`,
-      method: "POST",
-      headers: {
+    send(
+      path,
+      {
         "Content-Type": "application/json",
-        "X-BB-Session-Credential": credential.value,
         // Binding requires the challenge origin to match this header.
         Origin: portal,
       },
-      body: JSON.stringify(body),
-    });
+      JSON.stringify(body),
+    );
   /**
    * One POST; `read` turns the parsed reply (null when not linked) into the
    * answer. Any refusal of the answer is logged in development with the
@@ -505,7 +561,7 @@ export function builderlabAccount(
         { community_url: relayAddress(url) },
       );
     },
-    backUp: (pubkey) => backUpWith(identity, pubkey, credential.value),
+    backUp: (pubkey) => backUpWith(identity, pubkey, session),
     // Backup routes answer plain text, not the card's reply shape, so only
     // the status and a 2xx body are read.
     async backupStatus() {
