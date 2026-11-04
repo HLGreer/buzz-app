@@ -1804,12 +1804,27 @@ fn js_signs_emoji_sets_but_never_blossom_tokens() {
 }
 
 #[test]
+fn webp_thumbnails_fall_back_to_jpeg() {
+    let hash = "a".repeat(64);
+    let webp = Url::parse(&format!("https://relay.test/media/{hash}.thumb.webp")).unwrap();
+    assert_eq!(
+        jpeg_thumb(&webp).map(String::from),
+        Some(format!("https://relay.test/media/{hash}.thumb.jpg"))
+    );
+    for other in [format!("{hash}.thumb.jpg"), format!("{hash}.png")] {
+        let url = Url::parse(&format!("https://relay.test/media/{other}")).unwrap();
+        assert_eq!(jpeg_thumb(&url), None);
+    }
+}
+
+#[test]
 fn media_proxy_only_reaches_relay_blobs() {
     let hash = "a".repeat(64);
     for target in [
         format!("https://relay.test/media/{hash}"),
         format!("https://relay.test/media/{hash}.png"),
         format!("https://relay.test:8443/media/{hash}.thumb.jpg"),
+        format!("https://relay.test/media/{hash}.thumb.webp"),
     ] {
         assert!(media_url(&target).is_some(), "{target}");
     }
