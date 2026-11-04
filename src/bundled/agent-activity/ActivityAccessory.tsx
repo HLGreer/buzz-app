@@ -454,10 +454,8 @@ function ActivityBubble({
   const waiting = entries.some(starting);
   const stepping = entries.some((entry) => entry.working && !starting(entry));
 
-  const unknown = entries.some((entry) => !entry.lifecycle && !entry.working);
-  const failedCount = entries.filter(
-    (entry) => entry.lifecycle && entry.state === "error",
-  ).length;
+  const unknown = entries.some((entry) => entry.state === "unknown");
+  const failedCount = entries.filter((entry) => entry.state === "error").length;
   const label = (entry: Entry) =>
     entry.lifecycle
       ? localWorkLabel({
@@ -470,12 +468,12 @@ function ActivityBubble({
           ...(entry.reason ? { error: entry.reason } : {}),
           ...(entry.step ? { step: entry.step } : {}),
         })
-      : entry.working
-        ? "working"
-        : "status unknown";
-  const failedEntries = entries.filter(
-    (entry) => entry.lifecycle && entry.state === "error",
-  );
+      : entry.state === "error"
+        ? "failed"
+        : entry.working
+          ? "working"
+          : "status unknown";
+  const failedEntries = entries.filter((entry) => entry.state === "error");
   const otherEntries = entries.filter(
     (entry) => !failedEntries.includes(entry),
   );
@@ -606,17 +604,13 @@ function ActivityBubble({
                     label={
                       <span
                         className={`text-body-sm ${styles.preview}`}
-                        data-error={
-                          entry.lifecycle && entry.state === "error"
-                            ? ""
-                            : undefined
-                        }
+                        data-error={entry.state === "error" ? "" : undefined}
                       >
                         <ShimmerText
                           active={stopping || entry.working || starting(entry)}
                         >
                           {(stopping ? "Stopping…" : undefined) ??
-                            (entry.lifecycle
+                            (entry.lifecycle || entry.state === "error"
                               ? label(entry)
                               : !entry.working
                                 ? "Activity interrupted or out of date"
