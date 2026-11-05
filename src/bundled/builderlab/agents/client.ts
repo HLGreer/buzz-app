@@ -34,6 +34,8 @@ export type RemoteAgentModel = Readonly<{
   id: string;
   displayName: string;
   supportedReasoningEfforts: readonly string[];
+  /** Served on low-latency inference hardware, such as Cerebras. */
+  fast?: boolean;
 }>;
 
 function modelSelectionStatus(
@@ -378,6 +380,7 @@ export function createAgentClient(
         id: model.id,
         displayName: model.display_name,
         supportedReasoningEfforts: model.supported_reasoning_efforts,
+        fast: model.fast === true,
       }));
     },
     async updateModel(

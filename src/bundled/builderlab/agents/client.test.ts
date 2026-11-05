@@ -219,6 +219,12 @@ it("loads the standalone catalog with model-specific effort identifiers", async 
           display_name: "Friendly Model",
           supported_reasoning_efforts: ["none", "max"],
         },
+        {
+          id: "model-two",
+          display_name: "Fast Model",
+          supported_reasoning_efforts: ["low"],
+          fast: true,
+        },
       ],
     }),
   );
@@ -227,6 +233,13 @@ it("loads the standalone catalog with model-specific effort identifiers", async 
       id: "model-one",
       displayName: "Friendly Model",
       supportedReasoningEfforts: ["none", "max"],
+      fast: false,
+    },
+    {
+      id: "model-two",
+      displayName: "Fast Model",
+      supportedReasoningEfforts: ["low"],
+      fast: true,
     },
   ]);
   expect(vi.mocked(h.host.request).mock.calls[0]?.[0].url).toBe(
