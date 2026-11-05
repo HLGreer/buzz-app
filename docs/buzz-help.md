@@ -432,7 +432,10 @@ available rather than silently discarding it.
   still shows when an agent is working there. Expand recorded work to
   open its transcript or **Stop** the running request; before any work updates
   arrive, those controls appear on the live indicator. Stop availability depends
-  on the agent type.
+  on the agent type. A reply does not hide ongoing work. If more updates arrive
+  after a reply, the newest update group carries that agent's live activity and
+  Stop control; earlier groups remain readable history. In Codex DMs, an accepted
+  follow-up takes over the live indicator; separate threads keep their own.
 - A Goose agent's Activity lists the sessions Buzz recorded on this device for
   each conversation. A conversation with no recorded session, such as one from
   an earlier version of Buzz or another computer, offers **Search older
