@@ -1,5 +1,6 @@
 // Avatar selection above the agent identity and type-owned setup fields.
 import { useEffect, useId, useRef, useState } from "react";
+import type { AgentCardDraft } from "../../features/agents/agent-card";
 import { randomAgentAvatar } from "../../features/agents/avatar-packs";
 import type {
   Agent,
@@ -65,6 +66,7 @@ export function AgentCreateDialog({
   onClose,
   onCreated,
   request,
+  draft,
   onCreate,
   update,
 }: {
@@ -74,6 +76,8 @@ export function AgentCreateDialog({
   onClose(): void;
   onCreated(agent: Agent): void;
   request?: AgentCreationRequest;
+  /** Starts from an agent card's name, picture and instructions. */
+  draft?: AgentCardDraft;
   onCreate?(input: NewAgent): Promise<Agent>;
   /** Edits `agent` instead, starting from its settings with the request's
    * changes. */
@@ -86,12 +90,14 @@ export function AgentCreateDialog({
   const edited = update?.agent;
   const [open, setOpen] = useState(true);
   const [name, setName] = useState(
-    update ? (update.request.name ?? update.agent.name) : (request?.name ?? ""),
+    update
+      ? (update.request.name ?? update.agent.name)
+      : (request?.name ?? draft?.name ?? ""),
   );
   const [avatar, setAvatar] = useState<AvatarSelection>(() => {
     const picture = update
       ? (update.request.picture ?? update.agent.picture ?? "")
-      : request?.picture;
+      : (request?.picture ?? draft?.picture);
     return picture === undefined
       ? { kind: "gloopie", picture: randomAgentAvatar().url }
       : { kind: "image", picture };
@@ -112,7 +118,12 @@ export function AgentCreateDialog({
   };
   /** The agent's settings in `item`, with the requested instructions. */
   const seed = (item: RegisteredAgentType | undefined) => {
-    if (!update) return startingConfig(item);
+    if (!update) {
+      const config = startingConfig(item);
+      return draft?.instructions && item?.adopt
+        ? item.adopt({ instructions: draft.instructions }, config)
+        : config;
+    }
     const { agent, request } = update;
     const config =
       item?.key === agent.type
@@ -244,7 +255,9 @@ export function AgentCreateDialog({
           ? `${update.request.requesterName} proposed these changes. Nothing changes until you save.`
           : request
             ? `${request.requesterName} requested this agent. Review its settings before creating it.`
-            : undefined
+            : draft
+              ? "From an agent card. Review its settings before creating it."
+              : undefined
       }
       size="default"
       height="content"
