@@ -105,7 +105,7 @@ export function createSettingsTab(
     return (
       <div className="grid gap-4">
         {settingsSection !== "runtime" && signedIn && (
-          <AgentExecutionNote execution="remote" runtime={agent.type} />
+          <AgentExecutionNote runtime={agent.type} />
         )}
         {settingsSection !== "runtime" && (
           <Editor

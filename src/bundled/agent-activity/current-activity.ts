@@ -47,8 +47,6 @@ export function currentActivity(
       : "";
   const detail = presentation?.target ?? text(latest);
   return {
-    /** The transcript item shown: a tool call, thought, plan or response. */
-    kind: latest.type,
     title: `${title}${status}`,
     detail: detail.length > 240 ? `${detail.slice(0, 240)}…` : detail,
   };

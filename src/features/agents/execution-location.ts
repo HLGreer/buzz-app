@@ -25,29 +25,18 @@ export function remoteWorkDetail(
 }
 
 /** A location note: where the agent runs, then what that means for you. */
-type ExecutionCopy = Readonly<{ title?: string; description?: string }>;
+type ExecutionCopy = Readonly<{ description?: string }>;
 
 /** A plugin execution target does not establish Builderlab's availability or file boundary. */
-export function executionDetails(
-  execution: AgentExecutionLocation,
-  runtime?: string,
-): ExecutionCopy {
-  if (execution === "local") return executionCopy.local;
-  return runtime === "block.builderlab/builderlab"
-    ? executionCopy.remote
-    : { title: "Runs on a remote machine, not this computer" };
+export function executionDetails(runtime?: string): ExecutionCopy {
+  return runtime === "block.builderlab/builderlab" ? executionCopy.remote : {};
 }
 
 /** Execution location is independent of presence, model and ownership. */
 export const executionCopy = {
   remote: {
-    title: "Runs on Builderlab, not this computer",
     description:
       "Keeps working while this computer is off, and you can chat from your phone. It can’t open files on this computer.",
-  },
-  local: {
-    description:
-      "Runs on this computer and can work with its files. Needs Buzz open and this computer awake.",
   },
 } as const;
 

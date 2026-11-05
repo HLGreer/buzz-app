@@ -16,11 +16,8 @@ it("keeps a native agent with a remote execution binding distinct from local cus
     }),
   ).toBe("remote");
   // Only Builderlab establishes the availability and file boundary.
-  expect(executionDetails("remote", "buzz.codex/codex")).toEqual({
-    title: "Runs on a remote machine, not this computer",
-  });
-  expect(executionDetails("remote", "block.builderlab/builderlab")).toEqual({
-    title: "Runs on Builderlab, not this computer",
+  expect(executionDetails("buzz.codex/codex")).toEqual({});
+  expect(executionDetails("block.builderlab/builderlab")).toEqual({
     description:
       "Keeps working while this computer is off, and you can chat from your phone. It can’t open files on this computer.",
   });

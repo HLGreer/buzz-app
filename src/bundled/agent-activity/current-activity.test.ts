@@ -44,7 +44,6 @@ it("prefers the latest tool over later prose, including folded completions and f
     }),
   ];
   expect(currentActivity(records, turns)).toEqual({
-    kind: "tool",
     title: "Read file · Running",
     detail: "file.ts",
   });
@@ -56,7 +55,6 @@ it("prefers the latest tool over later prose, including folded completions and f
     }),
   );
   expect(currentActivity(records, turns)).toEqual({
-    kind: "tool",
     title: "Read file · Completed",
     detail: "file.ts",
   });

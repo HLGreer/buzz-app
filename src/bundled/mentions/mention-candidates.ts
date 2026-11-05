@@ -181,9 +181,6 @@ function buildCandidates(
   const executions = new Map(
     agents.map((agent) => [agent.pubkey, agent.execution]),
   );
-  const runtimes = new Map(
-    agents.map((agent) => [agent.pubkey, agent.runtime]),
-  );
   const profiles = session.profiles.snapshot();
   const known = knownAgentPubkeys(profiles, {
     definitions: [],
@@ -263,14 +260,12 @@ function buildCandidates(
     .filter((p) => admits(p.pubkey))
     .map((recipient) => {
       const execution = executions.get(recipient.pubkey);
-      const runtime = runtimes.get(recipient.pubkey);
       const fullName =
         profiles.get(recipient.pubkey)?.verified?.fullName ??
         verified.get(recipient.pubkey)?.fullName;
       return {
         recipient,
         ...(execution ? { execution } : {}),
-        ...(runtime ? { runtime } : {}),
         /** A community-verified full name, shown beside the row's detail. */
         ...(fullName ? { fullName } : {}),
         member: memberKeys.has(recipient.pubkey),

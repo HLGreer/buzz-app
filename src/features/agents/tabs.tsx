@@ -112,7 +112,7 @@ export function agentSections({
             settingsSection !== "runtime" &&
             execution === "remote" ? (
             <div className="grid gap-4">
-              <AgentExecutionNote execution={execution} runtime={agent.type} />
+              <AgentExecutionNote runtime={agent.type} />
               {content}
             </div>
           ) : (
@@ -132,7 +132,7 @@ export function agentSections({
       render: () => (
         <div className="grid gap-4">
           {execution === "remote" && (
-            <AgentExecutionNote execution={execution} runtime={agent.type} />
+            <AgentExecutionNote runtime={agent.type} />
           )}
           {settingsHost && <HostSettings host={settingsHost} />}
           {historyContent}

@@ -334,7 +334,7 @@ export function ComposerModels({
             initialFocus={choices.length ? thumb : undefined}
           >
             {remote.map((agent) => {
-              const detail = executionDetails("remote", agent.runtime);
+              const detail = executionDetails(agent.runtime);
               return (
                 <div
                   key={agent.pubkey}
