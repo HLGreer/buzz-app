@@ -610,6 +610,7 @@ fn a_sign_out_committed_while_a_refused_one_lets_go_exits_natively() {
         &instance,
         &paths,
         PLAIN,
+        || async { Ok(()) },
         || closes.set(closes.get() + 1),
         || -> std::future::Ready<Result<(), String>> { panic!("agents must not stop") },
         || {
@@ -981,6 +982,7 @@ fn preparation_commits_the_marker_before_stopping_agents() {
     run(prepare(
         &paths,
         choices(true),
+        || async { Ok(()) },
         || closed.set(true),
         || {
             assert!(marker.exists());
@@ -1000,6 +1002,7 @@ fn a_marker_write_failure_stops_nothing() {
     let failure = run(prepare(
         &paths,
         choices(true),
+        || async { Ok(()) },
         || panic!("nothing was committed"),
         || -> std::future::Ready<Result<(), String>> { panic!("agents must not stop") },
     ))
@@ -1018,6 +1021,7 @@ fn a_shutdown_failure_keeps_the_marker_and_exits_natively() {
         &instance,
         &paths,
         choices(false),
+        || async { Ok(()) },
         || closes.set(closes.get() + 1),
         || async { Err("controller stuck".to_owned()) },
         || {
@@ -1201,11 +1205,28 @@ fn a_linked_wipe_folder_refuses_before_any_marker() {
     let failure = run(prepare(
         &paths,
         choices(false),
+        || -> std::future::Ready<Result<(), Failure>> { panic!("paired tools stay") },
         || panic!("nothing was committed"),
         || -> std::future::Ready<Result<(), String>> { panic!("agents must not stop") },
     ))
     .unwrap_err();
     assert_eq!(failure, refuse(LINKED));
+    assert!(!paths.marker.exists());
+}
+
+/// Paired tools that can't be revoked refuse the sign-out before its commit.
+#[test]
+fn unrevoked_paired_tools_refuse_before_any_marker() {
+    let (_dir, paths) = fixture();
+    let failure = run(prepare(
+        &paths,
+        choices(false),
+        || async { Err(refuse("unrevoked")) },
+        || panic!("nothing was committed"),
+        || -> std::future::Ready<Result<(), String>> { panic!("agents must not stop") },
+    ))
+    .unwrap_err();
+    assert_eq!(failure, refuse("unrevoked"));
     assert!(!paths.marker.exists());
 }
 
@@ -1301,6 +1322,7 @@ fn finished_in_the_gap(
         &instance,
         paths,
         choices,
+        || async { Ok(()) },
         || closes.set(closes.get() + 1),
         || -> std::future::Ready<Result<(), String>> { panic!("agents must not stop") },
         || {

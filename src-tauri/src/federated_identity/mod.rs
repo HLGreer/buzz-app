@@ -384,6 +384,10 @@ impl FederatedIdentity {
         };
         Some((self.0.account.clone(), email))
     }
+    /// Whether the sign-in expired and the person must sign in again.
+    pub(crate) fn expired(&self) -> bool {
+        self.state().snapshot.status == Status::ReauthenticationRequired
+    }
     /// How many times derived agent credentials have been retired this run.
     pub(crate) fn retirements(&self) -> u64 {
         self.state().retirements

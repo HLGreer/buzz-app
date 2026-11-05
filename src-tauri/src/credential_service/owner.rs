@@ -7,6 +7,8 @@ use crate::identity::EventTemplate;
 use buzz_agent_controller::{bounded, framed, CANVAS_MAX_EVENT_BYTES};
 use serde_json::json;
 
+const STARTING: &str = "Buzz is still starting; retry shortly";
+
 impl CredentialService {
     /// The human paired tools act as, once the key and NIP-FI are settled.
     pub(super) async fn human(&self) -> Human {
@@ -17,7 +19,7 @@ impl CredentialService {
         let pubkey = match self.0.identity.saved_viewer().await {
             Ok(Some(pubkey)) => pubkey,
             Ok(None) => return Human::Absent,
-            Err(_) => return Human::Pending,
+            Err(_) => return Human::Pending(STARTING),
         };
         match self.0.session.pairing_account() {
             Some((store_account, fi_account)) => Human::Ready(Approver {
@@ -25,7 +27,10 @@ impl CredentialService {
                 store_account,
                 fi_account,
             }),
-            None => Human::Pending,
+            None if self.0.session.expired() => {
+                Human::Pending("Your Builderlab sign-in expired; sign in again in Buzz")
+            }
+            None => Human::Pending(STARTING),
         }
     }
 

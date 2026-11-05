@@ -91,6 +91,9 @@ impl FederatedIdentity {
         state.snapshot.status = Status::SignedIn;
         state.restored = true;
     }
+    pub(crate) fn expire_for_test(&self) {
+        self.retire(Status::ReauthenticationRequired, None);
+    }
     pub(crate) fn sign_out_for_test(&self) {
         self.retire(Status::SignedOut, None);
     }

@@ -836,3 +836,20 @@ async fn a_lease_that_cannot_be_checked_does_not_clear_the_pairings() {
     assert!(matches!(cleared, Err(ref unrevoked) if unrevoked.recorded));
     assert!(fixture.keychain.owed.load(Ordering::SeqCst));
 }
+
+/// An expired sign-in tells a paired tool to sign in again, not to wait.
+#[tokio::test]
+async fn an_expired_sign_in_asks_for_a_new_one() {
+    let fixture = fixture();
+    let token = paired(&fixture).await;
+    fixture.service.0.session.expire_for_test();
+    let reply = ask(&fixture, &token, "get_public_key", &[]).await;
+    assert_eq!(
+        error(&reply),
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+    );
+    assert!(reply.1["message"]
+        .as_str()
+        .unwrap()
+        .contains("sign in again in Buzz"));
+}

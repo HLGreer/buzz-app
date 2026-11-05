@@ -79,8 +79,8 @@ pub(crate) enum Human {
     Ready(Approver),
     /// No human identity here: no pairing acts.
     Absent,
-    /// Still loading (identity or NIP-FI restore): ask again shortly.
-    Pending,
+    /// Not settled: still loading, or the sign-in expired. Why, for the caller.
+    Pending(&'static str),
 }
 
 pub(crate) struct Pairings {
@@ -237,12 +237,7 @@ impl Pairings {
             .ok_or_else(Failure::revoked)?;
         let now = unix_now()?;
         let acts = match &human {
-            Human::Pending => {
-                return Err(Failure::new(
-                    "unavailable",
-                    "Buzz is still starting; retry shortly",
-                ))
-            }
+            Human::Pending(message) => return Err(Failure::new("unavailable", message)),
             Human::Absent => false,
             Human::Ready(approver) => *approver == record.approved_by,
         };
@@ -310,12 +305,7 @@ impl Pairings {
         let approver = match human().await {
             Human::Ready(approver) => approver,
             Human::Absent => return Err(Failure::new("denied", "Set up Buzz first")),
-            Human::Pending => {
-                return Err(Failure::new(
-                    "unavailable",
-                    "Buzz is still starting; retry shortly",
-                ))
-            }
+            Human::Pending(message) => return Err(Failure::new("unavailable", message)),
         };
         self.settled().await.map_err(Failure::unavailable)?;
         let generation = self
