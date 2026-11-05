@@ -168,7 +168,7 @@ test("independent packed author consumer and native-installed contribution survi
       await scroll.hover();
       await page.mouse.wheel(0, -500);
       await settle(page, scroll);
-      await row.scrollIntoViewIfNeeded();
+      await row.evaluate((node) => node.scrollIntoView({ block: "center" }));
       await settle(page, scroll);
       await hoverMessage(row);
       const inspect = row.getByRole("button", { name: "Inspect message" });

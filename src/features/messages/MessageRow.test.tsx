@@ -2743,7 +2743,7 @@ it("contains a throwing plugin action icon and opened component", async () => {
 });
 
 it.each([undefined, "toolbar"] as const)(
-  "keeps a %s action closed when its plugin is reinstalled with the same key",
+  "retires a %s action when its contribution or session ends",
   async (placement) => {
     const listeners = new Set<() => void>();
     const entry = () => ({
@@ -2782,29 +2782,29 @@ it.each([undefined, "toolbar"] as const)(
       messages: { report: undefined },
       channels: { subscribeList: () => () => {}, list: () => channelList },
     } as unknown as RelaySession;
-    try {
-      renderDom(
-        <MessageRow
-          row={{ ...row, replyCount: 0 }}
-          session={session}
-          profile={undefined}
-          media={() => undefined}
-          onOpenLink={() => false}
-          day={false}
-          retry={undefined}
-          extensions={{
-            tools: empty,
-            inline: empty,
-            actions: {
-              snapshot: () => actions,
-              subscribe(listener: () => void) {
-                listeners.add(listener);
-                return () => void listeners.delete(listener);
-              },
+    const draw = (currentSession = session) => (
+      <MessageRow
+        row={{ ...row, replyCount: 0 }}
+        session={currentSession}
+        profile={undefined}
+        media={() => undefined}
+        onOpenLink={() => false}
+        day={false}
+        retry={undefined}
+        extensions={{
+          tools: empty,
+          inline: empty,
+          actions: {
+            snapshot: () => actions,
+            subscribe(listener: () => void) {
+              listeners.add(listener);
+              return () => void listeners.delete(listener);
             },
-          }}
-        />,
-      );
+          },
+        }}
+      />
+    );
+    const activate = async () => {
       if (placement === "toolbar") {
         const button = screen.getByRole("button", { name: "Remind" });
         button.focus();
@@ -2817,10 +2817,18 @@ it.each([undefined, "toolbar"] as const)(
           await screen.findByRole("menuitem", { name: "Remind" }),
         );
       }
+    };
+    try {
+      const view = renderDom(draw());
+      await activate();
       expect(await screen.findByText("action dialog")).toBeInTheDocument();
       swap([]);
       expect(screen.queryByText("action dialog")).toBeNull();
       swap([entry()]);
+      expect(screen.queryByText("action dialog")).toBeNull();
+      await activate();
+      expect(await screen.findByText("action dialog")).toBeInTheDocument();
+      view.rerender(draw({ ...session }));
       expect(screen.queryByText("action dialog")).toBeNull();
     } finally {
       cleanup();
