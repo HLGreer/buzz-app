@@ -168,14 +168,15 @@ export function createCreationFields(
                 }
                 models={models.map(modelChoice)}
                 disabled={disabled}
-                onChange={(modelId) =>
+                onChange={(modelId) => {
+                  suggestion.current = undefined;
                   onChange({
                     ...draft,
                     modelId,
                     reasoningEffort: "",
                     subject: login.account?.subject,
-                  })
-                }
+                  });
+                }}
               />
               <Select
                 label="Thinking"
@@ -194,9 +195,10 @@ export function createCreationFields(
                     ),
                   },
                 ]}
-                onValueChange={(reasoningEffort) =>
-                  onChange({ ...draft, reasoningEffort })
-                }
+                onValueChange={(reasoningEffort) => {
+                  suggestion.current = undefined;
+                  onChange({ ...draft, reasoningEffort });
+                }}
               />
             </>
           )}

@@ -259,6 +259,66 @@ it("moves an untouched recommendation to a newly signed-in account", async () =>
   expect(screen.getByRole("combobox", { name: "Thinking" })).toBeEnabled();
 });
 
+it.each([
+  { field: "Thinking", recommendation: "changed" },
+  { field: "Thinking", recommendation: "missing" },
+  { field: "Model", recommendation: "changed" },
+  { field: "Model", recommendation: "missing" },
+])(
+  "preserves an explicit $field choice that returns to the suggestion before an account switch with a $recommendation recommendation",
+  async ({ field, recommendation }) => {
+    const h = await fixture(true, {
+      model_id: "one",
+      reasoning_effort: "high",
+    });
+    await act(async () => h.pending.resolve());
+    await screen.findByRole("button", { name: "Model: Sol 6.1" });
+    if (field === "Model") {
+      await choose("Model", "Model Two");
+      await choose("Thinking", "None");
+      await choose("Model", "Sol 6.1");
+    } else {
+      await choose("Thinking", "Low");
+    }
+    await choose("Thinking", "High");
+    const explicit = { ...h.draft() };
+    expect(explicit).toMatchObject({
+      modelId: "one",
+      reasoningEffort: "high",
+      subject: "account",
+    });
+    act(() => h.session.signOut());
+    h.acquire.mockResolvedValue({
+      value: "other-credential",
+      account: {
+        subject: "other",
+        email: "b@example.com",
+        canUseRemoteAgents: true,
+        canUseBuilderlabDecisions: false,
+      },
+    });
+    h.request.mockResolvedValue({
+      status: 200,
+      headers: {},
+      body: JSON.stringify({
+        models: catalog,
+        recommended_selection:
+          recommendation === "changed"
+            ? { model_id: "two", reasoning_effort: "none" }
+            : undefined,
+      }),
+    });
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Sign in with Builderlab" }));
+    const thinking = await screen.findByRole("combobox", { name: "Thinking" });
+    expect(h.draft()).toEqual(explicit);
+    expect(screen.getByText(/another Builderlab account/)).toBeVisible();
+    expect(thinking).toBeDisabled();
+    expect(h.ready).toHaveBeenLastCalledWith(false);
+  },
+);
+
 it("retains instructions when catalog loading fails and is retried", async () => {
   const h = await fixture();
   h.fail(true);
