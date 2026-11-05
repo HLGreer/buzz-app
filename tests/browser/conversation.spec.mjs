@@ -165,10 +165,11 @@ test("independent packed author consumer and native-installed contribution survi
       await page.locator("html").evaluate((node, mode) => {
         node.dataset.colorMode = mode;
       }, mode);
+      await scroll.hover();
+      await page.mouse.wheel(0, -500);
+      await settle(page, scroll);
       await row.scrollIntoViewIfNeeded();
       await settle(page, scroll);
-      const before = await scroll.evaluate((node) => node.scrollTop);
-      expect(before).toBeGreaterThan(0);
       await hoverMessage(row);
       const inspect = row.getByRole("button", { name: "Inspect message" });
       await expect(inspect).toBeVisible();
@@ -176,6 +177,9 @@ test("independent packed author consumer and native-installed contribution survi
       await expectMessageActionsHidden(actions);
       await inspect.focus();
       await expect(inspect).toBeVisible();
+      await settle(page, scroll);
+      const before = await scroll.evaluate((node) => node.scrollTop);
+      expect(before).toBeGreaterThan(0);
       await page.keyboard.press("Enter");
       await expect(
         page.getByText("Consumer message panel", { exact: true }),
