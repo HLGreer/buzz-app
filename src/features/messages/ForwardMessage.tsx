@@ -24,6 +24,10 @@ import type { ChannelMessage } from "../relay/contracts";
 import type { OutgoingEvent } from "../relay/outbox";
 import { splitPartition } from "../relay/partition";
 import type { RelaySession } from "../relay/session";
+import {
+  useVerifiedNames,
+  withVerifiedNames,
+} from "../profiles/useVerifiedNames";
 import styles from "./ForwardMessage.module.css";
 
 type Source = Extract<OpenTarget, { kind: "conversation" }> & {
@@ -276,6 +280,21 @@ function ForwardMessageDialog({
   const [people, setPeople] = useState<Recipient[]>(() =>
     recovered ? [recovered.person] : [],
   );
+  const verified = useVerifiedNames(session, people);
+  const profiles = useSyncExternalStore(
+    session.profiles.subscribe,
+    session.profiles.snapshot,
+  );
+  const labels = withVerifiedNames(
+    people.map((person) => {
+      const profile = profiles.get(person.pubkey);
+      return profile && !profile.verified
+        ? { ...person, name: profile.name }
+        : person;
+    }),
+    verified,
+    profiles,
+  );
   const [note, setNote] = useState(() => recovered?.note ?? "");
   const restored = useRef(recovered?.id);
   // The outbox can finish loading after the dialog mounts.
@@ -443,7 +462,7 @@ function ForwardMessageDialog({
             session={session}
             scope={scope}
             selected={people}
-            labels={people}
+            labels={labels}
             disabled={locked}
             maxRecipients={1}
             appearance="field"

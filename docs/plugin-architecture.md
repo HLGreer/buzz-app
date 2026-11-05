@@ -2097,6 +2097,7 @@ toolbar appears on hover and keyboard focus. The host supplies an icon button
 with the action title and icon. Activation mounts the same component as a menu
 action. Removal closes the component. `placement: "menu"` mounts the component
 inside the menu instead.
+Coordination rows keep toolbar contributions in their context menu.
 
 Markdown links can use a registered panel target. The host checks `canOpenLink`
 when it renders the link and again on activation. Removing the panel makes the

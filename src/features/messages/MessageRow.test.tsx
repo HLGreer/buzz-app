@@ -2742,9 +2742,10 @@ it("contains a throwing plugin action icon and opened component", async () => {
   }
 });
 
-it.each([undefined, "toolbar"] as const)(
+it.each(["menu", "toolbar", "coordination"] as const)(
   "retires a %s action when its contribution or session ends",
-  async (placement) => {
+  async (variant) => {
+    const placement = variant === "menu" ? undefined : "toolbar";
     const listeners = new Set<() => void>();
     const entry = () => ({
       id: "remind",
@@ -2784,7 +2785,13 @@ it.each([undefined, "toolbar"] as const)(
     } as unknown as RelaySession;
     const draw = (currentSession = session) => (
       <MessageRow
-        row={{ ...row, replyCount: 0 }}
+        row={{
+          ...row,
+          replyCount: 0,
+          ...(variant === "coordination"
+            ? { audience: "agents" as const }
+            : {}),
+        }}
         session={currentSession}
         profile={undefined}
         media={() => undefined}
@@ -2805,7 +2812,12 @@ it.each([undefined, "toolbar"] as const)(
       />
     );
     const activate = async () => {
-      if (placement === "toolbar") {
+      if (variant === "coordination") {
+        fireEvent.contextMenu(screen.getByRole("button", { name: /Root/ }));
+        fireEvent.click(
+          await screen.findByRole("menuitem", { name: "Remind" }),
+        );
+      } else if (placement === "toolbar") {
         const button = screen.getByRole("button", { name: "Remind" });
         button.focus();
         await userEvent.setup().keyboard("{Enter}");

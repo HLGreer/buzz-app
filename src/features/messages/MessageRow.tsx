@@ -464,38 +464,39 @@ function MessageRowContent({
       // A failed matcher makes this action unavailable.
     }
   };
-  const actionItems = actions
-    .filter((action) => action.placement !== "toolbar")
-    .map((action) =>
-      action.placement === "menu" && session && extensions?.actions ? (
-        <ContributionBoundary key={contributionKey(action)} fallback={null}>
-          <WithTargetOpener
-            component={action.component}
-            props={{
-              message: row,
-              session,
-              close: () => setOpenAction(undefined),
-            }}
-            registry={extensions.actions}
-            entry={action}
-          />
-        </ContributionBoundary>
-      ) : (
-        <MenuItem key={action.key} onClick={() => activateAction(action)}>
-          {action.icon && (
-            <MenuIcon>
-              <ContributionBoundary
-                key={contributionKey(action)}
-                fallback={null}
-              >
-                <action.icon />
-              </ContributionBoundary>
-            </MenuIcon>
-          )}
-          {action.title}
-        </MenuItem>
-      ),
-    );
+  const actionItems = (contextMenu: boolean) =>
+    actions
+      .filter((action) => action.placement !== "toolbar" || contextMenu)
+      .map((action) =>
+        action.placement === "menu" && session && extensions?.actions ? (
+          <ContributionBoundary key={contributionKey(action)} fallback={null}>
+            <WithTargetOpener
+              component={action.component}
+              props={{
+                message: row,
+                session,
+                close: () => setOpenAction(undefined),
+              }}
+              registry={extensions.actions}
+              entry={action}
+            />
+          </ContributionBoundary>
+        ) : (
+          <MenuItem key={action.key} onClick={() => activateAction(action)}>
+            {action.icon && (
+              <MenuIcon>
+                <ContributionBoundary
+                  key={contributionKey(action)}
+                  fallback={null}
+                >
+                  <action.icon />
+                </ContributionBoundary>
+              </MenuIcon>
+            )}
+            {action.title}
+          </MenuItem>
+        ),
+      );
   // A message renderer may draw some attachments itself. Its claims count only
   // while its card is mounted, and they return to the host list while its
   // fallback shows. A remounted card starts healthy and claims again.
@@ -781,7 +782,7 @@ function MessageRowContent({
             (session ? (
               <MessageManagementItems row={row} session={session} />
             ) : undefined)}
-          {actionItems}
+          {actionItems(!!target)}
           {activityItem}
           {reportItem}
         </>

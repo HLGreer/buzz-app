@@ -323,6 +323,7 @@ export function MessageLink({
             : description
         }
         data-link-label={label ?? ""}
+        data-panel-target={panelTarget ? url : undefined}
         data-solo-link={chatChip ? "" : undefined}
         title={
           chatLabel

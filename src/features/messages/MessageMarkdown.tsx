@@ -707,7 +707,9 @@ function PreparedMessageMarkdown({
         target &&
         (parseBuzzLink(target) ||
         profileKey(target) ||
-        (interactive && !/^https?:/i.test(target) && canOpenLink?.(target))
+        (interactive &&
+          !/^(?:https?|buzz|nostr):/i.test(target) &&
+          canOpenLink?.(target))
           ? target
           : safeLinkUrl(target));
       if (href && profileKey(href)) {
