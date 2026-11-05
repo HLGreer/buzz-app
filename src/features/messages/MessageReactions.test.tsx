@@ -513,6 +513,7 @@ it("does not let someone who cannot react toggle, and leaves keys to ancestors",
   await screen.findByRole("tooltip");
   // Enter and Space activate a native button by dispatching this click.
   fireEvent.click(pill);
+  expect(screen.getByRole("tooltip")).toBeTruthy();
   expect(h.session.outbox?.snapshot()).toHaveLength(0);
   expect(pill.getAttribute("aria-pressed")).toBe("false");
   expect(screen.queryByTestId("inline-add-reaction")).toBeNull();
