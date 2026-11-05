@@ -311,7 +311,7 @@ test.describe("DM archive delivery", () => {
     await choose(page, inbox, "Activity type", "DMs");
     await expect(rows).toHaveCount(1);
     await rows.getByRole("button", { name: /^Open / }).click();
-    // A DM opens whole; its root carries the mentioned reply.
+    // The DM resumes at the mentioned reply, so its thread opens under its root.
     await expect(
       inbox
         .getByRole("region", {
