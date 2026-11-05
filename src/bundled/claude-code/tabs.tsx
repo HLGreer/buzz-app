@@ -386,7 +386,21 @@ export function createTabs({
         loading={state.modelsChecking}
         error={state.modelsError}
         retry={() => void setup.loadModels(true)}
-        onChange={(model) => onChange({ ...current, model })}
+        onChange={(model) => {
+          const efforts = effortsFor(
+            model || providerDefaults.model,
+            state.models,
+          );
+          onChange({
+            ...current,
+            model,
+            effort:
+              state.models.length === 0 ||
+              efforts.some((level) => level.id === current.effort)
+                ? current.effort
+                : "",
+          });
+        }}
       />
     );
   }
@@ -820,8 +834,14 @@ export function createTabs({
       (place, signal) => runtime.find(agent.key, place, workspace, signal),
       (channelId) => runtime.channelLabel(agent.key, channelId),
     );
+    // Newest first, the opened conversation's channel above the rest.
     const recent = conversations
       .filter((item) => item.key !== here?.key)
+      .sort(
+        (a, b) =>
+          Number(b.channelId === conversation?.channelId) -
+          Number(a.channelId === conversation?.channelId),
+      )
       .slice(0, CONVERSATION_LIMIT);
     const activity = (key: string) => {
       const running = busy.get(key);
