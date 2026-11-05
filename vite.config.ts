@@ -127,7 +127,11 @@ export default defineConfig(async ({ command, mode }) => {
           api: `${builderlabUrl.replace(/\/$/, "")}/api/goose`,
           appsBase: (
             await import("./src/bundled/builderlab/apps/environment.ts")
-          ).controlPlane(builderlabUrl),
+          ).controlPlane(
+            builderlabUrl,
+            builderlabUrl,
+            env.BUZZ_BUILDERLAB_APPS_CONTROL_PLANE ?? "",
+          ),
         },
       }),
     );
@@ -162,6 +166,9 @@ export default defineConfig(async ({ command, mode }) => {
       ),
       "import.meta.env.VITE_BUZZ_BUILDERLAB_APPS_DOMAIN":
         JSON.stringify(env.BUZZ_BUILDERLAB_APPS_DOMAIN) ?? "undefined",
+      "import.meta.env.VITE_BUZZ_BUILDERLAB_APPS_CONTROL_PLANE": JSON.stringify(
+        env.BUZZ_BUILDERLAB_APPS_CONTROL_PLANE ?? "",
+      ),
       "import.meta.env.VITE_BUZZ_OPEN_RELAY": JSON.stringify(openOrigin),
       "import.meta.env.VITE_BUZZ_DATABRICKS_HOST":
         JSON.stringify(databricksHost),

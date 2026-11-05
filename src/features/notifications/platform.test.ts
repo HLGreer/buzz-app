@@ -40,15 +40,15 @@ it("browser activation focuses and routes once; close/dispose releases callbacks
   await t.platform.show(
     {
       id: "one",
-      title: "Pinky mentioned you in #Room",
-      body: "Hello Wes",
+      title: "Pippa mentioned you in #Room",
+      body: "Hello Wen",
     },
     activate,
     vi.fn(),
   );
-  expect(t.shown[0]?.title).toBe("Pinky mentioned you in #Room");
+  expect(t.shown[0]?.title).toBe("Pippa mentioned you in #Room");
   expect(t.shown[0]?.options).toEqual({
-    body: "Hello Wes",
+    body: "Hello Wen",
     tag: "one",
     // Sound is app-owned; the OS banner is always submitted silent.
     silent: true,

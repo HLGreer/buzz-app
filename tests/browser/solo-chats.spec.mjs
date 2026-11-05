@@ -1160,7 +1160,7 @@ test("unified chat naming and lifetime retain host focus and save only explicit 
 
 // Native caret placement after focus handoffs and popup picks needs a browser.
 test.describe("Solo composer caret", () => {
-  test.use({ soloAgentNames: ["Owned Honey", "Owned Brain"] });
+  test.use({ soloAgentNames: ["Owned Honey", "Owned Brann"] });
   test("a returning draft resumes at its end and picking agents leaves the text alone", async ({
     page,
     app,
@@ -1173,7 +1173,7 @@ test.describe("Solo composer caret", () => {
     });
     const caret = () =>
       composer.evaluate((el) => [el.value, el.selectionStart, el.selectionEnd]);
-    const [honey, brain] = app.soloAgents;
+    const [honey, brann] = app.soloAgents;
     // Agents-only Solo chats address agents from the composer's pill.
     const pill = page.getByRole("button", {
       name: /Change agents$|^Choose agent$/,
@@ -1202,7 +1202,7 @@ test.describe("Solo composer caret", () => {
 
     // Picking an agent changes the pill, not the text; typing continues
     // where the caret was.
-    await pick(brain);
+    await pick(brann);
     await expect.poll(caret).toEqual(["first", 5, 5]);
     await expect(composer).toBeFocused();
     await page.keyboard.insertText(" again");
@@ -1226,7 +1226,7 @@ test.describe("Solo composer caret", () => {
       name: "Message your agents",
       exact: true,
     });
-    const [honey, brain] = app.soloAgents;
+    const [honey, brann] = app.soloAgents;
     await composer.click();
     await page.keyboard.type(`@${honey.name}`);
     await page.keyboard.press("Enter");
@@ -1238,14 +1238,14 @@ test.describe("Solo composer caret", () => {
     });
     const search = menu.getByRole("searchbox");
     await expect(search).toBeFocused();
-    await page.keyboard.insertText(brain.name);
+    await page.keyboard.insertText(brann.name);
     await page.keyboard.press("Enter");
     // The tag joins the text while focus and typing stay in the search.
-    await expect(composer).toHaveText(`@${honey.name} @${brain.name} hello`);
+    await expect(composer).toHaveText(`@${honey.name} @${brann.name} hello`);
     await expect(search).toBeFocused();
     await page.keyboard.insertText("x");
-    await expect(search).toHaveValue(`${brain.name}x`);
-    await expect(composer).toHaveText(`@${honey.name} @${brain.name} hello`);
+    await expect(search).toHaveValue(`${brann.name}x`);
+    await expect(composer).toHaveText(`@${honey.name} @${brann.name} hello`);
     // Tab out closes the menu and leaves focus where Tab put it.
     await search.focus();
     const outside = () =>

@@ -21,20 +21,20 @@ it("orders names alphabetically before bounding, with the full namesake comparis
     expect(resolve).toHaveBeenCalledWith(key, "Same", keys);
 });
 it("matches the sidebar's alphabetical order, ignoring case", () => {
-  const [kenny, baxen, wes, cynthia] = ["k", "b", "w", "c"].map((c) =>
+  const [kenny, baxen, wen, cynthia] = ["k", "b", "w", "c"].map((c) =>
     c.repeat(64),
   ) as [string, string, string, string];
   const profiles = new Map([
     [kenny, { name: "Kenny Lopez" }],
     [baxen, { name: "baxen" }],
-    [wes, { name: "Wes" }],
+    [wen, { name: "Wen" }],
     [cynthia, { name: "Cynthia" }],
   ]);
   const resolve = (_key: string, fallback: string) => fallback;
-  expect(dmLabel([kenny, baxen, wes], profiles, resolve)).toBe(
-    "baxen, Kenny Lopez, Wes",
+  expect(dmLabel([kenny, baxen, wen], profiles, resolve)).toBe(
+    "baxen, Kenny Lopez, Wen",
   );
-  expect(dmLabel([wes, kenny, cynthia, baxen], profiles, resolve)).toBe(
+  expect(dmLabel([wen, kenny, cynthia, baxen], profiles, resolve)).toBe(
     "baxen, Cynthia, Kenny Lopez +1",
   );
 });

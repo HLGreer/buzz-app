@@ -1525,7 +1525,7 @@ it.each([true, false])(
     const agent = "a".repeat(64);
     const prompt = { ...row, id: "prompt", replyCount: 0 };
     const channels = { channels: [], status: "ready" };
-    const library = { identities: [{ pubkey: agent, name: "Brain" }] };
+    const library = { identities: [{ pubkey: agent, name: "Brann" }] };
     // Local work records a top-level prompt as its thread root.
     const typing: readonly TypingEntry[] = [
       { channelId: row.channelId, threadRootId: "prompt", pubkey: agent },
@@ -1626,10 +1626,10 @@ it.each(
           return (
             renderMessageSummary?.({
               participants: ["a".repeat(64)],
-              content: <span>Brain working</span>,
-              label: "Brain, working",
+              content: <span>Brann working</span>,
+              label: "Brann, working",
               ref: null,
-            }) ?? <span>Brain working</span>
+            }) ?? <span>Brann working</span>
           );
         },
       },
@@ -1655,9 +1655,9 @@ it.each(
         thread,
       );
       expect(
-        !!screen.getByText("Brain working").closest("[data-viewer-message]"),
+        !!screen.getByText("Brann working").closest("[data-viewer-message]"),
       ).toBe(placement === "message");
-      expect(screen.getByText("Brain working")).toBeInTheDocument();
+      expect(screen.getByText("Brann working")).toBeInTheDocument();
       expect(!!screen.queryByRole("button", { name: /^View thread/ })).toBe(
         placement === "message" ? thread : replyCount > 0,
       );
@@ -1901,8 +1901,8 @@ it("shows unbadged working-agent avatars and shared dots only while a known agen
   const cached = new Map([[foreign, { name: "Stranger", isAgent: true }]]);
   const library = {
     identities: [
-      { pubkey: agent, name: "Brain", avatar: "https://safe/brain" },
-      { pubkey: other, name: "Pinky" },
+      { pubkey: agent, name: "Brann", avatar: "https://safe/brann" },
+      { pubkey: other, name: "Pippa" },
     ],
   };
   const listeners = new Set<() => void>();
@@ -1929,7 +1929,7 @@ it("shows unbadged working-agent avatars and shared dots only while a known agen
       },
     },
   } as unknown as RelaySession;
-  const media = vi.fn(() => "https://proxy/brain");
+  const media = vi.fn(() => "https://proxy/brann");
   const emptyEntries: readonly never[] = [];
   const empty = { snapshot: () => emptyEntries, subscribe: () => () => {} };
   const accessories = [
@@ -1957,7 +1957,7 @@ it("shows unbadged working-agent avatars and shared dots only while a known agen
   });
   try {
     const working = screen.getByRole("button", {
-      name: "View thread: 23 replies. Brain working",
+      name: "View thread: 23 replies. Brann working",
     });
     const indicator = working.querySelector("[data-thread-working]");
     expect(indicator).not.toBeNull();
@@ -1966,9 +1966,9 @@ it("shows unbadged working-agent avatars and shared dots only while a known agen
     ).toHaveLength(1);
     expect(indicator?.querySelector("img")).toHaveAttribute(
       "src",
-      "https://proxy/brain",
+      "https://proxy/brann",
     );
-    expect(media).toHaveBeenCalledWith("https://safe/brain", "small");
+    expect(media).toHaveBeenCalledWith("https://safe/brann", "small");
     expect(indicator?.querySelector(".buzz-avatar-status-dot")).toBeNull();
     expect(indicator?.querySelector("i")).toBeNull();
     act(() => {
@@ -1982,7 +1982,7 @@ it("shows unbadged working-agent avatars and shared dots only while a known agen
       indicator?.querySelectorAll('[data-avatar-shape="squircle"]'),
     ).toHaveLength(2);
     expect(working).toHaveAccessibleName(
-      "View thread: 23 replies. Brain, Pinky working",
+      "View thread: 23 replies. Brann, Pippa working",
     );
     act(() => {
       entries = [
@@ -2000,7 +2000,7 @@ it("shows unbadged working-agent avatars and shared dots only while a known agen
       onOpenThread: open,
     });
     const first = screen.getByRole("button", {
-      name: "View thread: Brain is working",
+      name: "View thread: Brann is working",
     });
     expect(first).toHaveTextContent("View thread");
     expect(first).not.toHaveTextContent("is working");
@@ -2030,7 +2030,7 @@ it("bounds reply participants and projects artwork with fallback initials", () =
     row: { ...row, participants: ["p1", "p2", "p3", "p4", "p5"] },
     participantProfiles: new Map([
       ["p1", { name: "Alice", picture: "https://safe/avatar" }],
-      ["p2", { name: "Brain", picture: "http://unsafe" }],
+      ["p2", { name: "Brann", picture: "http://unsafe" }],
     ]),
     media,
     onOpenThread: () => {},
@@ -2043,13 +2043,13 @@ it("bounds reply participants and projects artwork with fallback initials", () =
       [...trigger.querySelectorAll("[title]")].map((e) =>
         e.getAttribute("title"),
       ),
-    ).toEqual(["Alice", "Brain", "p3"]);
+    ).toEqual(["Alice", "Brann", "p3"]);
     expect(trigger.querySelector("img")).toHaveAttribute(
       "src",
       "https://proxy/avatar",
     );
     expect(trigger.querySelectorAll("img")).toHaveLength(1);
-    expect(trigger.querySelector('[title="Brain"]')).toHaveTextContent("B");
+    expect(trigger.querySelector('[title="Brann"]')).toHaveTextContent("B");
     expect(trigger.querySelector('[title="p3"]')).toHaveTextContent("P");
     expect(trigger).toHaveTextContent("+2");
     expect(media).toHaveBeenCalledWith("https://safe/avatar", "small");
@@ -2506,8 +2506,8 @@ function renderWorkflowMessage(open = vi.fn(() => true)) {
       workflowOwnerId: ownerId,
     },
     viewer: ownerId,
-    profile: { name: "Wes" },
-    participantProfiles: new Map([[ownerId, { name: "Wes" }]]),
+    profile: { name: "Wen" },
+    participantProfiles: new Map([[ownerId, { name: "Wen" }]]),
     onOpenLink: open,
     canOpenLink: () => true,
   });
@@ -2526,11 +2526,11 @@ it("presents automation, links the owner and explains the message without keys",
     expect(
       screen.getByText("Workflow").closest('button, [role="button"]'),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Wes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Wen" })).toBeNull();
     expect(document.querySelector("[data-viewer-message]")).toBeNull();
     expect(document.querySelector("[data-own]")).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "View workflow owner Wes profile" }),
+      screen.getByRole("button", { name: "View workflow owner Wen profile" }),
     );
     expect(open).toHaveBeenCalledWith(profileTarget(ownerId), {
       rootId: "root",
@@ -2545,7 +2545,7 @@ it("presents automation, links the owner and explains the message without keys",
     expect(card).toHaveAccessibleDescription(
       "Sent automatically by a workflow. Its owner set it up but didn’t send this message personally.",
     );
-    expect(card).not.toHaveTextContent(/npub1|Wes/);
+    expect(card).not.toHaveTextContent(/npub1|Wen/);
     expect(
       screen.queryByRole("button", { name: "View Relay profile" }),
     ).toBeNull();
@@ -3601,7 +3601,7 @@ it.each([0, 23])(
     const subscribe = () => () => {};
     const channels = { channels: [], status: "ready" };
     const profiles = new Map();
-    const library = { identities: [{ pubkey: workingAgent, name: "Brain" }] };
+    const library = { identities: [{ pubkey: workingAgent, name: "Brann" }] };
     const typing = [
       { channelId: row.channelId, threadRootId: row.id, pubkey: workingAgent },
     ];
@@ -3631,7 +3631,7 @@ it.each([0, 23])(
           renderMessageSummary?.({
             participants: [failedAgent],
             content: <span>1 failed</span>,
-            label: "Pinky failed",
+            label: "Pippa failed",
             ref: null,
           }) ?? null,
       },
@@ -3652,8 +3652,8 @@ it.each([0, 23])(
     try {
       const summary = screen.getByRole("button", {
         name: replyCount
-          ? "View thread: 23 replies. Brain working. Pinky failed"
-          : "View thread: Brain working. Pinky failed",
+          ? "View thread: 23 replies. Brann working. Pippa failed"
+          : "View thread: Brann working. Pippa failed",
       });
       expect(summary).toHaveTextContent("1 failed");
       expect(summary).not.toHaveTextContent("View thread");
@@ -4112,7 +4112,7 @@ it.each([
     case: "signed owner",
     forged: false,
     viewer: undefined,
-    label: "Logan’s agent",
+    label: "Lomax’s agent",
   },
   // The viewer's own agent shows only the mark.
   { case: "viewer's agent", forged: false, viewer: "owner", label: undefined },
@@ -4152,7 +4152,7 @@ it.each([
     const read = vi.fn(async () => {
       // Later than the render that requested it, so only a subscription shows it.
       await new Promise((resolve) => setTimeout(resolve, 0));
-      return [profileEvent(owner, { name: "Logan" })];
+      return [profileEvent(owner, { name: "Lomax" })];
     });
     const directory = createProfileDirectory({ read });
     directory.accept([head]);

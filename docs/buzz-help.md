@@ -90,7 +90,7 @@ the interface unless an available tool actually supports that action.
 ## Connect an external app
 
 External apps are available only in communities enabled for this build.
-Desktop preview releases enable bb-block only. Other communities cannot grant access.
+Other communities cannot grant access.
 
 Start setup in the external app. Buzz desktop shows an **Authorize app**
 dialog. Select a community and an agent, check the requested access, then select
@@ -140,7 +140,7 @@ that agent in Buzz; they do not notify the external app through this connection.
   Consecutive addition and removal notices collapse into one row between
   conversation entries, even across long gaps or midnight. Large or mixed groups
   keep one name per action,
-  such as “Pinky and 182 others were added.” Hover or activate “182 others” to see
+  such as “Pippa and 182 others were added.” Hover or activate “182 others” to see
   the full, scrollable list of names. Messages and huddle entries split groups.
 
 - **Solo** organizes your chats with agents. Choose **New chat**, select or tag

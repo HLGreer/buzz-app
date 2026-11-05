@@ -317,7 +317,7 @@ it("archives a conversation durably, restores it, and reopens for participating 
   await waitFor(() =>
     expect(rows().getAllByRole("button", { name: /^Open / })).toHaveLength(2),
   );
-  post("John, please decide", now + 2, true);
+  post("Jory, please decide", now + 2, true);
   await waitFor(() =>
     expect(rows().getAllByRole("button", { name: /^Open / })).toHaveLength(2),
   );

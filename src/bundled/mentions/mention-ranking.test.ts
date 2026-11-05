@@ -110,7 +110,7 @@ it("orders mixed people and agents the same way from every input order", () => {
   const managed = choice("e", "Honey", {
     agent: true,
     managed: true,
-    label: "Wes’s Honey",
+    label: "Wen’s Honey",
   });
   const online = choice("f", "Honey", { agent: true, label: "Honey · aa" });
   const human = choice("1", "Honey · b");

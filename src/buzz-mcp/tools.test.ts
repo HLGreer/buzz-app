@@ -3150,12 +3150,12 @@ it("finds users through the community's name search, in its order", async () => 
   const { client } = fake(community);
   // Name search ranks Bob's exact match above a later Alice match.
   client.searchProfiles = vi.fn(async () => [
-    profile(bob, "Wes"),
+    profile(bob, "Wen"),
     profile(alice, "Wesley"),
   ]);
-  const found = await callTool(client, {}, "users", { q: "Wes" });
-  expect(found).toBe(`${bob} Wes\n${alice} Wesley`);
-  expect(client.searchProfiles).toHaveBeenCalledWith("wes", 100);
+  const found = await callTool(client, {}, "users", { q: "Wen" });
+  expect(found).toBe(`${bob} Wen\n${alice} Wesley`);
+  expect(client.searchProfiles).toHaveBeenCalledWith("wen", 100);
   expect(client.query).not.toHaveBeenCalled();
 });
 

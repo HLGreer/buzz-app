@@ -624,7 +624,7 @@ it("shows the real read failure, retains conversation choices, and retries to an
   const viewer = keypair();
   const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
   const discovery = [
-    metadata(relay, "crew", "wes-crew"),
+    metadata(relay, "crew", "wen-crew"),
     roster(relay, "crew", [viewer.pubkey]),
   ];
   const owner = createRelaySession({
@@ -649,7 +649,7 @@ it("shows the real read failure, retains conversation choices, and retries to an
     render(
       <SearchResults
         session={owner.session}
-        query="wes-cr"
+        query="wen-cr"
         onQueryChange={() => {}}
         input={createRef()}
         pages={[]}
@@ -663,7 +663,7 @@ it("shows the real read failure, retains conversation choices, and retries to an
     expect(request.filters).toEqual([
       {
         kinds: [40002, 40008, 9], // The real reader canonicalizes set order.
-        search: "wes-cr",
+        search: "wen-cr",
         search_mode: "prefix",
         limit: 20,
       },
@@ -678,22 +678,22 @@ it("shows the real read failure, retains conversation choices, and retries to an
         /Message search couldn’t finish: Relay response was invalid/,
       ),
     ).toBeVisible();
-    expect(screen.getByRole("option", { name: /wes-crew/ })).toBeVisible();
+    expect(screen.getByRole("option", { name: /wen-crew/ })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Retry messages" }));
     expect(screen.queryByText(/Message search couldn’t finish/)).toBeNull();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     });
-    const hit = message(viewer, "crew", "wes-crew exact message", 1700000001);
+    const hit = message(viewer, "crew", "wen-crew exact message", 1700000001);
     await act(async () => wire.next().respond([hit]));
     const input = screen.getByRole("combobox", { name: "Search Buzz" });
     // Typed text selects the first result; the late message sits below it.
     expect(
-      screen.getByRole("option", { name: /^wes-crew(?! exact)/ }),
+      screen.getByRole("option", { name: /^wen-crew(?! exact)/ }),
     ).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     expect(
-      screen.getByRole("option", { name: /wes-crew exact message/ }),
+      screen.getByRole("option", { name: /wen-crew exact message/ }),
     ).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(open).toHaveBeenCalledExactlyOnceWith("crew", hit.id);
@@ -3134,7 +3134,7 @@ it("runs operator-only date and author searches without a text predicate", async
   const before = message(alice, channel, "before the cutoff", 1700000001);
   const after = message(alice, channel, "after the cutoff", 1800000001);
   const discovery = [
-    metadata(relay, channel, "Wes"),
+    metadata(relay, channel, "Wen"),
     roster(relay, channel, [viewer.pubkey]),
   ];
   const reads: Filter[][] = [];
@@ -3257,14 +3257,14 @@ it.each(["from:ba", "from:@ba"])(
 it("requests a bounded prefix page before declaring a short name absent", async () => {
   const relay = keypair(),
     viewer = keypair(),
-    wes = keypair();
+    wen = keypair();
   const reads: Filter[][] = [];
   const owner = createRelaySession({
     ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
     query(filters) {
       if (filters.some((filter) => filter.kinds?.includes(0))) {
         reads.push(filters as Filter[]);
-        return Promise.resolve([profile(wes, { display_name: "Wes" })]);
+        return Promise.resolve([profile(wen, { display_name: "Wen" })]);
       }
       return Promise.resolve([]);
     },
@@ -3280,7 +3280,7 @@ it("requests a bounded prefix page before declaring a short name absent", async 
         openConversation={() => {}}
       />,
     );
-    expect(await screen.findByRole("option", { name: /Wes/ })).toBeVisible();
+    expect(await screen.findByRole("option", { name: /Wen/ })).toBeVisible();
     expect(reads).toContainEqual([
       { kinds: [0], search: "we", search_mode: "prefix", limit: 40 },
     ]);
@@ -3295,11 +3295,11 @@ it.each(["from:we"])(
   async (query) => {
     const relay = keypair(),
       viewer = keypair(),
-      wes = keypair();
+      wen = keypair();
     const channel = "crew";
     const discovery = [
       metadata(relay, channel, "crew"),
-      roster(relay, channel, [viewer.pubkey, wes.pubkey]),
+      roster(relay, channel, [viewer.pubkey, wen.pubkey]),
     ];
     const owner = createRelaySession({
       ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
@@ -3307,7 +3307,7 @@ it.each(["from:we"])(
         if (filters.some((filter) => filter.search === "we"))
           return Promise.reject(new Error("prefix lookup unavailable"));
         if (filters.some((filter) => filter.kinds?.includes(0)))
-          return Promise.resolve([profile(wes, { display_name: "Wes" })]);
+          return Promise.resolve([profile(wen, { display_name: "Wen" })]);
         return Promise.resolve(
           discovery.filter((event) =>
             filters.some((filter) => matchFilter(filter as Filter, event)),
@@ -3330,9 +3330,9 @@ it.each(["from:we"])(
       );
       const choice = await within(
         screen.getByRole("group", { name: "People" }),
-      ).findByRole("option", { name: /Wes/ });
+      ).findByRole("option", { name: /Wen/ });
       fireEvent.click(choice);
-      expect(change).toHaveBeenCalledWith(`from:${wes.pubkey} `);
+      expect(change).toHaveBeenCalledWith(`from:${wen.pubkey} `);
     } finally {
       cleanup();
       owner.dispose();
@@ -4054,14 +4054,14 @@ it("renders from:<author chip> without exposing the signed operand in the input"
     ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
     query(filters) {
       if (filters.some((filter) => filter.kinds?.includes(0)))
-        return Promise.resolve([profile(human, { display_name: "Wes" })]);
+        return Promise.resolve([profile(human, { display_name: "Wen" })]);
       if (filters.some((filter) => filter.kinds?.includes(9)))
         reads.push(filters as Filter[]);
       return Promise.resolve([]);
     },
   });
   function Search() {
-    const [query, setQuery] = useState("from:@wes");
+    const [query, setQuery] = useState("from:@wen");
     return (
       <SearchResults
         session={owner.session}
@@ -4078,11 +4078,11 @@ it("renders from:<author chip> without exposing the signed operand in the input"
     fireEvent.click(
       await within(screen.getByRole("group", { name: "People" })).findByRole(
         "option",
-        { name: /Wes/ },
+        { name: /Wen/ },
       ),
     );
-    const chip = screen.getByRole("button", { name: "Remove author Wes" });
-    expect(chip).toHaveTextContent("from:@Wes");
+    const chip = screen.getByRole("button", { name: "Remove author Wen" });
+    expect(chip).toHaveTextContent("from:@Wen");
     expect(chip).toHaveAttribute("title", npubEncode(human.pubkey));
     const input = screen.getByRole("combobox", { name: "Search Buzz" });
     expect(input).toHaveValue("");
@@ -4119,7 +4119,7 @@ it("renders from:<author chip> without exposing the signed operand in the input"
     );
     fireEvent.click(chip);
     expect(
-      screen.queryByRole("button", { name: "Remove author Wes" }),
+      screen.queryByRole("button", { name: "Remove author Wen" }),
     ).toBeNull();
     expect(input).toHaveValue("deploy");
   } finally {
@@ -4230,10 +4230,10 @@ it("keeps a person visible when agent candidates exceed the picker cap", async (
 it("retains a member of the in: channel when global author lookup fails", async () => {
   const relay = keypair(),
     viewer = keypair(),
-    wes = keypair();
+    wen = keypair();
   const discovery = [
     metadata(relay, "crew", "crew"),
-    roster(relay, "crew", [viewer.pubkey, wes.pubkey]),
+    roster(relay, "crew", [viewer.pubkey, wen.pubkey]),
   ];
   const owner = createRelaySession({
     ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
@@ -4241,7 +4241,7 @@ it("retains a member of the in: channel when global author lookup fails", async 
       if (filters.some((filter) => filter.search === "we"))
         return Promise.reject(new Error("prefix lookup unavailable"));
       if (filters.some((filter) => filter.kinds?.includes(0)))
-        return Promise.resolve([profile(wes, { display_name: "Wes" })]);
+        return Promise.resolve([profile(wen, { display_name: "Wen" })]);
       return Promise.resolve(
         discovery.filter((event) =>
           filters.some((filter) => matchFilter(filter as Filter, event)),
@@ -4263,7 +4263,7 @@ it("retains a member of the in: channel when global author lookup fails", async 
     expect(
       await within(screen.getByRole("group", { name: "People" })).findByRole(
         "option",
-        { name: /Wes/ },
+        { name: /Wen/ },
       ),
     ).toBeVisible();
   } finally {
@@ -5328,8 +5328,8 @@ it("leads a message hit's conversation name with its type icon and words", async
     ["board", "hash", "Public channel", "board"],
     ["vault", "lock", "Private channel", "vault"],
     ["notes", "message-circle", "Chat", "Notes"],
-    ["dm", "message-circle", "Direct message", "Pinky"],
-    ["group", "message-circle", "Direct message", "Brain, Pinky"],
+    ["dm", "message-circle", "Direct message", "Pippa"],
+    ["group", "message-circle", "Direct message", "Brann, Pippa"],
   ] as const;
   const dm = [
     ["t", "dm"],
@@ -5364,8 +5364,8 @@ it("leads a message hit's conversation name with its type icon and words", async
             : [viewer.pubkey],
       ),
     ),
-    profile(peer, { name: "Pinky" }),
-    profile(other, { name: "Brain" }),
+    profile(peer, { name: "Pippa" }),
+    profile(other, { name: "Brann" }),
   ];
   const owner = createRelaySession({
     ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
@@ -6860,7 +6860,7 @@ it("holds an early Enter for a person still being found over a section holding t
   } as unknown as AppServices["settingsCards"];
   const openSection = vi.fn();
   const openConversation = vi.fn();
-  // "wes" finds Software updates the same way, but in the shipped palette
+  // "wen" finds Software updates the same way, but in the shipped palette
   // plugin rows still take its early Enter: plugin descriptions hold most
   // names' letters in order. Of the bundled plugins, controls and a member's
   // sections, "champ" matched only Channel templates, so this Enter turns on

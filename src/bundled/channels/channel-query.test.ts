@@ -3,13 +3,13 @@ import { channelQuery } from "./channel-query";
 
 it.each([
   "#",
-  "#wes-crew",
+  "#wen-crew",
   "Hello #WE",
   "(#we",
   "[#we",
   "line\n#we",
   "#日本語",
-  "#wes crew",
+  "#wen crew",
   "#we ",
 ])("matches a prose trigger: %s", (text) => {
   const start = text.lastIndexOf("#");

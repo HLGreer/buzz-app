@@ -1573,8 +1573,8 @@ it("prioritizes the viewer-owned namesake in both menus and selects the exact ow
     owner = "2".repeat(64),
     mine = "c".repeat(64);
   const profiles = new Map([
-    [viewer, { name: "Logan" }],
-    [owner, { name: "Wes" }],
+    [viewer, { name: "Lomax" }],
+    [owner, { name: "Wen" }],
     [mine, { name: "Honey", isAgent: true as const, ownerPubkey: viewer }],
     [test.key, { name: "Honey", isAgent: true as const, ownerPubkey: owner }],
   ]);
@@ -1617,7 +1617,7 @@ it("prioritizes the viewer-owned namesake in both menus and selects the exact ow
     ),
   ).toEqual([
     [mine, true, undefined],
-    [test.key, true, "Managed by Wes"],
+    [test.key, true, "Managed by Wen"],
   ]);
   completion.unmount();
   const select = vi.fn(() => true);
@@ -1634,14 +1634,14 @@ it("prioritizes the viewer-owned namesake in both menus and selects the exact ow
   await user.click(screen.getByRole("button", { name: "Mention a member" }));
   await user.type(screen.getByRole("searchbox"), "hon");
   // Someone else's agent also says who manages it; your own does not.
-  const wes = await screen.findByRole("button", {
-    name: rowName("Wes’s Honey", "Managed by Wes"),
+  const wen = await screen.findByRole("button", {
+    name: rowName("Wen’s Honey", "Managed by Wen"),
   });
   const own = screen.getByRole("button", { name: rowName("Honey") });
   expect(
-    own.compareDocumentPosition(wes) & Node.DOCUMENT_POSITION_FOLLOWING,
+    own.compareDocumentPosition(wen) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
-  await user.click(wes);
+  await user.click(wen);
   expect(select).toHaveBeenCalledWith({ pubkey: test.key, name: "Honey" });
   view.unmount();
   names.dispose();
@@ -1656,8 +1656,8 @@ it("names a manager only once ownership is attested and the owner has a real nam
     unnamed = "3".repeat(64),
     other = "e".repeat(64);
   const profiles = new Map([
-    [viewer, { name: "Logan" }],
-    [owner, { name: "Wes" }],
+    [viewer, { name: "Lomax" }],
+    [owner, { name: "Wen" }],
     [unnamed, { name: unnamed.slice(0, 10), nameIsFallback: true as const }],
     [test.key, { name: "Honey", isAgent: true as const, ownerPubkey: owner }],
     [other, { name: "Bee", isAgent: true as const, ownerPubkey: unnamed }],
@@ -1705,7 +1705,7 @@ it("names a manager only once ownership is attested and the owner has a real nam
     for (const listener of listeners) listener();
   });
   expect(
-    screen.getByRole("button", { name: rowName("Honey", "Managed by Wes") }),
+    screen.getByRole("button", { name: rowName("Honey", "Managed by Wen") }),
   ).toBeVisible();
   // An owner without a name never shows a key fragment instead.
   expect(screen.getByRole("button", { name: rowName("Bee") })).toBeVisible();

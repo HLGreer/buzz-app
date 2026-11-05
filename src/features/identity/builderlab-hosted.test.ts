@@ -34,7 +34,6 @@ it.each([
   "wss://notcommunities.buzz.xyz",
   "wss://xcommunities.buzz.xyz",
   "wss://buzz.xyz",
-  "wss://buzz.block.builderlab.xyz",
   "wss://buzz.acme.builderlab.xyz",
   "wss://relay.example.com",
   "https://communities.buzz.xyz:8443",
@@ -48,7 +47,7 @@ it.each([
   // Only the origin counts: the build URL carries the API's base path.
   ["https://app.builderlab.xyz/api/goose/", true],
   // Another deployment's portal, as a federated-identity build derives it.
-  ["https://block.builderlab.xyz", false],
+  ["https://acme.builderlab.xyz", false],
 ])("a build URL of %j hosts communities.buzz.xyz: %s", (build, expected) => {
   expect(
     hostedByThisBuilderlab(found("wss://design.communities.buzz.xyz"), build),

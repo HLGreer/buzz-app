@@ -1709,7 +1709,7 @@ it("a landing URL hosted by this build's Builderlab signs in at once, with no co
 });
 
 it.each([
-  ["https://app.builderlab.xyz", "buzz.block.builderlab.xyz"],
+  ["https://app.builderlab.xyz", "buzz.acme.builderlab.xyz"],
   ["", "design.communities.buzz.xyz"],
 ])(
   "a build whose Builderlab (%j) does not host a landing URL pauses on the ordinary connect choice: %s",

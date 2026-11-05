@@ -576,7 +576,7 @@ it("rejects profile image URLs with embedded credentials", async () => {
 });
 
 function setup() {
-  let state = { status: "ready", profile: { name: "Arjun", picture: "" } };
+  let state = { status: "ready", profile: { name: "Arden", picture: "" } };
   const listeners = new Set<() => void>();
   const saveProfile = vi.fn((profile: PersonalProfile) => {
     state = { ...state, profile };
@@ -613,7 +613,7 @@ it("shows Cancel then Save only for edits, including picture edits, and restores
       .getAllByRole("button")
       .map((button) => button.textContent),
   ).toEqual(["Cancel", "Save"]);
-  fireEvent.change(name, { target: { value: "Arjun" } });
+  fireEvent.change(name, { target: { value: "Arden" } });
   expect(
     screen.queryByRole("button", { name: "Save" }),
   ).not.toBeInTheDocument();
@@ -709,7 +709,7 @@ it("preserves input focus on implicit submit and external profile updates", asyn
     name: "Profile description (optional)",
   });
   description.focus();
-  act(() => saveProfile({ name: "Arjun updated again", picture: "" }));
+  act(() => saveProfile({ name: "Arden updated again", picture: "" }));
   expect(
     screen.queryByRole("button", { name: "Save" }),
   ).not.toBeInTheDocument();

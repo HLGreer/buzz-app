@@ -231,6 +231,30 @@ Tests must control the ordering they assert, not depend on runner speed.
   engines for browser changes. Report exact validation scope and remaining gaps;
   a green run does not establish that all flakes are gone.
 
+## Open-source boundary
+
+This repository is public. Never commit values that only make sense inside
+Block: Block's employee-only community and its hosts (bb-block:
+`block.builderlab.xyz`, `buzz.block.builderlab.xyz`, `*.communities.block.xyz`),
+private GitHub organizations, repositories or org SSH users, internal hosts,
+cloud accounts, IAM roles or buckets, internal ticket keys, go/ links, Slack
+channels, or real employees' names and personal setups. Public Builderlab
+(`app.builderlab.xyz`, `*.communities.builderlab.xyz`) is a supported public
+service and is fine.
+
+A distributor's values come from build-time settings set by that distributor's
+release build: `BUZZ_BUILDERLAB_URL`, `BUZZ_BUILDERLAB_APPS_DOMAIN`,
+`BUZZ_BUILDERLAB_APPS_CONTROL_PLANE`, `BUZZ_BUILD_FEDERATED_IDENTITY_CONFIG`,
+`BUZZ_BUILD_REPOSITORY_ACCESS`, `BUZZ_EXTERNAL_MCP_COMMUNITIES`,
+`BUZZ_DEFAULT_COMMUNITY_URL`, `BUZZ_NSEC_BACKUP_SERVICE_URL` and
+`BUZZ_NSEC_BACKUP_NAMESPACE` (see [configuration](docs/configuration.md)). If
+one is missing, add a generic setting; never hardcode the value or special-case
+a host or organization.
+
+Tests, fixtures, docs and examples use example values (`example.org`,
+`example-org`, fictional names). Reviewers treat a violation as a blocking
+finding.
+
 ## Commit attribution and DCO
 
 Every PR commit needs a `Signed-off-by` (the hosted **DCO Check** fails without
@@ -303,15 +327,6 @@ confirmation, not app runs.
   and code-owner approval. This preflight is not automatic permission to merge.
 
 Icons use Tabler only, through `src/shared/design-system/icons`. Add individual exports as needed; icon and weight choices belong to the designer. The local lint and design checks enforce this import boundary.
-
-## Arjun's desktop acceptance setup
-
-When launching Buzz desktop builds for Arjun's acceptance testing, use his existing
-configured identity through the established local setup and verify that his
-communities load. Do not expose credentials in logs or responses. If the identity
-or community loading cannot be verified, report that limitation before presenting
-the build as ready to test. Follow the worktree bootstrap instructions above;
-do not hardcode identity values into tracked files.
 
 ## Inspect a live agent session
 

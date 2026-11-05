@@ -259,8 +259,8 @@ it("applies viewer and owner metadata through the shared view and follows owner 
     b = "b".repeat(64);
   const listeners = new Set<() => void>();
   let profiles = new Map([
-    [me, { name: "Logan" }],
-    [other, { name: "Wes" }],
+    [me, { name: "Lomax" }],
+    [other, { name: "Wen" }],
     [a, { name: "Honey", isAgent: true as const, ownerPubkey: me }],
     [b, { name: "Honey", isAgent: true as const, ownerPubkey: other }],
   ]);
@@ -289,9 +289,9 @@ it("applies viewer and owner metadata through the shared view and follows owner 
     subscribe: () => () => {},
   });
   expect(names.resolve(a)).toBe("Honey");
-  expect(names.resolve(b)).toBe("Wes’s Honey");
+  expect(names.resolve(b)).toBe("Wen’s Honey");
   expect(provider.scope({ ...source, viewer: other })(a)?.name).toBe(
-    "Logan’s Honey",
+    "Lomax’s Honey",
   );
   expect(names.resolve(a)).toBe("Honey");
   const changed = vi.fn();
@@ -615,7 +615,7 @@ it("labels a scope from its own keys and their owners, not the whole profile cac
     { name: string; isAgent?: true; ownerPubkey?: string }
   >([
     ...crowd,
-    [owner, { name: "Wes" }],
+    [owner, { name: "Wen" }],
     [a, { name: "Honey", isAgent: true, ownerPubkey: owner }],
     [b, { name: "Honey", isAgent: true, ownerPubkey: me }],
   ]);
@@ -638,7 +638,7 @@ it("labels a scope from its own keys and their owners, not the whole profile cac
   const provider = createNameProvider({ ...defaultNamingPolicy, resolve });
   const scoped = provider.scope(source, [a, b]);
   // The owner outside the scope still qualifies its agent's name.
-  expect(scoped(a)?.name).toBe("Wes’s Honey");
+  expect(scoped(a)?.name).toBe("Wen’s Honey");
   expect(scoped(b)?.name).toBe("Honey");
   const rows = resolve.mock.calls[0]?.[0] ?? [];
   expect(new Set(rows.map((row) => row.pubkey))).toEqual(

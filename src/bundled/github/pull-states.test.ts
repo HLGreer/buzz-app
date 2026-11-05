@@ -1049,7 +1049,7 @@ const text = (ids: string[]) => ({
       ? {
           __typename: "PullRequestReview",
           id,
-          author: { login: "wes" },
+          author: { login: "wen" },
           state: id === "R2" ? "COMMENTED" : "CHANGES_REQUESTED",
           body: id === "R2" ? " " : "Fix it",
           url: `u/${id}`,

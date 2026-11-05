@@ -1,4 +1,4 @@
-// Signed host-request admission controls, originally contributed by Brain.
+// Signed host-request admission controls.
 
 import { assert, afterEach, expect, it, vi } from "vitest";
 import { connectSignedTransport } from "./transport";

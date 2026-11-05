@@ -275,7 +275,7 @@ test("Inbox archive survives reload and reopens Threads before fresh Mentions", 
   app.append(
     "primary",
     channel,
-    "John, please decide",
+    "Jory, please decide",
     true,
     false,
     root.id,

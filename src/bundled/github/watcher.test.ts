@@ -646,7 +646,7 @@ describe("github_watch_pr", () => {
     app.gh(
       answer({
         checks: [{ name: "unit", conclusion: "SUCCESS" }],
-        comments: [{ id: "I1", login: "wes", body: "body-old" }],
+        comments: [{ id: "I1", login: "wen", body: "body-old" }],
       }),
     );
     expect(await app.call({ url }, true)).toContain(
@@ -656,8 +656,8 @@ describe("github_watch_pr", () => {
       answer({
         checks: [{ name: "unit", conclusion: "SUCCESS" }],
         comments: [
-          { id: "I1", login: "wes", body: "body-old" },
-          { id: "I2", login: "wes", body: "body-new" },
+          { id: "I1", login: "wen", body: "body-old" },
+          { id: "I2", login: "wen", body: "body-new" },
         ],
       }),
     );
@@ -673,7 +673,7 @@ describe("github_watch_pr", () => {
         agent,
         {
           channel: "c",
-          text: `New feedback on ${url}, quoted from GitHub:\n- comment by wes ${url}#I2:\n  > body-new`,
+          text: `New feedback on ${url}, quoted from GitHub:\n- comment by wen ${url}#I2:\n  > body-new`,
         },
       ],
     ]);
@@ -698,7 +698,7 @@ describe("github_watch_pr", () => {
   });
 
   it("reads, after a restart, the text of only the feedback the watch has not seen", async () => {
-    const before = [{ id: "R1", login: "wes", body: "Looks off", inline: [] }];
+    const before = [{ id: "R1", login: "wen", body: "Looks off", inline: [] }];
     const app = setup(answer({ reviews: before }));
     await app.call({ url });
     app.dispose();
@@ -706,7 +706,7 @@ describe("github_watch_pr", () => {
       answer({
         reviews: [
           ...before,
-          { id: "R2", login: "wes", body: "Still off", inline: [] },
+          { id: "R2", login: "wen", body: "Still off", inline: [] },
         ],
       }),
     );
@@ -807,7 +807,7 @@ describe("github_watch_pr", () => {
     app.gh(
       answer({
         checks: [{ name: "unit", conclusion: "SUCCESS" }],
-        comments: [{ id: "I1", login: "wes", body: "x".repeat(22_000) }],
+        comments: [{ id: "I1", login: "wen", body: "x".repeat(22_000) }],
       }),
     );
     await vi.advanceTimersByTimeAsync(POLL_MS);
@@ -816,7 +816,7 @@ describe("github_watch_pr", () => {
     await vi.advanceTimersByTimeAsync(2 * POLL_MS + QUIET_MS);
     expect(app.texts()).toHaveLength(2);
     expect(app.texts()[1]).toMatch(
-      new RegExp(`^New feedback on .+\\n- comment by wes ${url}#I1:`),
+      new RegExp(`^New feedback on .+\\n- comment by wen ${url}#I1:`),
     );
     expect(app.woke).toHaveBeenCalledTimes(2);
     app.dispose();
@@ -825,10 +825,10 @@ describe("github_watch_pr", () => {
   it("wakes for a reply on an older thread, which comes with its own review", async () => {
     const old = Array.from({ length: 40 }, (_, i) => ({
       id: `R${i}`,
-      login: "wes",
+      login: "wen",
       body: "",
       inline: [
-        { id: `C${i}`, login: "wes", body: `old ${i}`, path: "src/a.ts" },
+        { id: `C${i}`, login: "wen", body: `old ${i}`, path: "src/a.ts" },
       ],
     }));
     const app = setup(answer({ reviews: old }));
@@ -839,12 +839,12 @@ describe("github_watch_pr", () => {
           ...old,
           {
             id: "R40",
-            login: "wes",
+            login: "wen",
             body: "",
             inline: [
               {
                 id: "C40",
-                login: "wes",
+                login: "wen",
                 body: "Still broken",
                 path: "src/a.ts",
               },
@@ -857,7 +857,7 @@ describe("github_watch_pr", () => {
     expect(app.texts()).toEqual([
       [
         `New feedback on ${url}, quoted from GitHub:`,
-        `- inline comment by wes ${url}#C40, on:`,
+        `- inline comment by wen ${url}#C40, on:`,
         "  > src/a.ts",
         "  > Still broken",
       ].join("\n"),
@@ -892,7 +892,7 @@ describe("github_watch_pr", () => {
   });
 
   it("reads newer feedback before rereading what it holds", async () => {
-    savePolicy("allow author:wes\nallow org:block");
+    savePolicy("allow author:wen\nallow org:block");
     const app = setup();
     await app.call({ url });
     app.members(null);
@@ -905,16 +905,16 @@ describe("github_watch_pr", () => {
     await vi.advanceTimersByTimeAsync(POLL_MS);
     app.gh(
       answer({
-        comments: [...held, { id: "I50", login: "wes", body: "body-wes" }],
+        comments: [...held, { id: "I50", login: "wen", body: "body-wen" }],
       }),
     );
     await vi.advanceTimersByTimeAsync(POLL_MS + QUIET_MS + POLL_MS);
-    expect(app.texts().join("\n")).toContain("body-wes");
+    expect(app.texts().join("\n")).toContain("body-wen");
     app.dispose();
   });
 
   it("keeps holding feedback a poll did not reread, so it cannot crowd out what is new", async () => {
-    savePolicy("allow author:wes\nallow org:block");
+    savePolicy("allow author:wen\nallow org:block");
     const app = setup();
     await app.call({ url });
     app.members(null);
@@ -934,24 +934,24 @@ describe("github_watch_pr", () => {
         ],
         comments: [
           ...Array.from({ length: 49 }, (_, index) => stranger(index + 60)),
-          { id: "I109", login: "wes", body: "body-wes" },
+          { id: "I109", login: "wen", body: "body-wen" },
         ],
       }),
     );
     await vi.advanceTimersByTimeAsync(4 * POLL_MS + QUIET_MS + POLL_MS);
-    expect(app.texts().join("\n")).toContain("body-wes");
+    expect(app.texts().join("\n")).toContain("body-wen");
     app.dispose();
   });
 
   it("tells only feedback from trusted authors, once their organization is known", async () => {
-    savePolicy("allow author:wes\nallow org:block");
+    savePolicy("allow author:wen\nallow org:block");
     const app = setup();
     await app.call({ url });
     app.members(null);
     app.gh(
       answer({
         comments: [
-          { id: "I1", login: "wes", body: "body-wes" },
+          { id: "I1", login: "wen", body: "body-wen" },
           { id: "I2", login: "stranger", body: "body-stranger" },
           { id: "I3", login: "alice", body: "body-alice" },
         ],
@@ -959,7 +959,7 @@ describe("github_watch_pr", () => {
     );
     await vi.advanceTimersByTimeAsync(POLL_MS + QUIET_MS + POLL_MS);
     expect(app.texts()).toHaveLength(1);
-    expect(app.texts()[0]).toContain("body-wes");
+    expect(app.texts()[0]).toContain("body-wen");
     expect(app.texts()[0]).not.toContain("body-alice");
     // Membership read once it can be; strangers are never told.
     app.members(["alice"]);
@@ -976,16 +976,16 @@ describe("github_watch_pr", () => {
     app.gh(
       answer({
         comments: [
-          { id: "I1", login: "wes", body: "body-wes" },
+          { id: "I1", login: "wen", body: "body-wen" },
           { id: "I2", login: "stranger", body: "body-stranger" },
         ],
       }),
     );
     await vi.advanceTimersByTimeAsync(POLL_MS);
-    savePolicy("allow author:wes");
+    savePolicy("allow author:wen");
     await vi.advanceTimersByTimeAsync(QUIET_MS + POLL_MS);
     expect(app.texts()).toHaveLength(1);
-    expect(app.texts()[0]).toContain("body-wes");
+    expect(app.texts()[0]).toContain("body-wen");
     expect(app.texts()[0]).not.toContain("body-stranger");
     app.dispose();
   });
@@ -1001,17 +1001,17 @@ describe("github_watch_pr", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
     };
     fireEvent.click(screen.getByRole("radio", { name: "Don’t wake it" }));
-    save("allow author:wes");
-    const wes = { id: "I1", login: "wes", body: "body-wes" };
+    save("allow author:wen");
+    const wen = { id: "I1", login: "wen", body: "body-wen" };
     const stranger = { id: "I2", login: "stranger", body: "body-stranger" };
-    app.gh(answer({ comments: [wes, stranger] }));
+    app.gh(answer({ comments: [wen, stranger] }));
     await vi.advanceTimersByTimeAsync(POLL_MS + QUIET_MS + POLL_MS);
     expect(app.texts()).toHaveLength(1);
-    expect(app.texts()[0]).toContain("body-wes");
+    expect(app.texts()[0]).toContain("body-wen");
     expect(app.texts()[0]).not.toContain("body-stranger");
     save("allow author:stranger");
     const later = { id: "I3", login: "stranger", body: "body-later" };
-    app.gh(answer({ comments: [wes, stranger, later] }));
+    app.gh(answer({ comments: [wen, stranger, later] }));
     await vi.advanceTimersByTimeAsync(POLL_MS + QUIET_MS + POLL_MS);
     expect(app.texts()).toHaveLength(2);
     expect(app.texts()[1]).toContain("body-later");
@@ -1021,9 +1021,9 @@ describe("github_watch_pr", () => {
 
   it("checks newly read feedback against rules saved while membership is read", async () => {
     savePolicy("allow org:block", "allow");
-    const wes = { id: "I0", login: "wes", body: "body-wes" };
+    const wen = { id: "I0", login: "wen", body: "body-wen" };
     const pending = [{ name: "ci", conclusion: null }];
-    const app = setup(answer({ checks: pending, comments: [wes] }));
+    const app = setup(answer({ checks: pending, comments: [wen] }));
     await app.call({ url });
     let asked = false;
     let release = () => {};
@@ -1041,7 +1041,7 @@ describe("github_watch_pr", () => {
     app.gh(
       answer({
         checks: [{ name: "ci", conclusion: "SUCCESS" }],
-        comments: [wes, { id: "I1", login: "stranger", body: "body-stranger" }],
+        comments: [wen, { id: "I1", login: "stranger", body: "body-stranger" }],
       }),
     );
     await vi.advanceTimersByTimeAsync(POLL_MS);
@@ -1122,17 +1122,17 @@ describe("github_watch_pr", () => {
     const app = setup();
     await app.call({ url });
     app.gh(
-      answer({ comments: [{ id: "I1", login: "wes", body: "body-wes" }] }),
+      answer({ comments: [{ id: "I1", login: "wen", body: "body-wen" }] }),
     );
     await vi.advanceTimersByTimeAsync(POLL_MS);
     savePolicy("allow org:block");
     app.members(null);
     await vi.advanceTimersByTimeAsync(QUIET_MS + POLL_MS);
     expect(app.texts()).toHaveLength(0);
-    app.members(["wes"]);
+    app.members(["wen"]);
     await vi.advanceTimersByTimeAsync(POLL_MS + QUIET_MS + POLL_MS);
     expect(app.texts()).toHaveLength(1);
-    expect(app.texts()[0]).toContain("body-wes");
+    expect(app.texts()[0]).toContain("body-wen");
     app.dispose();
   });
 
@@ -1284,14 +1284,14 @@ describe("github_watch_pr", () => {
     for (const pull of urls) await app.call({ url: pull });
     app.members(null);
     app.gh(
-      answer({ comments: [{ id: "I1", login: "wes", body: "body-wes" }] }),
+      answer({ comments: [{ id: "I1", login: "wen", body: "body-wen" }] }),
     );
     await vi.advanceTimersByTimeAsync(4 * POLL_MS);
     expect(app.texts()).toHaveLength(0);
-    app.members(["wes"]);
+    app.members(["wen"]);
     await vi.advanceTimersByTimeAsync(POLL_MS + QUIET_MS + POLL_MS);
     expect(app.texts()).toHaveLength(3);
-    for (const text of app.texts()) expect(text).toContain("body-wes");
+    for (const text of app.texts()) expect(text).toContain("body-wen");
     app.dispose();
   });
 
@@ -1357,10 +1357,10 @@ describe("github_watch_pr", () => {
     savePolicy(`deny body:/^\\s*nit\\b/i
 allow author:/^COPILOT/
 allow org:block
-allow org:squareup author:/^ada_/`);
+allow org:example-org author:/^ada_/`);
     const app = setup();
     await app.call({ url });
-    app.members(["alice@block", "ada_x@squareup", "bob@squareup"]);
+    app.members(["alice@block", "ada_x@example-org", "bob@example-org"]);
     app.gh(
       answer({
         comments: [

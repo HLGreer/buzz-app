@@ -2141,7 +2141,7 @@ mod tests {
             &agent_at(origin, &key),
             &key,
             Some("Bearer agent.jwt.sig"),
-            "wes",
+            "wen",
             40,
         )
         .await
@@ -2153,7 +2153,7 @@ mod tests {
         assert!(request.contains("authorization: nostr "));
         assert!(request.contains("nostr-federated-identity: bearer agent.jwt.sig"));
         let body: Value = serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
-        assert_eq!(body, serde_json::json!({ "query": "wes", "limit": 40 }));
+        assert_eq!(body, serde_json::json!({ "query": "wen", "limit": 40 }));
     }
 
     #[tokio::test]
@@ -2161,7 +2161,7 @@ mod tests {
         let key = Secret::generate().unwrap();
         for status in ["404 Not Found", "405 Method Not Allowed"] {
             let (origin, served) = answer_once(status, "").await;
-            let found = search_profiles(&agent_at(origin, &key), &key, None, "wes", 40).await;
+            let found = search_profiles(&agent_at(origin, &key), &key, None, "wen", 40).await;
             assert_eq!(found, Ok(None), "{status}");
             served.await.unwrap();
         }
@@ -2170,7 +2170,7 @@ mod tests {
             r#"{"error":"profile search error"}"#,
         )
         .await;
-        let failed = search_profiles(&agent_at(origin, &key), &key, None, "wes", 40).await;
+        let failed = search_profiles(&agent_at(origin, &key), &key, None, "wen", 40).await;
         assert_eq!(
             failed,
             Err("The community refused the profile search: profile search error".into())

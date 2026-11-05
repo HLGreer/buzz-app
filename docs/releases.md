@@ -196,11 +196,10 @@ empty `BUZZ_BUILDERLAB_URL` instead, because FI builds reject the legacy origin.
 
 ### Signing
 
-Deploy [the signing infrastructure](https://github.com/squareup/tf-mobuild-workers/pull/1398)
-and set these repository Actions secrets:
+Set these repository Actions secrets:
 
-- `OSX_CODESIGN_ROLE`: ARN of `block-buzz-app-codesign-role`.
-- `CODESIGN_S3_BUCKET`: `block-buzz-app-artifacts-bucket-<environment>`.
+- `OSX_CODESIGN_ROLE`: ARN of the IAM role the signing action assumes.
+- `CODESIGN_S3_BUCKET`: the signing action's artifact bucket.
 - `TAURI_SIGNING_PRIVATE_KEY`: persistent Tauri updater private key (not the
   Apple Developer ID signing identity). Restrict access to release CI and back
   it up outside Actions; losing it prevents old updater-enabled builds from
