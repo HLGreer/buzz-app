@@ -2021,7 +2021,11 @@ async fn a_revision_fenced_sign_out_leaves_a_newer_session_and_its_grants() {
     }
     let newer = f.tokens.0.identity.snapshot();
     assert_ne!(newer.revision, rejected);
+    // With the retirement marker unwritable, the stale sign-out still never
+    // touches it: no retirement is left for recovery or a restart to act on.
+    f.grants.fail_pending(true);
     let snapshot = f.tokens.sign_out(Some(&rejected)).await.unwrap();
+    f.grants.fail_pending(false);
     assert!(snapshot.status == crate::federated_identity::Status::SignedIn);
     assert_eq!(snapshot.revision, newer.revision);
     assert!(!f.grants.pending(&f.tokens.retiring_key()).unwrap());

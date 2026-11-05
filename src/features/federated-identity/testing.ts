@@ -67,6 +67,8 @@ export function federatedFixture(
           status: "signed-out",
           revision: crypto.randomUUID(),
           email: null,
+          failure: null,
+          cleanup: false,
         });
       return state;
     }),

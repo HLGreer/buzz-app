@@ -2274,30 +2274,46 @@ it("Use a different account leaves a newer session signed in, and reports and re
   });
   expect(fi.service.snapshot().revision).toBe("newer");
   expect(screen.queryByRole("alert")).toBeNull();
-  // Native resolves a failed record removal as unavailable with cleanup.
+  // Native retires A at a new revision, then resolves a failed record
+  // removal there as unavailable with cleanup.
+  const failCleanup = (revision: string) =>
+    vi.mocked(fi.service.signOut).mockImplementationOnce(async () =>
+      fi.publish({
+        status: "unavailable",
+        revision,
+        failure: "storage-denied",
+        cleanup: true,
+      }),
+    );
+  const alert = "Couldn't sign out of that account. Try again.";
   fi.publish({ status: "signed-in", revision: credential.revision });
-  vi.mocked(fi.service.signOut).mockImplementationOnce(async () =>
-    fi.publish({
-      status: "unavailable",
-      failure: "storage-denied",
-      cleanup: true,
-    }),
-  );
+  failCleanup("retired");
   await reject();
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Couldn't sign out of that account. Try again.",
-  );
-  // A thrown failure is retryable the same way.
-  fi.publish({ status: "signed-in", cleanup: false });
+  expect(await screen.findByRole("alert")).toHaveTextContent(alert);
+  // A thrown retry stays retryable, still at native's revision.
   vi.mocked(fi.service.signOut).mockRejectedValueOnce(new Error("offline"));
   await user.click(screen.getByRole("button", { name: "Try again" }));
-  expect(await screen.findByRole("alert")).toBeVisible();
-  // A replacement before the retry is left signed in, and the retry ends.
-  fi.publish({ status: "signed-in", revision: "replacement" });
+  expect(await screen.findByRole("alert")).toHaveTextContent(alert);
+  expect(fi.service.signOut).toHaveBeenLastCalledWith({ revision: "retired" });
+  // Storage recovers: the retry, fenced to that revision, finishes cleanup.
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  await vi.waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  expect(fi.service.signOut).toHaveBeenLastCalledWith({ revision: "retired" });
+  expect(fi.service.snapshot()).toMatchObject({ status: "signed-out" });
+  // A replacement before the retry is refused natively and stays signed in.
+  fi.publish({
+    status: "signed-in",
+    revision: credential.revision,
+    cleanup: false,
+  });
+  failCleanup("retired-again");
+  await reject();
+  expect(await screen.findByRole("alert")).toHaveTextContent(alert);
+  fi.publish({ status: "signed-in", revision: "replacement", cleanup: false });
   await user.click(screen.getByRole("button", { name: "Try again" }));
   await vi.waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   expect(fi.service.signOut).toHaveBeenLastCalledWith({
-    revision: credential.revision,
+    revision: "retired-again",
   });
   expect(fi.service.snapshot().revision).toBe("replacement");
   expect(welcomeHeading()).toBeVisible();

@@ -139,6 +139,73 @@ describe("the NIP-FI sign-in", () => {
     await root.fiber.dispose();
   });
 
+  it.each([
+    ["continues as the renewal", "renewed"],
+    ["yields to a newer session", "newer"],
+    ["stops on Cancel", "cancel"],
+  ] as const)(
+    "after adopting a session and renewing it with delayed events, %s",
+    async (_, ending) => {
+      let emit!: (payload: unknown) => void;
+      vi.mocked(listen).mockImplementation(async (name, handler) => {
+        if (name === "federated-identity")
+          emit = (payload) => handler({ payload } as never);
+        return () => {};
+      });
+      const base = federatedFixture().service.snapshot();
+      const at = (revision: string) => ({
+        ...base,
+        status: "signed-in",
+        revision,
+      });
+      const requests: string[] = [];
+      let signIns = 0;
+      let renewed!: () => void;
+      const answered = new Promise<void>((resolve) => {
+        renewed = resolve;
+      });
+      vi.mocked(invoke).mockImplementation(async (command, args) => {
+        if (command === "plugin_catalog") return catalog(true);
+        if (command === "federated_identity_snapshot") return base;
+        if (command === "federated_identity_register") return undefined;
+        if (command === "federated_identity_cancel_sign_in") return undefined;
+        if (command === "federated_identity_sign_in") {
+          // Adoption answers before B's event; that event lands mid-renewal,
+          // and the renewal answers C before C's event.
+          if (++signIns === 1) return at("B");
+          emit(at("B"));
+          renewed();
+          return at("C");
+        }
+        if (command === "federated_identity_request") {
+          requests.push((args as { session: string }).session);
+          return { status: 200, headers: {}, body: JSON.stringify(me) };
+        }
+        throw new Error(`Unexpected ${command}`);
+      });
+      const root = new Context();
+      new FederatedIdentityService(root);
+      await vi.waitFor(() =>
+        expect(invoke).toHaveBeenCalledWith("federated_identity_snapshot"),
+      );
+      const abort = new AbortController();
+      const result = firstRunCredential(
+        abort.signal,
+        bundledFederatedIdentity(root),
+      );
+      await answered;
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(requests).toEqual([]);
+      if (ending === "renewed") emit(at("C"));
+      if (ending === "newer") emit(at("D"));
+      if (ending === "cancel") abort.abort();
+      if (ending === "renewed") expect((await result).revision).toBe("C");
+      else await expect(result).rejects.toThrow();
+      expect(requests).toEqual(ending === "renewed" ? ["C"] : []);
+      await root.fiber.dispose();
+    },
+  );
+
   it("signs in through the native session and reads its account", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(catalog(true));
     const fi = federatedFixture();

@@ -32,16 +32,25 @@ export type FirstRunIdentity = Pick<
  * is still the one first run signed in as. Native checks the revision as it
  * retires, so a newer sign-in (from Settings or another copy) stays signed
  * in. Rejects when the sign-out did not finish, including cleanup native
- * reports as `unavailable`.
+ * reports as `unavailable`, with the revision to retry at: retiring moves
+ * native's revision, so a retry fenced to the old one would be refused.
  */
+export class SignOutIncomplete extends Error {
+  constructor(readonly revision: string) {
+    super("Couldn't sign out of that account. Try again.");
+  }
+}
 export async function releaseFirstRunSession(
-  identity: Pick<FederatedIdentity, "signOut">,
+  identity: Pick<FederatedIdentity, "signOut" | "snapshot">,
   revision: string,
 ) {
-  const after = await identity.signOut({ revision });
+  const after = await identity.signOut({ revision }).catch(() => {
+    const now = identity.snapshot();
+    throw new SignOutIncomplete(now.cleanup ? now.revision : revision);
+  });
   if (after.status === "signed-in" && after.revision !== revision) return;
   if (after.status !== "signed-out" || after.cleanup)
-    throw new Error(recoveryMessage(after.failure ?? ""));
+    throw new SignOutIncomplete(after.revision);
 }
 
 /**
@@ -120,6 +129,8 @@ async function federatedCredential(
       signal.throwIfAborted();
     }
     let before = identity.snapshot();
+    // Pushed snapshots from before this sign-in answered; see the wait below.
+    const earlier = [before.revision];
     let session = await signIn(identity);
     signal.throwIfAborted();
     // After a failed restore, `signIn` restores again first and answers with
@@ -132,6 +143,7 @@ async function federatedCredential(
       !browsed
     ) {
       before = session;
+      earlier.push(session.revision);
       session = await signIn(identity);
       signal.throwIfAborted();
     }
@@ -143,9 +155,17 @@ async function federatedCredential(
     if (session.status !== "signed-in")
       throw new Error(recoveryMessage(session.failure ?? ""));
     // Requests are fenced to the pushed snapshot, which may still be the
-    // browser step's: wait for this session's own, unless something newer
-    // (a cancel, another sign-in) replaces it first.
-    while (identity.snapshot().status === "signing-in") {
+    // browser step's or, for a renewal that stays signed in, the session
+    // before it: wait for this session's own, unless something newer (a
+    // cancel, another sign-in) replaces it first.
+    const pending = () => {
+      const now = identity.snapshot();
+      return (
+        now.revision !== session.revision &&
+        (now.status === "signing-in" || earlier.includes(now.revision))
+      );
+    };
+    while (pending()) {
       await new Promise<void>((resolve) => {
         wake = resolve;
       });
@@ -241,9 +261,12 @@ export function createFirstRunLogin(
       try {
         await release(held);
         if (!attempt && !credential) publish({ status: "signed-out" });
-      } catch {
+      } catch (error) {
         if (attempt || credential) return;
-        releasing = held;
+        releasing =
+          error instanceof SignOutIncomplete
+            ? { ...held, revision: error.revision }
+            : held;
         publish({
           status: "signed-out",
           error: "Couldn't sign out of that account. Try again.",

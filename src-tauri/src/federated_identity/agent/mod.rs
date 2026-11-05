@@ -720,6 +720,16 @@ impl AgentTokens {
     /// in, its grants untouched.
     pub(crate) async fn sign_out(&self, expected: Option<&str>) -> Result<Snapshot, String> {
         let _wiping = self.0.wiping.lock().await;
+        // A stale target never records a retirement: sessions install while
+        // holding `wiping` (`preparing_session`), so none replaces it before
+        // the authoritative check in `begin_sign_out`. Unfenced sign-out
+        // takes no state lock here, keeping its order with local commits.
+        if let Some(expected) = expected {
+            let current = self.0.identity.snapshot();
+            if current.revision != expected {
+                return Ok(current);
+            }
+        }
         let (retired, at) = (self.0.retired.clone(), self.retiring_key());
         #[cfg(test)]
         let contended = lock(&self.0.contended).take();
