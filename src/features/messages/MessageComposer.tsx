@@ -1558,6 +1558,50 @@ function Composer({
     caret.current = next.text.length;
     setError(undefined);
   });
+  const startQueuedEdit = (id: string) => {
+    if (
+      !host ||
+      !permitted.current ||
+      editingDisabled ||
+      submission ||
+      !input.current
+    )
+      return;
+    if (editing.target) {
+      setError("Finish or cancel your current edit first.");
+      input.current.focus();
+      return;
+    }
+    try {
+      const queue = followUpQueue(host);
+      const entry = queue
+        .snapshot()
+        .find((entry) => entry.id === id && entry.channelId === channelId);
+      if (!entry?.message)
+        throw new Error("This queued message is no longer available to edit.");
+      const lease = queue.edit(id);
+      completion.invalidate();
+      beforeEdit.current = {
+        value: valueRef.current,
+        restore: input.current.checkpoint(),
+      };
+      const body = editing.startDraft({
+        id,
+        content: entry.text,
+        saveDraft: lease.save,
+        cancelDraft: lease.cancel,
+      });
+      const next = stageChatCards(mentionDraft(body), channels());
+      valueRef.current = next;
+      updateDraft(next);
+      input.current.reset(next);
+      setLinkEdit(null);
+      caret.current = next.text.length;
+      setError(undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
   useEffect(() => {
     if (!editScope) return;
     const start = (row: ChannelMessage) => startEdit(row);
@@ -2357,6 +2401,10 @@ function Composer({
     if (!permitted.current || voice.isCapturing()) return;
     if (editing.target) {
       if (editDisabled || editing.locked) return;
+      if ("saveDraft" in editing.target) {
+        editing.save(composerMarkdown(valueRef.current), undefined);
+        return;
+      }
       if (
         !valueRef.current.text.trim() &&
         !valueRef.current.chatCards?.length
@@ -3090,7 +3138,8 @@ function Composer({
         <QueuedFollowUps
           session={host}
           channelId={channelId}
-          disabled={disabled || !active}
+          disabled={disabled || !active || !!editing.target}
+          onEdit={startQueuedEdit}
           focusComposer={() => input.current?.focus()}
         />
       )}

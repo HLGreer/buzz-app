@@ -352,6 +352,10 @@ account and community. Saved text, recipients, uploaded attachments, references,
 and model choices survive a reload or restart; uploads still in progress are not
 queued yet.
 
+Use the pencil button to edit queued text in the message composer. Save changes
+or cancel to return to your previous draft; attachments and recipients stay with
+the queued message. The X button removes it, and the up-arrow sends it.
+
 After restart, saved messages stay paused. **Send** sends a selected row, and
 **Remove** discards an unsent row. **Resume** restarts supported interrupted turns
 and unpauses saved follow-ups in those chats, sending them in order as turns finish.
