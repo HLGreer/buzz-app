@@ -11,7 +11,9 @@ export function AgentResponsePreview({
   layout = "timeline",
   children,
   stackPrevious = false,
+  bylineHint,
 }: {
+  bylineHint?: ReactNode;
   stackPrevious?: boolean;
   name: string;
   picture?: string | undefined;
@@ -74,6 +76,7 @@ export function AgentResponsePreview({
                   />
                   {name}
                 </strong>
+                {bylineHint}
               </div>
             </div>
           )}

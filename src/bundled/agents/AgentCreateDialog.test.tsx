@@ -12,6 +12,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useEffect } from "react";
 import { CreateModelChoices } from "../../features/agents/CreateModelChoices";
@@ -187,6 +188,75 @@ const createButton = () => screen.getByRole("button", { name: "Create agent" });
 // The disabled action blocks ordinary attempts; direct submits retain a guard.
 const submitForm = (dialog: HTMLElement) =>
   fireEvent.submit(within(dialog).getByRole("form", { name: "New agent" }));
+const remoteEcho = {
+  ...echo,
+  title: "Builderlab",
+  remote: {},
+} as RegisteredAgentType;
+
+it("gates submission on the selected harness action, including configuration changes and sign-out during the introduction", async () => {
+  let access = (_ready: boolean) => {};
+  let configuration = (_ready: boolean) => {};
+  const protectedType: RegisteredAgentType = {
+    ...remoteEcho,
+    CreateConfiguration: ({ harnessControl, onReadyChange }) => {
+      useLayoutEffect(() => {
+        configuration = onReadyChange ?? (() => {});
+        onReadyChange?.(false);
+      }, [onReadyChange]);
+      return harnessControl;
+    },
+    CreateAction: ({
+      onReadyChange,
+    }: {
+      onReadyChange(ready: boolean): void;
+    }) => {
+      useLayoutEffect(() => {
+        access = onReadyChange;
+        onReadyChange(false);
+      }, [onReadyChange]);
+      return (
+        <button type="button" onClick={() => onReadyChange(true)}>
+          Sign in
+        </button>
+      );
+    },
+  };
+  const { agents, dialog, user } = setup([protectedType, notes]);
+  await user.type(within(dialog).getByLabelText("Name"), "Nova");
+  expect(createButton()).toBeDisabled();
+  fireEvent.submit(within(dialog).getByRole("form", { name: "New agent" }));
+  expect(agents.create).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("dialog", { name: "Meet your remote agent" }),
+  ).not.toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Sign in" }));
+  expect(createButton()).toBeDisabled();
+  act(() => configuration(true));
+  expect(createButton()).toBeEnabled();
+  await user.click(createButton());
+  const intro = await screen.findByRole("dialog", {
+    name: "Meet your remote agent",
+  });
+  const proceed = within(intro).getByRole("button", { name: "Let’s go" });
+  act(() => configuration(false));
+  expect(proceed).toBeDisabled();
+  act(() => configuration(true));
+  expect(proceed).toBeEnabled();
+  act(() => access(false));
+  expect(proceed).toBeDisabled();
+  await user.click(proceed);
+  expect(agents.create).not.toHaveBeenCalled();
+  await user.click(within(intro).getByRole("button", { name: "Back" }));
+  expect(createButton()).toBeDisabled();
+  const harness = within(dialog).getByRole("combobox", { name: "Harness" });
+  await user.click(harness);
+  await user.click(await screen.findByRole("option", { name: "Notes" }));
+  expect(createButton()).toBeEnabled();
+  await user.click(within(dialog).getByRole("combobox", { name: "Harness" }));
+  await user.click(await screen.findByRole("option", { name: "Builderlab" }));
+  expect(createButton()).toBeDisabled();
+});
 
 it("creates with the name, a pack picture and the config from the type's view", async () => {
   const { agents, onCreated, dialog, user } = setup([echo]);
@@ -772,6 +842,173 @@ it("uses displayed configuration readiness without interpreting or editing raw c
       config: { modelId: "", reasoningEffort: "" },
     }),
   );
+});
+
+it("groups remote and local harnesses without an inline execution hint", async () => {
+  const { dialog, user } = setup([remoteEcho, notes]);
+  const harness = within(dialog).getByRole("combobox", { name: "Harness" });
+  expect(harness).toHaveTextContent(/^Builderlab$/);
+  expect(within(dialog).queryByRole("note")).not.toBeInTheDocument();
+  await user.click(harness);
+  const remoteGroup = await screen.findByRole("group", { name: "Remote" });
+  const localGroup = screen.getByRole("group", { name: "Local" });
+  expect(
+    within(remoteGroup).getByRole("option", { name: "Builderlab" }),
+  ).toBeInTheDocument();
+  await user.click(within(localGroup).getByRole("option", { name: "Notes" }));
+  expect(harness).toHaveTextContent(/^Notes$/);
+  expect(within(dialog).queryByRole("note")).not.toBeInTheDocument();
+});
+
+it("introduces remote creation with the chosen avatar and preserves the draft on Back and Escape", async () => {
+  motion.reduced = true;
+  let finish = (_agent: Agent) => {};
+  const { agents, onCreated, onClose, dialog, user } = setup(
+    [remoteEcho],
+    () =>
+      new Promise<Agent>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await user.click(createButton());
+  expect(
+    screen.queryByRole("dialog", { name: "Meet your remote agent" }),
+  ).not.toBeInTheDocument();
+  expect(agents.create).not.toHaveBeenCalled();
+  await user.type(within(dialog).getByLabelText("Name"), "Nova");
+  await user.type(within(dialog).getByLabelText("Reply"), "Hello");
+  const avatars = within(dialog).getByRole("group", { name: "Agent avatars" });
+  const avatar = agentAvatars.find((item) =>
+    within(avatars).queryByRole("button", { name: item.label }),
+  );
+  if (!avatar) throw new Error("Avatar dock is empty");
+  await user.click(within(avatars).getByRole("button", { name: avatar.label }));
+  await user.click(createButton());
+  const intro = await screen.findByRole("dialog", {
+    name: "Meet your remote agent",
+  });
+  expect(intro).toBe(dialog);
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(
+    within(intro).queryByRole("textbox", { name: "Name" }),
+  ).not.toBeInTheDocument();
+  expect(intro).toHaveTextContent("Hi, I’m Nova.");
+  expect(intro).toHaveTextContent("I work on another computer.");
+  expect(intro).toHaveTextContent(
+    "My availability and file access depend on that computer’s setup.",
+  );
+  expect(intro).not.toHaveTextContent("always ready for you");
+  expect(intro).not.toHaveTextContent("even when your desktop is off");
+  expect(intro).not.toHaveTextContent("won’t be able to open files");
+  expect(
+    within(intro)
+      .getByRole("img", { name: "Nova’s avatar" })
+      .querySelector("img"),
+  ).toHaveAttribute("src", avatar.preview);
+  expect(agents.create).not.toHaveBeenCalled();
+  await user.click(within(intro).getByRole("button", { name: "Back" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "Meet your remote agent" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(within(dialog).getByLabelText("Name")).toHaveValue("Nova");
+  expect(within(dialog).getByLabelText("Reply")).toHaveValue("Hello");
+  await waitFor(() => expect(createButton()).toHaveFocus());
+  await user.click(createButton());
+  await screen.findByRole("dialog", { name: "Meet your remote agent" });
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "Meet your remote agent" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(dialog).toBeVisible();
+  expect(onClose).not.toHaveBeenCalled();
+  await user.click(createButton());
+  const again = await screen.findByRole("dialog", {
+    name: "Meet your remote agent",
+  });
+  await user.click(within(again).getByRole("button", { name: "Let’s go" }));
+  await waitFor(() =>
+    expect(agents.create).toHaveBeenCalledExactlyOnceWith({
+      type: remoteEcho.key,
+      name: "Nova",
+      picture: avatar.url,
+      config: { reply: "Hello" },
+    }),
+  );
+  try {
+    expect(screen.getByRole("dialog", { name: "Meet your remote agent" })).toBe(
+      again,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Create agent" }),
+    ).not.toBeInTheDocument();
+    const proceed = within(again).getByRole("button", { name: "Let’s go" });
+    expect(proceed).toHaveAttribute("aria-busy", "true");
+    expect(proceed).toHaveAttribute("aria-disabled", "true");
+    expect(within(again).getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(
+      within(again).getByRole("button", { name: "Back to agent settings" }),
+    ).toBeDisabled();
+    await user.keyboard("{Escape}");
+    await user.click(proceed);
+    expect(screen.getByRole("dialog", { name: "Meet your remote agent" })).toBe(
+      again,
+    );
+    expect(agents.create).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => finish(made));
+  }
+  expect(onCreated).toHaveBeenCalledExactlyOnceWith(made);
+});
+
+it("previews an emoji without uploading until Continue and retries a failed remote create within the same introduction", async () => {
+  Element.prototype.scrollIntoView = vi.fn();
+  const file = new File(["emoji"], "avatar.png", { type: "image/png" });
+  vi.mocked(emojiAvatar).mockResolvedValue(file);
+  vi.mocked(uploadAvatar).mockResolvedValue("https://images.example/emoji.png");
+  let attempts = 0;
+  const { agents, onCreated, dialog, user } = setup(
+    [remoteEcho],
+    async () => {
+      if (++attempts === 1) throw new Error("Try again");
+      return made;
+    },
+    "https://a.example",
+  );
+  await user.type(within(dialog).getByLabelText("Name"), "Nova");
+  await user.click(within(dialog).getByRole("tab", { name: "Emoji" }));
+  await user.click(createButton());
+  const intro = await screen.findByRole("dialog", {
+    name: "Meet your remote agent",
+  });
+  expect(
+    within(intro)
+      .getByRole("img", { name: "Nova’s avatar" })
+      .querySelector("canvas"),
+  ).not.toBeNull();
+  expect(emojiAvatar).not.toHaveBeenCalled();
+  expect(uploadAvatar).not.toHaveBeenCalled();
+  await user.click(within(intro).getByRole("button", { name: "Let’s go" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "Try again",
+  );
+  expect(agents.create).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("dialog", { name: "Meet your remote agent" })).toBe(
+    intro,
+  );
+  expect(within(intro).getByRole("alert")).toBeVisible();
+  const proceed = within(intro).getByRole("button", { name: "Let’s go" });
+  expect(proceed).toBeEnabled();
+  expect(proceed).not.toHaveAttribute("aria-busy", "true");
+  expect(within(intro).getByRole("button", { name: "Back" })).toBeEnabled();
+  await user.click(proceed);
+  await waitFor(() => expect(onCreated).toHaveBeenCalledExactlyOnceWith(made));
+  expect(agents.create).toHaveBeenCalledTimes(2);
+  expect(within(intro).queryByRole("alert")).not.toBeInTheDocument();
 });
 
 it("switches harness, starting over on the new type's defaults", async () => {

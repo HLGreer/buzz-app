@@ -973,22 +973,30 @@ it.each([
       const createDialog = screen.getByRole("dialog", { name: "Create agent" });
       expect(
         within(createDialog).getByRole("combobox", { name: "Harness" }),
-      ).toHaveTextContent("Builderlab (hosted)");
+      ).toHaveTextContent(/^Builderlab$/);
       expect(
         within(createDialog).getByRole("textbox", {
           name: "Instructions Optional",
         }),
       ).toBeVisible();
       const name = within(createDialog).getByRole("textbox", { name: "Name" });
-      const create = within(createDialog).getByRole("button", {
+      let create = within(createDialog).getByRole("button", {
         name: "Create agent",
       });
       expect(create).toBeDisabled();
       await user.type(name, "Browser");
       expect(create).toBeDisabled();
+      expect(
+        within(createDialog).getByRole("button", {
+          name: "Model: Choose a model",
+        }),
+      ).toBeDisabled();
+      expect(
+        within(createDialog).getByRole("combobox", { name: "Thinking" }),
+      ).toBeDisabled();
       const signIn = () =>
         within(createDialog).getByRole("button", {
-          name: "Sign in with Builderlab",
+          name: "Sign in to Builderlab",
         });
       if (flow === "creation sign-in recovery") {
         const beforeCreateLogin = loginWaits().length;
@@ -1006,18 +1014,30 @@ it.each([
           ).toHaveTextContent("Browser could not open.");
           expect(create).toBeDisabled();
           expect(name).toHaveValue("Browser");
-          // The wait itself can be abandoned from the dialog.
+          // The inline action shows progress and cannot start another attempt.
           loginCallback = deferred();
           await user.click(signIn());
-          await user.click(
-            await within(createDialog).findByRole("button", {
-              name: "Cancel sign-in",
-            }),
+          const progress = await within(createDialog).findByRole("button", {
+            name: "Sign in to Builderlab",
+          });
+          expect(progress).toHaveAttribute("aria-busy", "true");
+          expect(
+            progress.querySelector(".buzz-button-spinner"),
+          ).toBeInTheDocument();
+          expect(create).toBeDisabled();
+          await waitFor(() =>
+            expect(loginWaits()).toHaveLength(beforeCreateLogin + 2),
           );
-          expect(within(createDialog).getByRole("status")).toHaveTextContent(
-            "Sign in to choose a model and thinking level.",
-          );
-          expect(within(createDialog).queryByRole("alert")).toBeNull();
+          await user.click(progress);
+          expect(loginWaits()).toHaveLength(beforeCreateLogin + 2);
+          // Browser cancellation still returns to a retryable form.
+          loginCallback.reject(new Error("Sign-in canceled."));
+          await within(createDialog).findByRole("button", {
+            name: "Sign in to Builderlab",
+          });
+          expect(
+            await within(createDialog).findByRole("alert"),
+          ).toHaveTextContent("Sign-in canceled.");
           expect(create).toBeDisabled();
           expect(
             within(createDialog).queryByRole("button", {
@@ -1097,6 +1117,13 @@ it.each([
       instructionsSave = deferred();
       try {
         await user.click(create);
+        const introduction = await screen.findByRole("dialog", {
+          name: "Meet your remote agent",
+        });
+        expect(introduction).toHaveTextContent("Builderlab");
+        await user.click(
+          within(introduction).getByRole("button", { name: "Let’s go" }),
+        );
         await waitFor(() =>
           expect(
             requestsTo("update-agent").filter(
@@ -1105,12 +1132,26 @@ it.each([
             ),
           ).toHaveLength(1),
         );
-        expect(create).toBeDisabled();
+        expect(
+          screen.getByRole("dialog", { name: "Meet your remote agent" }),
+        ).toBe(introduction);
+        expect(
+          within(introduction).getByRole("button", { name: "Let’s go" }),
+        ).toHaveAttribute("aria-busy", "true");
+        expect(
+          within(introduction).getByRole("button", { name: "Back" }),
+        ).toBeDisabled();
         for (const control of controls) expect(control).toBeDisabled();
         instructionsSave.reject(new Error("offline"));
         expect(
           await within(createDialog).findByRole("alert"),
         ).toHaveTextContent("Could not reach Builderlab");
+        await user.click(
+          within(introduction).getByRole("button", { name: "Back" }),
+        );
+        create = within(createDialog).getByRole("button", {
+          name: "Create agent",
+        });
         for (const control of controls) expect(control).toBeEnabled();
         expect(create).toBeEnabled();
         expect(agents.find(browserKey)?.unfinished).toBe(true);
@@ -1127,6 +1168,7 @@ it.each([
         instructionsSave = undefined;
       }
       await user.click(create);
+      await user.click(await screen.findByRole("button", { name: "Let’s go" }));
       await waitFor(() =>
         expect(agents.find(browserKey)).toMatchObject({
           name: "Browser",

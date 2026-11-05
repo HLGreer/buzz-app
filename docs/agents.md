@@ -448,6 +448,15 @@ Buzz keeps no separate Goose defaults store. Readiness requires a working
 fields remain overrides. Types without a provider contribution have no Harness
 defaults row; a failed contribution retains the unavailable fallback.
 
+For creation-specific access, `CreateAction` contributes a compact action beside
+Harness and reports readiness through `onReadyChange`. The host blocks submit
+until the selected action reports ready, including in the remote introduction.
+Builderlab uses it for Sign in with a pending loading spinner, while its creation
+fields keep Model and Thinking visible but disabled when signed out. After three
+seconds, browser sign-in shows guidance and Cancel sign-in, matching the agent
+pane. Account verification remains non-cancellable. Sign-in errors remain
+with the fields and drafts survive cancellation.
+
 Workspace, instructions and session scope are always per-agent. Claude and Codex
 model/thinking choices may instead be blank, which means inherited rather than
 rewritten. Their effective order is explicit agent override, saved device-wide

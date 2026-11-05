@@ -25,6 +25,8 @@ import {
   useAgentsSnapshot,
 } from "../agents/react";
 import type { MentionModelChoice } from "../agents/react";
+import { executionDetails } from "../agents/execution-location";
+import type { ComposerSession } from "./composer-session";
 import type { SessionPlace, SessionControlAction } from "../agents/service";
 import type { MentionPicks, RunPick } from "../relay/messages";
 import {
@@ -36,6 +38,7 @@ import {
   CircleNotchIcon,
   CircleDottedIcon,
   GaugeIcon,
+  CloudIcon,
 } from "../../shared/design-system/icons/index";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -55,9 +58,12 @@ export type DraftPicks = Readonly<
   Record<string, RunPick & Readonly<{ type?: string }>>
 >;
 
+const noSubscribe = () => () => {};
+
 /** Model and effort for the next run of each mentioned agent of the viewer's
  * that offers a choice. Session controls act immediately on this conversation. */
 export function ComposerModels({
+  agentChoices,
   pubkeys,
   profiles,
   media,
@@ -71,6 +77,7 @@ export function ComposerModels({
   startsThread,
   place,
 }: {
+  agentChoices?: ComposerSession["agentChoices"];
   pubkeys: readonly string[];
   profiles: ProfileQueries;
   media: Parameters<typeof avatarMedia>[1];
@@ -92,6 +99,14 @@ export function ComposerModels({
   const [open, setOpen] = useState(false);
   const [retry, setRetry] = useState(0);
   const mentioned = useMentionModels(pubkeys, retry);
+  const inventory = useSyncExternalStore(
+    agentChoices?.subscribe ?? noSubscribe,
+    () => agentChoices?.snapshot(),
+  );
+  const remote =
+    inventory?.identities.filter(
+      (agent) => pubkeys.includes(agent.pubkey) && agent.execution === "remote",
+    ) ?? [];
   const choices = useMemo<readonly MentionModelChoice[]>(
     () =>
       mentioned.flatMap((choice) => {
@@ -237,7 +252,8 @@ export function ComposerModels({
   const canReset =
     resettable &&
     pubkeys.some((pubkey) => value[pubkey]?.model || value[pubkey]?.effort);
-  if (!choices.length && !inventoryFailed && !canReset) return null;
+  if (!choices.length && !remote.length && !inventoryFailed && !canReset)
+    return null;
   const picked = choices.flatMap((choice) => {
     if (choice.loading) return [];
     const { model, effort } = value[choice.pubkey] ?? {};
@@ -264,11 +280,16 @@ export function ComposerModels({
         : rest,
     );
   };
-  const label = choices.some((choice) => choice.session)
+  const controlsLabel = choices.some((choice) => choice.session)
     ? `Model, effort, and session controls${resettable ? " for this chat" : ""}`
     : resettable
       ? "Model and effort for this chat"
       : "Model and effort for the next run";
+  const label = remote.length
+    ? choices.length || inventoryFailed || canReset
+      ? "Agent controls and remote workspace"
+      : "Remote workspace"
+    : controlsLabel;
   const target = resettable ? "this chat" : "next run";
   return (
     <Popover.Root open={open && !disabled} onOpenChange={setOpen}>
@@ -287,7 +308,13 @@ export function ComposerModels({
                 ? `${label}. ${target}: ${picked.join(", ")}`
                 : label
             }
-            icon={<GaugeIcon size={18} aria-hidden="true" />}
+            icon={
+              remote.length ? (
+                <CloudIcon size={18} aria-hidden="true" />
+              ) : (
+                <GaugeIcon size={18} aria-hidden="true" />
+              )
+            }
           />
         }
       />
@@ -304,8 +331,31 @@ export function ComposerModels({
           <Popover.Popup
             className={styles.popup}
             aria-label={label}
-            initialFocus={thumb}
+            initialFocus={choices.length ? thumb : undefined}
           >
+            {remote.map((agent) => {
+              const detail = executionDetails("remote", agent.runtime);
+              return (
+                <div
+                  key={agent.pubkey}
+                  className={`${styles.remote} floating-surface`}
+                >
+                  <div className={styles.remoteHeading}>
+                    <CloudIcon size={16} aria-hidden="true" />
+                    <h2 className="m-0 text-body-sm">
+                      {pubkeys.length > 1 && `${agent.name} · `}
+                      {agent.runtime === "block.builderlab/builderlab"
+                        ? "Runs on a Builderlab machine"
+                        : "Runs remotely"}
+                    </h2>
+                  </div>
+                  <p className="m-0 text-body-sm text-secondary">
+                    This agent works on another computer.
+                    {detail.description && ` ${detail.description}`}
+                  </p>
+                </div>
+              );
+            })}
             {inventoryFailed && (
               <div className={`${styles.agent} floating-surface`}>
                 <PanelHeader

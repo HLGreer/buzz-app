@@ -4020,6 +4020,110 @@ it("blocks plain-text DM sends during compaction even after removing the mention
   expect(h.messages.send).toHaveBeenCalledWith("channel", "plain text", [], []);
 });
 
+it.each([
+  ["block.builderlab/builderlab", "Runs on a Builderlab machine"],
+  ["other/remote", "Runs remotely"],
+  ["codex-remote", "Runs remotely"],
+])(
+  "explains %s behind the remote workspace cloud without model controls",
+  async (runtime, title) => {
+    const viewer = localAgent.owner;
+    const control = localAgentsFixture();
+    control.set(
+      runtime === "codex-remote"
+        ? { agents: [{ ...localAgent, ...first, execution: "remote" }] }
+        : { hosted: [{ ...localAgent, ...first, runtime }] },
+    );
+    const h = mount(
+      { scope: `https://relay.example.test:${viewer}` },
+      control,
+      viewer,
+    );
+    act(() => h.commands().insertMention(first));
+    const trigger = screen.getByRole("button", { name: "Remote workspace" });
+    expect(trigger.querySelector(".tabler-icon-cloud")).not.toBeNull();
+    expect(screen.queryByText(title)).toBeNull();
+    const draft = h.input().value;
+    await h.user.click(trigger);
+    const popup = await screen.findByRole("dialog", {
+      name: "Remote workspace",
+    });
+    const heading = within(popup).getByRole("heading", {
+      name: title,
+    });
+    expect(heading).toBeVisible();
+    expect(heading.querySelector("svg")).toBeNull();
+    expect(popup.querySelector("p")).toHaveTextContent(
+      "This agent works on another computer.",
+    );
+    if (runtime === "block.builderlab/builderlab") {
+      expect(popup.querySelector(".tabler-icon-cloud")).not.toBeNull();
+      expect(popup).toHaveTextContent(
+        "Keeps working while this computer is off",
+      );
+      expect(popup).toHaveTextContent("It can’t open files on this computer.");
+    } else {
+      expect(
+        within(popup).queryByText("Builderlab", { exact: true }),
+      ).toBeNull();
+      expect(popup).not.toHaveTextContent("phone");
+      expect(popup).not.toHaveTextContent("can’t open files");
+    }
+    expect(within(popup).queryByRole("slider")).toBeNull();
+    await h.user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+    expect(h.input()).toHaveValue(draft);
+    expect(h.commands().recipients).toEqual([first]);
+    expect(h.messages.send).not.toHaveBeenCalled();
+    act(() => control.set({ hosted: [], agents: [] }));
+    expect(
+      screen.queryByRole("button", { name: "Remote workspace" }),
+    ).toBeNull();
+  },
+);
+
+it("keeps local model and session controls beside remote workspace information", async () => {
+  const viewer = localAgent.owner;
+  const control = localAgentsFixture();
+  control.set({
+    hosted: [
+      {
+        ...localAgent,
+        ...first,
+        name: "Remote agent",
+        runtime: "block.builderlab/builderlab",
+      },
+    ],
+  });
+  const agents = sessionAgents("channel", undefined, [second.pubkey]);
+  const h = mount(
+    { scope: `https://relay.example.test:${viewer}` },
+    control,
+    viewer,
+    agents,
+  );
+  act(() => {
+    h.commands().insertMention(first);
+    h.commands().insertMention(second);
+  });
+  await h.user.click(
+    await screen.findByRole("button", {
+      name: "Agent controls and remote workspace",
+    }),
+  );
+  const popup = await screen.findByRole("dialog", {
+    name: "Agent controls and remote workspace",
+  });
+  expect(popup).toHaveTextContent(
+    "Remote agent · Runs on a Builderlab machine",
+  );
+  expect(popup).toHaveTextContent("This agent works on another computer.");
+  expect(
+    await within(popup).findByRole("button", { name: "Compact session" }),
+  ).toBeVisible();
+  expect(agents.session).not.toHaveBeenCalled();
+});
+
 it("offers a one-to-one DM's agent its model and effort without a mention", async () => {
   const agents = sessionAgents("channel", [
     {

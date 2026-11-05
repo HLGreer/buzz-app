@@ -786,6 +786,12 @@ export type AgentType<Config = unknown> = {
       onReadyChange?: (ready: boolean) => void;
     }
   >;
+  /** Compact provider-owned action beside Harness. Until it reports ready,
+   * the creation host disables submission; sign-in stays with the provider. */
+  CreateAction?: ComponentType<{
+    disabled: boolean;
+    onReadyChange(ready: boolean): void;
+  }>;
   /** Provider-owned account notice, pinned across the agent's tabs.
    * Return null when no account notice is needed. The active settings view may
    * replace this slot through the AgentSaveFooter context's setPanelNotice(content),
@@ -2834,6 +2840,7 @@ export class AgentsService extends Service implements Agents {
     | {
         identities: readonly AgentIdentity[];
         state: Pick<AgentsSnapshot, "status" | "error">;
+        remote: ReadonlySet<AgentKey>;
         hosted: readonly Agent[];
         value: LocalAgentsSnapshot;
       }
@@ -2845,9 +2852,18 @@ export class AgentsService extends Service implements Agents {
     const hosted = state.agents.filter(
       (agent) => agent.place === "hosted" && !agent.unfinished,
     );
+    const remote = new Set(
+      identities
+        .filter(
+          (identity) => !identity.deleted && this.executions.read(identity.key),
+        )
+        .map((identity) => identity.key),
+    );
     const cached = this.localCache;
     if (
       cached?.identities === identities &&
+      cached.remote.size === remote.size &&
+      [...remote].every((key) => cached.remote.has(key)) &&
       cached.hosted.length === hosted.length &&
       hosted.every((agent, index) => agent === cached.hosted[index]) &&
       cached.state.status === state.status &&
@@ -2859,12 +2875,13 @@ export class AgentsService extends Service implements Agents {
       agents: Object.freeze(
         identities
           .filter((identity) => !identity.deleted)
-          .map(({ pubkey, name, relay, owner, picture }) =>
+          .map(({ key, pubkey, name, relay, owner, picture }) =>
             Object.freeze({
               pubkey,
               name,
               relayUrl: relay,
               owner,
+              ...(remote.has(key) ? { execution: "remote" as const } : {}),
               ...(picture ? { picture } : {}),
             }),
           ),
@@ -2872,12 +2889,13 @@ export class AgentsService extends Service implements Agents {
       ...(hosted.length
         ? {
             hosted: Object.freeze(
-              hosted.map(({ pubkey, name, relay, owner, picture }) =>
+              hosted.map(({ pubkey, name, relay, owner, picture, type }) =>
                 Object.freeze({
                   pubkey,
                   name,
                   relayUrl: relay,
                   owner,
+                  runtime: type,
                   ...(picture ? { picture } : {}),
                 }),
               ),
@@ -2886,7 +2904,7 @@ export class AgentsService extends Service implements Agents {
         : {}),
       ...(state.error ? { error: state.error } : {}),
     });
-    this.localCache = { identities, state, hosted, value };
+    this.localCache = { identities, state, remote, hosted, value };
     return value;
   };
 

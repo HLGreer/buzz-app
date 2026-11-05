@@ -383,6 +383,36 @@ available rather than silently discarding it.
   the model clears the thinking choice. Instructions are optional. **Create agent**
   stays disabled until its name and required choices are complete; Builderlab
   also waits for sign-in and its model catalog.
+- Desktop's **Harness** menu groups agent types under **Remote** and **Local**.
+  Creating a remote agent on desktop opens an introduction with its chosen name
+  and avatar, explaining its online workspace and file access (Builderlab
+  includes its name and logo). The text streams in, or appears immediately with reduced motion;
+  choose **Let’s go** to create it, or **Back** to keep editing. The introduction
+  stays visible while creation runs; if creation fails, retry there or go Back
+  to edit the retained draft.
+  When signed out of Builderlab, use **Sign in** beside Harness first.
+  Model, Thinking and Create agent stay disabled until sign-in completes.
+  Sign in shows a loading spinner, then browser guidance and **Cancel sign-in**
+  after three seconds. Account verification keeps the spinner until it finishes.
+  Builderlab agents work from your phone even when your desktop is off, and
+  cannot open files on your computer. Their Settings hint appears only while
+  signed in, beside a cloud. Local agents have no execution hint.
+  Cards and pane headings omit location captions. Both @ menus identify known
+  remote agents with **Remote**, alongside membership details. Local rows have
+  no location caption. The Harness menu keeps the Remote and Local group headings.
+  Owners also see **Remote** beside their agents’ names in messages and typing or
+  working previews when the local inventory confirms remote execution. Hover or
+  focus it for where the agent runs. A cloud precedes a remote agent’s current
+  step and pulses while working, staying still with reduced motion.
+  When a remote agent has no current step details, the activity popover shows
+  where it runs; received tool details take precedence.
+  Addressing a known remote agent also shows a cloud beside Send. Open it for
+  where that agent runs and what that means for work and file access. Builderlab
+  agents work on another computer, keep working while this computer is off,
+  and cannot open files on this computer. Other remote runtimes show only their
+  confirmed location. Available model and session controls stay in that popover.
+  Activity keeps its transcript and feed guidance without a separate workspace
+  note.
 - An agent's name and picture identify it. Instructions shape its response
   style, tasks, initiative, and boundaries. They do not add tools, credentials,
   or permissions. Saving instructions affects future work, not past messages.

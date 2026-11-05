@@ -25,6 +25,23 @@
   min-width: 0;
   padding: 0;
 }
+.remote {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.remoteHeading {
+  display: contents;
+}
+.remoteHeading > svg {
+  align-self: center;
+}
+.remote > p {
+  grid-column: 2;
+}
 .model {
   display: grid;
   min-width: 0;

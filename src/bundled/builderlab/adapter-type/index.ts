@@ -2,7 +2,12 @@ import { BuilderlabLogoIcon } from "../../../shared/design-system/icons";
 import { createActivityTab } from "./Activity";
 import { createSettingsTab } from "./Instructions";
 import { createProfileActions, createSignInFooter } from "./SignInFooter";
-import { creationConfig, createCreationFields, EMPTY_CREATION } from "./Create";
+import {
+  creationConfig,
+  createCreationAction,
+  createCreationFields,
+  EMPTY_CREATION,
+} from "./Create";
 import type { AgentType } from "../../../features/agents/service";
 import type { RelayData } from "../../../features/relay/service";
 import type { AgentClient } from "../agents/client";
@@ -102,6 +107,7 @@ export function builderlabType(
     description: "Sign in to Builderlab when creating an agent.",
     defaults: () => ({ config: { ...EMPTY_CREATION } }),
     ...createCreationFields(client, session),
+    CreateAction: createCreationAction(session),
     PanelFooter: createSignInFooter(session),
     ProfileActions: createProfileActions(session),
     tabs: [
