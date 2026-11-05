@@ -1780,6 +1780,39 @@ it.each([
   },
 );
 
+it("a build with no Builderlab sign-in sends a found community to Enter your private key, and Back returns to the landing with the address kept", async () => {
+  const relay = landingRelay();
+  const identity = createIdentity();
+  const user = userEvent.setup();
+  render(
+    <Welcome
+      identity={identity}
+      communities={noJoin}
+      invites={invites}
+      servers={async () => []}
+    >
+      <p>Signed in</p>
+    </Welcome>,
+  );
+  await screen.findByRole("button", { name: "Other options" });
+  expect(screen.queryByRole("button", { name: SIGN_IN })).toBeNull();
+  await user.type(urlField(), "relay.example.com:8443{Enter}");
+  await act(async () => relay.info.resolve());
+  expect(
+    await screen.findByRole("heading", { name: "Enter your private key" }),
+  ).toBeVisible();
+  // Back is the landing: there is no connect choice whose Builderlab sign-in
+  // this build could run.
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(welcomeHeading()).toBeVisible();
+  expect(screen.queryByRole("heading", { name: /^Connect to / })).toBeNull();
+  expect(screen.queryByRole("button", { name: SIGN_IN })).toBeNull();
+  expect(urlField()).toHaveValue("relay.example.com:8443");
+  expect(relay.relayCalls).toEqual(relay.lookup);
+  expect(identity.snapshot().status).toBe("missing");
+  identity.dispose();
+});
+
 it("canceling or failing sign-in after a landing URL returns to the landing with the address kept and no second lookup", async () => {
   const relay = landingRelay("https://relay.example.com");
   relay.info.resolve();

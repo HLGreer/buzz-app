@@ -717,7 +717,10 @@ export function Welcome({
                     })
                 : undefined
             }
-            onBack={() =>
+            onBack={() => {
+              // Without a Builderlab sign-in, the found community led straight
+              // here, so there is no connect choice to return to.
+              if (!current && !connect) return backToLanding();
               back(
                 !current
                   ? "connect-choice"
@@ -725,8 +728,8 @@ export function Welcome({
                     ? "welcome-back"
                     : "key-choice",
                 "import",
-              )
-            }
+              );
+            }}
             onImport={async (nsec) => {
               await importKey(identity, nsec);
               if (!current) void setup.start([]);

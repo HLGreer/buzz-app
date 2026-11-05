@@ -70,7 +70,8 @@ app opens, the key's backup choice is
 [filled in like any missing one](#automatic-backup-consent-hooks)); **Back**
 returns to the welcome screen with the address kept. A build without a sign-in
 server skips that page: with no Builderlab sign-in to offer, every found
-community opens **Enter your private key**.
+community opens **Enter your private key**, whose **Back** returns to the
+welcome screen with the address kept.
 
 Success continues to **Getting ready**, with an animated bee. Detailed operation
 status remains available to screen readers without a visible second line. It first runs **Checking your account**, a real read of the
