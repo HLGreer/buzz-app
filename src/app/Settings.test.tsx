@@ -1288,6 +1288,7 @@ function pluginSectionsFixture(
   const plugins = {
     subscribe: () => () => {},
     snapshot: () => snapshot,
+    requests: noRequests,
     change: vi.fn(),
     reload: vi.fn(),
     dismissError: vi.fn(),
@@ -1343,6 +1344,7 @@ it("links a plugin's details to the Settings sections it adds", async () => {
     retainPresentation: () => () => {},
     subscribe: () => () => {},
     snapshot: () => noCommunityState,
+    relay,
   } as unknown as Parameters<typeof Settings>[0]["communities"];
 
   const { rerender } = render(view("plugins"));
