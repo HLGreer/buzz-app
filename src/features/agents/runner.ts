@@ -35,6 +35,7 @@ import { EFFORT_TAG, MODEL_TAG } from "../relay/messages";
 import type { LiveBatch } from "../relay/incoming";
 import { CHANNEL_KINDS, LIVE_REPLAY_LIMIT } from "../relay/live";
 import type { RelaySession } from "../relay/session";
+import type { InboxItem } from "../relay/inbox";
 import type { ChannelSummary } from "../relay/contracts";
 import {
   addressedTo,
@@ -483,6 +484,8 @@ export type RunnerHost = {
   handoff(agent: Agent, handoff: AgentHandoff): void;
   /** The owner's channel templates as the agent's handle offers them. */
   templates(agent: Agent): ReturnType<AgentHandle["templates"]>;
+  /** The owner's Inbox when this exact agent remains its authorized Bestie. */
+  inbox?(agent: Agent): Promise<Readonly<{ items: readonly InboxItem[] }>>;
   /** The owner's thread tabs as the agent's handle offers them. */
   tabs(agent: Agent): ReturnType<AgentHandle["tabs"]>;
   /** Whether watch classifiers can run here. */
@@ -2763,6 +2766,13 @@ export class AgentRunners {
           },
         }),
         templates: () => this.host.templates(agent),
+        ...(this.host.inbox
+          ? {
+              inbox: () =>
+                this.host.inbox?.(agent) ??
+                Promise.reject(new Error("Inbox access is unavailable")),
+            }
+          : {}),
         tabs: () => this.host.tabs(agent),
         notes: (channelId: string, root?: string) => {
           const pending = runner.notes.get(channelId) ?? [];

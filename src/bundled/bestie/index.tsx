@@ -36,12 +36,12 @@ export const apply: PluginModule["apply"] = (ctx) => {
   ctx.agents.registerTab(formerBestieTab(ctx.relay, ctx.agents));
   // Whoever is Bestie, on any device, only it checks in.
   ctx.effect(() => stopFormerCheckIns(ctx.relay, ctx.agents));
-  // A Bestie made on this device starts out remembering its owner. One made
-  // elsewhere keeps what it has, so memory turned off stays off.
+  // A Bestie made on this device starts with its owner-facing features on.
+  // One made elsewhere keeps what it has, so a feature turned off stays off.
   ctx.effect(() =>
     onBestieMade((pubkey) => {
       rememberNewBestie(ctx.relay, ctx.agents, pubkey).catch((error) =>
-        console.warn("Bestie's memory wasn't turned on", error),
+        console.warn("Bestie's default features weren't turned on", error),
       );
     }),
   );
