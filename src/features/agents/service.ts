@@ -1920,7 +1920,12 @@ export class AgentsService extends Service implements Agents {
         }
         const unread = session.unread.inbox();
         const feed = session.inboxFeed.snapshot();
+        const sync = session.unread.sync();
         await Promise.all([
+          ...(sync.status === "error" ||
+          (sync.status === "stale" && sync.capability !== "unsupported")
+            ? [session.unread.retrySync()]
+            : []),
           unread.status === "error" || unread.freshness === "stale"
             ? session.unread.refresh()
             : session.unread.ensure(),
@@ -1941,6 +1946,9 @@ export class AgentsService extends Service implements Agents {
         const roster = session.channels.list();
         const result = session.unread.inbox();
         const settled = session.inboxFeed.snapshot();
+        const readSync = session.unread.sync();
+        // Local-only hosts have no remote markers to refresh after a live gap.
+        // Their storage errors still block release, as do all remote sync gaps.
         if (
           live.status !== "ready" ||
           live.viewer !== agent.owner ||
@@ -1949,6 +1957,10 @@ export class AgentsService extends Service implements Agents {
           roster.coverage === "partial" ||
           result.status !== "ready" ||
           result.freshness !== "observed" ||
+          readSync.status === "loading" ||
+          readSync.status === "error" ||
+          (readSync.status === "stale" &&
+            readSync.capability !== "unsupported") ||
           settled.status !== "ready" ||
           settled.incomplete.length
         )
