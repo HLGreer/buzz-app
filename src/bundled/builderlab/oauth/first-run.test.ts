@@ -248,6 +248,25 @@ describe("an FI build", () => {
     ).rejects.toThrow(new Error(message));
   });
 
+  it.each([true, false])(
+    "asks the native sign-in for the sign-up screen only for Create account (signup: %s)",
+    async (signup) => {
+      vi.mocked(invoke).mockResolvedValueOnce(catalog(true));
+      const fi = federatedFixture();
+      fi.request.mockResolvedValueOnce({
+        status: 200,
+        headers: {},
+        body: JSON.stringify(me),
+      });
+      await firstRunCredential(
+        new AbortController().signal,
+        fi.service,
+        signup,
+      );
+      expect(vi.mocked(fi.service.signIn).mock.calls).toEqual([[{ signup }]]);
+    },
+  );
+
   it("continues as the account the browser chose again for a session that already exists", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(catalog(true));
     const fi = federatedFixture();
@@ -322,9 +341,14 @@ describe("an FI build", () => {
       const credential = await firstRunCredential(
         new AbortController().signal,
         fi.service,
+        true,
       );
       expect(credential.value).toBe("user:1");
-      expect(fi.service.signIn).toHaveBeenCalledTimes(2);
+      // The renewal is the one that opens the browser: it keeps the choice.
+      expect(vi.mocked(fi.service.signIn).mock.calls).toEqual([
+        [{ signup: true }],
+        [{ signup: true }],
+      ]);
     });
 
     it("continues after a browser sign-in, without renewing it", async () => {

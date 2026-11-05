@@ -1,5 +1,5 @@
 import { Service, type Context } from "@deepseek-ai/cordis";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { nativeIdentityEnabled } from "../identity/service";
 import type { HostResponse } from "../host/service";
@@ -137,20 +137,23 @@ export class FederatedIdentityService
       this.shared.listeners.delete(listener);
     };
   };
-  private async operation(command: string) {
+  private async operation(command: string, ...args: [InvokeArgs?]) {
     if (!nativeIdentityEnabled() || this.shared.closed)
       throw new Error("Federated identity requires Buzz desktop");
     const epoch = this.shared.epoch;
     try {
-      const snapshot = await invoke<SessionSnapshot>(command);
+      const snapshot = await invoke<SessionSnapshot>(command, ...args);
       if (this.shared.epoch === epoch) this.accept(snapshot);
       return this.shared.snapshot;
     } catch (error) {
       throw typeof error === "string" ? new Error(error) : error;
     }
   }
-  signIn() {
-    return this.operation("federated_identity_sign_in");
+  /** `signup` is first run's alone (`FirstRunIdentity`); plugins see `signIn()`. */
+  signIn(options?: { signup?: boolean }) {
+    return this.operation("federated_identity_sign_in", {
+      signup: options?.signup === true,
+    });
   }
   async signOut() {
     await this.operation("federated_identity_sign_out");

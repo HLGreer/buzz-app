@@ -103,6 +103,19 @@ fn a_callback_timeout_keeps_its_own_failure_code() {
     );
 }
 
+#[test]
+fn only_signup_asks_the_login_start_for_the_sign_up_screen() {
+    let config = host(Arc::new(Memory::default())).0.config.clone().unwrap();
+    assert_eq!(
+        login_start(&config, "challenge", false).as_str(),
+        "https://identity.example/v1/login/start?handoff_challenge=challenge&handoff_challenge_method=S256"
+    );
+    assert_eq!(
+        login_start(&config, "challenge", true).as_str(),
+        "https://identity.example/v1/login/start?handoff_challenge=challenge&handoff_challenge_method=S256&screen_hint=signup"
+    );
+}
+
 #[tokio::test]
 async fn cancel_releases_the_native_callback_before_a_replacement_login() {
     let owner = host(Arc::new(Memory::default()));

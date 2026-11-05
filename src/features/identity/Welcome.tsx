@@ -157,11 +157,16 @@ export function Welcome({
     | undefined;
 }) {
   const state = useSyncExternalStore(identity.subscribe, identity.snapshot);
-  // Whether the next sign-in opens the create-account page: set by the
-  // landing's Create account, cleared by every other sign-in.
+  // Whether the next sign-in opens the sign-up screen: set by the landing's
+  // Create account and taken by the sign-in it starts. A restart or a later
+  // sign-in usually follows the sign-up, so it signs in.
   const signup = useRef(false);
   const [login] = useState(() =>
-    createOAuthSession((signal) => connect(signal, signup.current)),
+    createOAuthSession((signal) => {
+      const create = signup.current;
+      signup.current = false;
+      return connect(signal, create);
+    }),
   );
   // Counts canceled sign-ins: a sign-in continues only if none was canceled
   // since it started, since the session may by then hold a later sign-in.
@@ -451,11 +456,12 @@ export function Welcome({
     void signIn(create);
   };
   /**
-   * Picks up a sign-in the browser hasn't finished, keeping Create account or
-   * Sign in. The browser remembers the account, so a verified one finishes
-   * without a password, and an unverified one returns to Verify your email.
+   * Picks up a sign-in the browser hasn't finished, as Sign in even after
+   * Create account: the browser remembers the account, so a verified one
+   * finishes without a password, and an unverified one returns to Verify
+   * your email.
    */
-  const resumeSignIn = () => start(signup.current);
+  const resumeSignIn = () => start(false);
   /** Between pauses nothing runs: no key exists until a choice resumes setup. */
   const pause = (at: SetupPause) =>
     void setup.start([], { status: "paused", at });

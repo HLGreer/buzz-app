@@ -914,7 +914,7 @@ it("Create account signs in with signup and Sign in without it", async () => {
   identity.dispose();
 });
 
-it("Open Buzz restarts a waiting sign-in with the same choice", async () => {
+it("Open Buzz restarts a waiting sign-in as Sign in, even after Create account", async () => {
   missingKey();
   const signals: AbortSignal[] = [];
   const connect = vi.fn((signal: AbortSignal, _signup?: boolean) => {
@@ -938,10 +938,11 @@ it("Open Buzz restarts a waiting sign-in with the same choice", async () => {
     await screen.findByRole("button", { name: "Create account" }),
   );
   expect(connect).toHaveBeenCalledTimes(1);
+  expect(connect.mock.calls[0]?.[1]).toBe(true);
   act(() => requestSignIn());
   await waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
   expect(signals[0]?.aborted).toBe(true);
-  expect(connect.mock.calls[1]?.[1]).toBe(true);
+  expect(connect.mock.calls[1]?.[1]).toBe(false);
   identity.dispose();
 });
 
@@ -968,7 +969,7 @@ it("Open Buzz that launched the app signs in once the landing shows", async () =
   identity.dispose();
 });
 
-it("a timed-out browser wait asks to finish in the browser, and Continue restarts the same choice", async () => {
+it("a timed-out browser wait asks to finish in the browser, and Continue restarts it as Sign in", async () => {
   missingKey();
   const connect = vi
     .fn<(signal: AbortSignal, signup?: boolean) => Promise<Credential>>()
@@ -998,7 +999,7 @@ it("a timed-out browser wait asks to finish in the browser, and Continue restart
   expect(screen.queryByRole("alert")).toBeNull();
   await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(connect).toHaveBeenCalledTimes(2);
-  expect(connect.mock.calls[1]?.[1]).toBe(true);
+  expect(connect.mock.calls.map(([, signup]) => signup)).toEqual([true, false]);
   expect(
     screen.queryByRole("heading", { name: "Finish in your browser" }),
   ).toBeNull();
@@ -5065,9 +5066,18 @@ it.each(["same", "different", "canceled"])(
         <p>Signed in</p>
       </Welcome>,
     );
-    await user.click(await screen.findByRole("button", { name: SIGN_IN }));
+    await user.click(
+      await screen.findByRole("button", { name: "Create account" }),
+    );
     await screen.findByRole("alert");
     await user.click(screen.getByRole("button", { name: "Try again" }));
+    // The retry signs in to the account Create account made.
+    await waitFor(() =>
+      expect(connect.mock.calls.map(([, signup]) => signup)).toEqual([
+        true,
+        false,
+      ]),
+    );
     if (outcome === "same") {
       await screen.findByRole("heading", { name: "Connect to a community" });
       expect(refreshedBackup).toHaveBeenCalledExactlyOnceWith(viewer);

@@ -1,7 +1,10 @@
 import type { Context } from "@deepseek-ai/cordis";
 import { invoke } from "@tauri-apps/api/core";
 import { recoveryMessage } from "../../../features/federated-identity/CommunitySignIn";
-import type { FederatedIdentity } from "../../../features/federated-identity/service";
+import type {
+  FederatedIdentity,
+  SessionSnapshot,
+} from "../../../features/federated-identity/service";
 import type { Host } from "../../../features/host/service";
 import type { StorageResult } from "../../../plugins/types";
 import manifest from "../manifest.json";
@@ -35,11 +38,14 @@ export const bundledFederatedIdentity = (ctx: Context): FederatedIdentity =>
   ctx.extend({ pluginOwner: { id: manifest.id, revision: "bundled" } })
     .federatedIdentity;
 
-/** What first run uses of the NIP-FI session: it never signs out. */
+/**
+ * What first run uses of the NIP-FI session: it never signs out, and it alone
+ * asks for the sign-up screen, which the host's service passes to native.
+ */
 export type FirstRunIdentity = Pick<
   FederatedIdentity,
-  "snapshot" | "subscribe" | "signIn" | "cancelSignIn" | "request"
->;
+  "snapshot" | "subscribe" | "cancelSignIn" | "request"
+> & { signIn(options?: { signup?: boolean }): Promise<SessionSnapshot> };
 
 /**
  * The bundled grant exists only while this plugin is enabled, so with it
@@ -50,7 +56,7 @@ export type FirstRunIdentity = Pick<
 export async function firstRunCredential(
   signal: AbortSignal,
   federated?: FirstRunIdentity,
-  /** Open the create-account page; an FI build's native sign-in has one page. */
+  /** Open the sign-up screen rather than sign-in: Create account's alone. */
   signup = false,
 ): Promise<Credential> {
   const result = await invoke<StorageResult>("plugin_catalog").catch(() => {
@@ -69,13 +75,13 @@ export async function firstRunCredential(
       "Builderlab is turned off on this device, so you can't sign in with email. Enter a community address instead.",
     );
   return federated
-    ? federatedCredential(federated, signal)
+    ? federatedCredential(federated, signal, signup)
     : browserCredential(bundledHost, signal, undefined, signup);
 }
 
 // Native rejects with a bare failure code, such as a refused renewal's.
-const signIn = (identity: FirstRunIdentity) =>
-  identity.signIn().catch((error: unknown) => {
+const signIn = (identity: FirstRunIdentity, signup: boolean) =>
+  identity.signIn({ signup }).catch((error: unknown) => {
     throw new Error(
       recoveryMessage(error instanceof Error ? error.message : ""),
     );
@@ -92,6 +98,7 @@ const signIn = (identity: FirstRunIdentity) =>
 async function federatedCredential(
   identity: FirstRunIdentity,
   signal: AbortSignal,
+  signup: boolean,
 ): Promise<Credential> {
   signal.throwIfAborted();
   let wake = () => {};
@@ -122,7 +129,7 @@ async function federatedCredential(
       signal.throwIfAborted();
     }
     let before = identity.snapshot();
-    let session = await signIn(identity);
+    let session = await signIn(identity, signup);
     signal.throwIfAborted();
     // After a failed restore, `signIn` restores again first and answers with
     // the stored session it finds: renew that, so the browser chooses.
@@ -132,7 +139,7 @@ async function federatedCredential(
       !browsed
     ) {
       before = session;
-      session = await signIn(identity);
+      session = await signIn(identity, signup);
       signal.throwIfAborted();
     }
     // A renewal that is canceled (in the browser, by Cancel, or by a newer

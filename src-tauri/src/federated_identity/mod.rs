@@ -634,9 +634,11 @@ impl FederatedIdentity {
         revision
     }
     /// A renewal that fails returns its failure code; it changes nothing else.
+    /// `signup` opens the identity provider's sign-up screen (`login_start`).
     pub(crate) async fn sign_in<R: tauri::Runtime>(
         &self,
         app: &tauri::AppHandle<R>,
+        signup: bool,
     ) -> Result<Snapshot, &'static str> {
         let (observed, attempt) = {
             let state = self.state();
@@ -676,7 +678,7 @@ impl FederatedIdentity {
                 )
             }
         };
-        let result = self.login(app, &revision, &cancel, operation).await;
+        let result = self.login(app, &revision, &cancel, operation, signup).await;
         if renewing {
             self.renewed(&revision, &cancel, result)?;
         } else if let Err(failure) = result {
@@ -708,6 +710,7 @@ impl FederatedIdentity {
         revision: &str,
         cancel: &CancellationToken,
         operation: tokio::sync::MutexGuard<'_, ()>,
+        signup: bool,
     ) -> Result<(), Failure> {
         if cancel.is_cancelled() {
             return Err("sign-in-canceled".into());
@@ -717,11 +720,7 @@ impl FederatedIdentity {
         getrandom::fill(bytes.as_mut()).map_err(|_| "random-unavailable")?;
         let secret = Zeroizing::new(URL_SAFE_NO_PAD.encode(bytes.as_ref()));
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(secret.as_bytes()));
-        let mut login = config.endpoint("/v1/login/start");
-        login
-            .query_pairs_mut()
-            .append_pair("handoff_challenge", &challenge)
-            .append_pair("handoff_challenge_method", "S256");
+        let login = login_start(config, &challenge, signup);
         let callback = app.state::<crate::oauth_callback::OAuthCallbackHost>();
         let attempt = callback
             .begin_federated(login.to_string(), |url| {
@@ -992,6 +991,21 @@ fn due(now: i64, warn: i64, expires: i64, warned: bool) -> Due {
     }
 }
 
+/// The browser step's start URL. Only an explicit Create account asks for the
+/// sign-up screen: kgoose answers the hint with Auth0's sign-up even over an
+/// existing session, so a restart, which usually follows sign-up, must not.
+fn login_start(config: &Config, challenge: &str, signup: bool) -> url::Url {
+    let mut login = config.endpoint("/v1/login/start");
+    login
+        .query_pairs_mut()
+        .append_pair("handoff_challenge", challenge)
+        .append_pair("handoff_challenge_method", "S256");
+    if signup {
+        login.query_pairs_mut().append_pair("screen_hint", "signup");
+    }
+    login
+}
+
 #[tauri::command]
 pub(crate) async fn federated_identity_snapshot(
     host: tauri::State<'_, FederatedIdentity>,
@@ -1002,8 +1016,11 @@ pub(crate) async fn federated_identity_snapshot(
 pub(crate) async fn federated_identity_sign_in<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     host: tauri::State<'_, FederatedIdentity>,
+    signup: Option<bool>,
 ) -> Result<Snapshot, String> {
-    host.sign_in(&app).await.map_err(String::from)
+    host.sign_in(&app, signup.unwrap_or(false))
+        .await
+        .map_err(String::from)
 }
 #[tauri::command]
 pub(crate) fn federated_identity_cancel_sign_in(host: tauri::State<'_, FederatedIdentity>) {
