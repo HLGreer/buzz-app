@@ -413,7 +413,8 @@ export function createRelayReader(
           ) =>
             read(
               [],
-              { ...options, deadlineMs: LARGE_READ_DEADLINE_MS },
+              // A later hint must never join an attempt dispatched before it.
+              { ...options, fresh: true, deadlineMs: LARGE_READ_DEADLINE_MS },
               false,
               undefined,
               false,
