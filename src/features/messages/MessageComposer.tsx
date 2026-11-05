@@ -3580,30 +3580,32 @@ function Composer({
           <p role="alert">{error ?? editing.error}</p>
         )}
         {stickyPicks && (pickReadPending || pickReadFailed) && (
-          <LoadingRegion
-            pending={pickReadPending}
-            label="Loading saved model and effort…"
-            statusVisibility="screen-reader"
-            feedback={
-              pickReadFailed ? (
-                <div>
-                  <p role="alert">
-                    Could not read saved model and effort for this chat on this
-                    device. Retry before sending.
-                  </p>
-                  <Button
-                    type="button"
-                    disabled={pickReadPending}
-                    onClick={() => void refreshPicks()}
-                  >
-                    Retry saved choices
-                  </Button>
-                </div>
-              ) : undefined
-            }
-          >
-            {null}
-          </LoadingRegion>
+          <div className={pickReadFailed ? undefined : "sr-only"}>
+            <LoadingRegion
+              pending={pickReadPending}
+              label="Loading saved model and effort…"
+              statusVisibility="screen-reader"
+              feedback={
+                pickReadFailed ? (
+                  <div>
+                    <p role="alert">
+                      Could not read saved model and effort for this chat on
+                      this device. Retry before sending.
+                    </p>
+                    <Button
+                      type="button"
+                      disabled={pickReadPending}
+                      onClick={() => void refreshPicks()}
+                    >
+                      Retry saved choices
+                    </Button>
+                  </div>
+                ) : undefined
+              }
+            >
+              {null}
+            </LoadingRegion>
+          </div>
         )}
         {pickStorageFailed && (
           <p role="alert">
