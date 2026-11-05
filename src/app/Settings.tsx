@@ -33,6 +33,7 @@ import {
   type ReactNode,
   forwardRef,
   type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -52,6 +53,7 @@ import { canRetryPlugin, type PluginManager } from "../plugins/manager";
 import type { Catalog, PluginInfo } from "../plugins/types";
 import type { Communities, Membership } from "../features/communities/service";
 import { PluginImport } from "./PluginImport";
+import { AgentPluginRequests } from "./AgentPluginRequests";
 import { ManagedPluginUpdate, ManagedPlugins } from "./ManagedPlugins";
 import { managedBy, pendingManaged } from "../plugins/managed";
 import { RecommendationCount } from "./RecommendationCount";
@@ -61,7 +63,7 @@ import { bundledReadmes } from "../bundled/readmes";
 import { bundledIcons } from "../bundled/icons";
 import type { Identity } from "../features/identity/service";
 import { ProfileSettings } from "./ProfileSettings";
-import { IdentitySettings } from "./IdentitySettings";
+import { IdentitySettings, keyActivity } from "./IdentitySettings";
 import { SecuritySettings } from "./SecuritySettings";
 import type { FederatedIdentity } from "../features/federated-identity/service";
 import { CommunityLocalSettings } from "./CommunityLocalSettings";
@@ -623,6 +625,7 @@ export function Settings({
   communities,
   identity,
   federatedIdentity,
+  builderlabIdentity,
   appearance,
   shortcuts,
   shortcutBindings,
@@ -645,6 +648,8 @@ export function Settings({
   communities: Communities;
   identity?: Identity | undefined;
   federatedIdentity?: FederatedIdentity | undefined;
+  /** The session as the Builderlab plugin's bundled installation, for its account reads. */
+  builderlabIdentity?: FederatedIdentity | undefined;
   appearance: Appearance;
   shortcuts: ShortcutsService;
   shortcutBindings: ShortcutBindings;
@@ -1203,6 +1208,16 @@ export function Settings({
       </PluginListEntry>
     );
   };
+  // A new connection's session reads activity again.
+  const relay = useSyncExternalStore(
+    communities.relay.subscribe,
+    communities.relay.snapshot,
+  );
+  const relaySession = relay.status === "ready" ? relay.session : undefined;
+  const lastActive = useCallback(
+    (pubkey: string) => keyActivity(relaySession, pubkey),
+    [relaySession],
+  );
   const authorizePluginGit = async (repository: string) => {
     const connection = communities.relay.snapshot();
     return connection.status === "ready"
@@ -1337,6 +1352,8 @@ export function Settings({
             viewer={client.viewer}
             identity={identity}
             federatedIdentity={federatedIdentity}
+            builderlabIdentity={builderlabIdentity}
+            lastActive={lastActive}
           />
         )}
         {selected === "security" && <SecuritySettings />}
@@ -1365,6 +1382,16 @@ export function Settings({
             <AnimatePresence initial={false} mode="popLayout">
               {coreGroup && renderPluginGroup(coreGroup)}
             </AnimatePresence>
+            {catalog && (
+              <AgentPluginRequests
+                plugins={plugins}
+                catalog={catalog}
+                busy={busy}
+                authorizeGit={authorizePluginGit}
+                holdReview={installRequests?.holdReview}
+                fallbackFocus={() => pluginSection.current}
+              />
+            )}
             {catalog && (
               <ManagedPlugins
                 plugins={plugins}

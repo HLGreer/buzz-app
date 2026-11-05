@@ -626,6 +626,7 @@ function ConnectedAppContent({ services }: { services: AppServices }) {
                   chatMenus={services.conversation.chatMenus}
                   sidebarSections={services.sidebarSections}
                   sidebarScope={services.sidebarScope}
+                  sidebarRows={services.sidebarRows}
                   target={workspace.target}
                 >
                   {pageNavigation}
@@ -769,6 +770,7 @@ function ConnectedAppContent({ services }: { services: AppServices }) {
                     communities={services.communities}
                     identity={services.identity}
                     federatedIdentity={services.federatedIdentity}
+                    builderlabIdentity={services.firstRunFederatedIdentity}
                     appearance={services.appearance}
                     shortcuts={services.shortcuts}
                     shortcutBindings={services.shortcutBindings}
