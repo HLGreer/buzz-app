@@ -102,9 +102,13 @@ automatic backup.
 **Not linked** pauses on **Get started with Buzz**, which says the account will
 manage the Buzz identity. **Set me up** creates and links a key; **Use an
 existing key** opens **Enter your private key**. **Use a different account**
-signs out the first-run session and returns to the welcome screen.
-The browser may retain its portal session. This choice page shows the signed-in
-email so the account can be checked before linking a key.
+signs out the first-run session and, on organization builds, the organization
+session on this device, then returns to the welcome screen. Until a sign-in
+completes, every sign-in from there asks the browser for credentials rather
+than continuing as the account it remembers. If the organization session can't
+be ended, the page stays with *Couldn’t switch accounts. Try again.* This
+choice page shows the signed-in email so the account can be checked before
+linking a key.
 
 Builderlab setup automatically backs up the created key after linking it to the
 signed-in account and waits for the uploader. The import screen discloses
@@ -134,8 +138,9 @@ is refused under the field with *That isn’t the key linked to this account. It
 expects npub1…*, and **Back** returns to Welcome back. **Recover from another
 device** is *Coming soon* (device pairing is its future entry). Last in the
 stack, **Use a different account** is the same exit as on Get started with Buzz: it
-signs the session out and returns to the welcome screen without importing,
-restoring or replacing the linked key. The imported
+signs the session out and returns to the welcome screen, where the next
+sign-in asks for credentials, without importing, restoring or replacing the
+linked key. The imported
 key is already the account's, so nothing is linked. Unless the lookup already
 lists it, a successful import automatically backs up the key as on a new
 account; a listed key continues without another upload.

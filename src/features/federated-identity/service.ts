@@ -30,6 +30,13 @@ export type SessionSnapshot = Readonly<{
   /** The session ends soon; signing in again now keeps the app open. */
   expiring: boolean;
 }>;
+/** First run's sign-in choices (`FirstRunIdentity`); plugins see `signIn()`. */
+export type SignInOptions = Readonly<{
+  /** Open the identity provider's sign-up screen: Create account's alone. */
+  signup?: boolean;
+  /** Ask for credentials over the browser's session: after Use a different account. */
+  forceLogin?: boolean;
+}>;
 export type AuthenticatedRequest = Readonly<{
   path: string;
   method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -149,10 +156,10 @@ export class FederatedIdentityService
       throw typeof error === "string" ? new Error(error) : error;
     }
   }
-  /** `signup` is first run's alone (`FirstRunIdentity`); plugins see `signIn()`. */
-  signIn(options?: { signup?: boolean }) {
+  signIn(options?: SignInOptions) {
     return this.operation("federated_identity_sign_in", {
       signup: options?.signup === true,
+      forceLogin: options?.forceLogin === true,
     });
   }
   async signOut() {

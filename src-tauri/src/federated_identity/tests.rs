@@ -104,16 +104,24 @@ fn a_callback_timeout_keeps_its_own_failure_code() {
 }
 
 #[test]
-fn only_signup_asks_the_login_start_for_the_sign_up_screen() {
+fn the_login_start_asks_only_for_the_sign_up_screen_and_forced_login_it_was_given() {
     let config = host(Arc::new(Memory::default())).0.config.clone().unwrap();
-    assert_eq!(
-        login_start(&config, "challenge", false).as_str(),
-        "https://identity.example/v1/login/start?handoff_challenge=challenge&handoff_challenge_method=S256"
-    );
-    assert_eq!(
-        login_start(&config, "challenge", true).as_str(),
-        "https://identity.example/v1/login/start?handoff_challenge=challenge&handoff_challenge_method=S256&screen_hint=signup"
-    );
+    let start = "https://identity.example/v1/login/start?handoff_challenge=challenge&handoff_challenge_method=S256";
+    for (signup, force_login, hints) in [
+        (false, false, ""),
+        (true, false, "&screen_hint=signup"),
+        (false, true, "&prompt=login"),
+        (true, true, "&screen_hint=signup&prompt=login"),
+    ] {
+        let asked = LoginStart {
+            signup,
+            force_login,
+        };
+        assert_eq!(
+            login_start(&config, "challenge", asked).as_str(),
+            format!("{start}{hints}")
+        );
+    }
 }
 
 #[tokio::test]

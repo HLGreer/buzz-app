@@ -32,6 +32,7 @@ import {
 import { createJoinJournal, JournalError } from "../communities/join-journal";
 import type { Communities, PersonalProfile } from "../communities/service";
 import { SIGN_IN_TIMED_OUT } from "../federated-identity/CommunitySignIn";
+import type { SignInOptions } from "../federated-identity/service";
 import { readErrorKind } from "../relay/errors";
 import { Button } from "../../shared/design-system/ui/Button";
 import { BackupError } from "./backup";
@@ -123,8 +124,8 @@ export function Welcome({
   invites,
   children,
   federatedIdentity,
-  connect = (signal, signup) =>
-    firstRunCredential(signal, federatedIdentity, signup),
+  connect = (signal, options) =>
+    firstRunCredential(signal, federatedIdentity, options),
   account = (credential, identity) =>
     firstRunAccount(credential, identity, federatedIdentity),
 }: {
@@ -150,7 +151,10 @@ export function Welcome({
    * it instead of the plugin's network grant, which an FI build lacks.
    */
   federatedIdentity?: FirstRunIdentity | undefined;
-  connect?: (signal: AbortSignal, signup?: boolean) => Promise<Credential>;
+  connect?: (
+    signal: AbortSignal,
+    options: SignInOptions,
+  ) => Promise<Credential>;
   /** The account for a credential `connect` returned. */
   account?:
     | ((credential: Credential, identity: Identity) => FirstRunAccount)
@@ -161,11 +165,15 @@ export function Welcome({
   // Create account and taken by the sign-in it starts. A restart or a later
   // sign-in usually follows the sign-up, so it signs in.
   const signup = useRef(false);
+  // Whether sign-ins ask the browser for credentials over its session, which
+  // would finish them as the account just left: armed by Use a different
+  // account, kept by every restart, cleared once one completes.
+  const switching = useRef(false);
   const [login] = useState(() =>
     createOAuthSession((signal) => {
       const create = signup.current;
       signup.current = false;
-      return connect(signal, create);
+      return connect(signal, { signup: create, forceLogin: switching.current });
     }),
   );
   // Counts canceled sign-ins: a sign-in continues only if none was canceled
@@ -383,6 +391,7 @@ export function Welcome({
     await login.signIn();
     if (attempt !== cancels.current || login.snapshot().status !== "signed-in")
       return;
+    switching.current = false;
     rememberBuilderlab();
     const current = account(login.credential(), identity);
     reads.current = current;
@@ -585,6 +594,28 @@ export function Welcome({
     setFinding(origin);
     setInviteCode(code);
     setCreated(justCreated);
+  };
+  /**
+   * Use a different account: the organization session ends first, so an
+   * abandoned switch doesn't keep this account on the device, and every
+   * sign-in from here asks the browser for credentials until one completes.
+   * A linked key already on this device is signed out, which relaunches.
+   */
+  const switchAccount = async () => {
+    const failed = () => setSwitchError("Couldn’t switch accounts. Try again.");
+    if (federatedIdentity) {
+      // Native reports a storage failure as an `unavailable` snapshot.
+      const ended = await federatedIdentity.signOut().then(
+        () => federatedIdentity.snapshot().status === "signed-out",
+        () => false,
+      );
+      if (!ended) return failed();
+    }
+    switching.current = true;
+    const here = identity.snapshot();
+    if (here.status !== "ready" || here.viewer !== linked)
+      return backToLanding();
+    await identity.signOut({ wipe: false, removeAgents: false }).catch(failed);
   };
   /** Every way back to the landing, so a kept `finding` cannot re-enter discovery. */
   const backToLanding = () => {
@@ -829,14 +860,7 @@ export function Welcome({
                     : undefined
               }
               onImport={() => pause("key-import")}
-              onSwitchAccount={() => {
-                if (viewer !== linked) return backToLanding();
-                void identity
-                  .signOut({ wipe: false, removeAgents: false })
-                  .catch(() =>
-                    setSwitchError("Couldn’t switch accounts. Try again."),
-                  );
-              }}
+              onSwitchAccount={() => void switchAccount()}
             />
             {switchError && <p role="alert">{switchError}</p>}
           </>

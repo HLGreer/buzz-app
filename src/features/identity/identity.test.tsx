@@ -35,6 +35,7 @@ import { Welcome } from "./Welcome";
 import { requestSignIn, takeSignInRequest } from "./sign-in-requests";
 import { SIGN_IN_TIMED_OUT } from "../federated-identity/CommunitySignIn";
 import { federatedFixture } from "../federated-identity/testing";
+import type { SignInOptions } from "../federated-identity/service";
 import { ProfileStep } from "./ProfileStep";
 import { OnboardingScreen } from "./OnboardingScreen";
 import type { Credential } from "../../bundled/builderlab/oauth/browser";
@@ -884,10 +885,14 @@ it("a fresh landing offers Create account, Sign in, then Other options", async (
   identity.dispose();
 });
 
+/** What Welcome's `connect` receives when no switch is armed. */
+const createAccount: SignInOptions = { signup: true, forceLogin: false };
+const plainSignIn: SignInOptions = { signup: false, forceLogin: false };
+
 it("Create account signs in with signup and Sign in without it", async () => {
   missingKey();
   const connect = vi.fn(
-    (_signal: AbortSignal, _signup?: boolean) =>
+    (_signal: AbortSignal, _options: SignInOptions) =>
       new Promise<Credential>(() => {}),
   );
   const identity = createIdentity();
@@ -907,17 +912,17 @@ it("Create account signs in with signup and Sign in without it", async () => {
     await screen.findByRole("button", { name: "Create account" }),
   );
   expect(connect).toHaveBeenCalledTimes(1);
-  expect(connect.mock.calls[0]?.[1]).toBe(true);
+  expect(connect.mock.calls[0]?.[1]).toEqual(createAccount);
   await user.click(screen.getByRole("button", { name: SIGN_IN }));
   expect(connect).toHaveBeenCalledTimes(2);
-  expect(connect.mock.calls[1]?.[1]).toBeFalsy();
+  expect(connect.mock.calls[1]?.[1]).toEqual(plainSignIn);
   identity.dispose();
 });
 
 it("Open Buzz restarts a waiting sign-in as Sign in, even after Create account", async () => {
   missingKey();
   const signals: AbortSignal[] = [];
-  const connect = vi.fn((signal: AbortSignal, _signup?: boolean) => {
+  const connect = vi.fn((signal: AbortSignal, _options: SignInOptions) => {
     signals.push(signal);
     return new Promise<Credential>(() => {});
   });
@@ -938,18 +943,18 @@ it("Open Buzz restarts a waiting sign-in as Sign in, even after Create account",
     await screen.findByRole("button", { name: "Create account" }),
   );
   expect(connect).toHaveBeenCalledTimes(1);
-  expect(connect.mock.calls[0]?.[1]).toBe(true);
+  expect(connect.mock.calls[0]?.[1]).toEqual(createAccount);
   act(() => requestSignIn());
   await waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
   expect(signals[0]?.aborted).toBe(true);
-  expect(connect.mock.calls[1]?.[1]).toBe(false);
+  expect(connect.mock.calls[1]?.[1]).toEqual(plainSignIn);
   identity.dispose();
 });
 
 it("Open Buzz that launched the app signs in once the landing shows", async () => {
   missingKey();
   const connect = vi.fn(
-    (_signal: AbortSignal, _signup?: boolean) =>
+    (_signal: AbortSignal, _options: SignInOptions) =>
       new Promise<Credential>(() => {}),
   );
   requestSignIn();
@@ -972,7 +977,7 @@ it("Open Buzz that launched the app signs in once the landing shows", async () =
 it("a timed-out browser wait asks to finish in the browser, and Continue restarts it as Sign in", async () => {
   missingKey();
   const connect = vi
-    .fn<(signal: AbortSignal, signup?: boolean) => Promise<Credential>>()
+    .fn<(signal: AbortSignal, options: SignInOptions) => Promise<Credential>>()
     .mockRejectedValueOnce(new Error(SIGN_IN_TIMED_OUT))
     .mockReturnValue(new Promise<Credential>(() => {}));
   const identity = createIdentity();
@@ -999,7 +1004,10 @@ it("a timed-out browser wait asks to finish in the browser, and Continue restart
   expect(screen.queryByRole("alert")).toBeNull();
   await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(connect).toHaveBeenCalledTimes(2);
-  expect(connect.mock.calls.map(([, signup]) => signup)).toEqual([true, false]);
+  expect(connect.mock.calls.map(([, options]) => options)).toEqual([
+    createAccount,
+    plainSignIn,
+  ]);
   expect(
     screen.queryByRole("heading", { name: "Finish in your browser" }),
   ).toBeNull();
@@ -4809,6 +4817,10 @@ async function welcomeBackPage(
   user: ReturnType<typeof userEvent.setup>,
   identity: Identity,
   account: ComponentProps<typeof Welcome>["account"],
+  props: Pick<
+    ComponentProps<typeof Welcome>,
+    "connect" | "federatedIdentity"
+  > = {},
 ) {
   render(
     <Welcome
@@ -4817,6 +4829,7 @@ async function welcomeBackPage(
       invites={invites}
       connect={vi.fn().mockResolvedValue(credential)}
       account={account}
+      {...props}
     >
       <p>Signed in</p>
     </Welcome>,
@@ -4933,62 +4946,215 @@ it("a linked account is welcomed back with its npub, accepts only the linked key
   identity.dispose();
 });
 
-it("Use a different account on Welcome back returns to the landing without touching the key, and the linked key is read again only at the next sign-in", async () => {
-  vi.mocked(invoke).mockImplementation((command) => {
-    if (command === "nsec_backup_choice")
-      return Promise.resolve({
-        available: false,
-        pubkey: viewer,
-        automatic: null,
-      });
-    if (command === "identity_restore") return Promise.resolve(null);
-    if (command === "identity_legacy_available") return Promise.resolve(false);
-    throw new Error(`Unexpected command ${command}`);
-  });
-  const linkedKey = vi.fn(() => Promise.resolve(owned.pubkey));
-  const account: ComponentProps<typeof Welcome>["account"] = () => ({
-    linkedKey,
-    communityList: owning(),
-    knownCommunities: () => Promise.resolve([]),
-    saveCommunity,
-    bind: () => Promise.reject(new Error("Welcome bound the linked key again")),
-    unbind: noUnlink,
-    ...backupAnswers,
-    ...noCreation,
-  });
+/** Native for a device with no key, through Welcome back. */
+const noKeyYet = (command: string) => {
+  if (command === "nsec_backup_choice")
+    return Promise.resolve({
+      available: false,
+      pubkey: viewer,
+      automatic: null,
+    });
+  if (command === "identity_restore") return Promise.resolve(null);
+  if (command === "identity_legacy_available") return Promise.resolve(false);
+  if (command === "identity_create") return Promise.resolve(viewer);
+  throw new Error(`Unexpected command ${command}`);
+};
+/** What Welcome's `connect` receives once Use a different account is armed. */
+const switchedSignIn: SignInOptions = { signup: false, forceLogin: true };
+const useDifferentAccount = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByRole("button", { name: "Use a different account" }));
+
+it.each([
+  ["an FI build", true],
+  ["a PKCE build", false],
+])(
+  "Use a different account on Welcome back (%s) ends the organization session, returns to the landing without touching the key, and the next sign-in reads the linked key again and asks for credentials",
+  async (_build, federated) => {
+    vi.mocked(invoke).mockImplementation(noKeyYet);
+    const linkedKey = vi.fn(() => Promise.resolve(owned.pubkey));
+    const account: ComponentProps<typeof Welcome>["account"] = () => ({
+      linkedKey,
+      communityList: owning(),
+      knownCommunities: () => Promise.resolve([]),
+      saveCommunity,
+      bind: () =>
+        Promise.reject(new Error("Welcome bound the linked key again")),
+      unbind: noUnlink,
+      ...backupAnswers,
+      ...noCreation,
+    });
+    const fi = federatedFixture();
+    fi.publish({ status: "signed-in", revision: "user:a" });
+    const connect = vi.fn(
+      async (_signal: AbortSignal, _options: SignInOptions) => credential,
+    );
+    const identity = createIdentity();
+    const user = userEvent.setup();
+    await welcomeBackPage(user, identity, account, {
+      connect,
+      ...(federated ? { federatedIdentity: fi.service } : {}),
+    });
+    expect(linkedKey).toHaveBeenCalledTimes(1);
+    expect(screen.getByTitle(linkedNpub)).toBeVisible();
+    await useDifferentAccount(user);
+    // Back on the landing, signed out of the organization on an FI build; the
+    // linked key was never imported or replaced, and its npub is gone with
+    // the page.
+    expect(await screen.findByRole("heading", { name: "Buzz" })).toBeVisible();
+    expect(fi.service.signOut).toHaveBeenCalledTimes(federated ? 1 : 0);
+    expect(fi.service.snapshot().status).toBe(
+      federated ? "signed-out" : "signed-in",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Continue with this key" }),
+    ).toBeNull();
+    expect(screen.queryByText(linkedNpub)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(identity.snapshot().status).toBe("missing");
+    expect(linkedKey).toHaveBeenCalledTimes(1);
+    expect(connect).toHaveBeenCalledTimes(1);
+    // The next sign-in reads the account again rather than reusing the
+    // answer, and asks the browser for credentials rather than letting its
+    // session finish as the same account.
+    await user.click(landingSignIn());
+    expect(
+      await screen.findByRole("heading", { name: "Continue with this key" }),
+    ).toBeVisible();
+    expect(linkedKey).toHaveBeenCalledTimes(2);
+    expect(connect.mock.calls.map(([, options]) => options)).toEqual([
+      plainSignIn,
+      switchedSignIn,
+    ]);
+    expect(commands()).toEqual([
+      "identity_restore",
+      "identity_legacy_available",
+    ]);
+    identity.dispose();
+  },
+);
+
+it("after Use a different account, a restart, Continue and Create account all ask the browser for credentials", async () => {
+  vi.mocked(invoke).mockImplementation(noKeyYet);
+  const fi = federatedFixture();
+  const signals: AbortSignal[] = [];
+  const connect = vi
+    .fn<(signal: AbortSignal, options: SignInOptions) => Promise<Credential>>()
+    .mockResolvedValueOnce(credential)
+    // Sign in waits on the browser; Open Buzz restarts it, and that restart
+    // and Continue's both time out.
+    .mockImplementationOnce((signal) => {
+      signals.push(signal);
+      return new Promise<Credential>(() => {});
+    })
+    .mockRejectedValueOnce(new Error(SIGN_IN_TIMED_OUT))
+    .mockRejectedValueOnce(new Error(SIGN_IN_TIMED_OUT))
+    .mockReturnValue(new Promise<Credential>(() => {}));
   const identity = createIdentity();
   const user = userEvent.setup();
-  await welcomeBackPage(user, identity, account);
-  expect(linkedKey).toHaveBeenCalledTimes(1);
-  expect(screen.getByTitle(linkedNpub)).toBeVisible();
-  await user.click(
-    screen.getByRole("button", { name: "Use a different account" }),
-  );
-  // Back on the landing, signed out; the linked key was never imported or
-  // replaced, and its npub is gone with the page.
-  expect(welcomeHeading()).toBeVisible();
-  expect(
-    screen.queryByRole("heading", { name: "Continue with this key" }),
-  ).toBeNull();
-  expect(screen.queryByText(linkedNpub)).toBeNull();
-  expect(identity.snapshot().status).toBe("missing");
-  expect(linkedKey).toHaveBeenCalledTimes(1);
-  expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
-    "identity_restore",
-    "identity_legacy_available",
-  ]);
-  // The next sign-in reads the account again rather than reusing the answer.
-  await user.click(landingSignIn());
-  expect(
-    await screen.findByRole("heading", { name: "Continue with this key" }),
-  ).toBeVisible();
-  expect(linkedKey).toHaveBeenCalledTimes(2);
-  expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
-    "identity_restore",
-    "identity_legacy_available",
+  await welcomeBackPage(user, identity, linkedTo(owned.pubkey), {
+    connect,
+    federatedIdentity: fi.service,
+  });
+  await useDifferentAccount(user);
+  await user.click(await screen.findByRole("button", { name: SIGN_IN }));
+  act(() => requestSignIn());
+  await screen.findByRole("heading", { name: "Finish in your browser" });
+  expect(signals[0]?.aborted).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await waitFor(() => expect(connect).toHaveBeenCalledTimes(4));
+  await screen.findByRole("heading", { name: "Finish in your browser" });
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  await user.click(screen.getByRole("button", { name: "Create account" }));
+  expect(connect.mock.calls.map(([, options]) => options)).toEqual([
+    plainSignIn,
+    switchedSignIn,
+    switchedSignIn,
+    switchedSignIn,
+    { signup: true, forceLogin: true },
   ]);
   identity.dispose();
 });
+
+it("a completed sign-in after Use a different account stops asking for credentials: the backup's re-sign-in after an expired session doesn't", async () => {
+  vi.mocked(invoke).mockImplementation(noKeyYet);
+  const fi = federatedFixture();
+  const other = {
+    ...credential,
+    value: "other-token",
+    account: { ...credential.account, subject: "other-account" },
+  };
+  const refreshed = { ...other, value: "refreshed-token" };
+  const expiredBackup = vi.fn(async () => {
+    throw new BackupError("signed_out");
+  });
+  const refreshedBackup = vi.fn(async () => {});
+  const connect = vi
+    .fn<(signal: AbortSignal, options: SignInOptions) => Promise<Credential>>()
+    .mockResolvedValueOnce(credential)
+    .mockResolvedValueOnce(other)
+    .mockResolvedValueOnce(refreshed);
+  // The first account has a key elsewhere; the one switched to has none, so
+  // setup links and backs up a new key, whose upload finds the session over.
+  const account = (value: Credential, identity: Identity) =>
+    value === credential
+      ? linkedTo(owned.pubkey)(value, identity)
+      : unlinkedWith(async () => {}, {
+          backUp: value === other ? expiredBackup : refreshedBackup,
+        })(value, identity);
+  const identity = createIdentity();
+  const user = userEvent.setup();
+  await welcomeBackPage(user, identity, account, {
+    connect,
+    federatedIdentity: fi.service,
+  });
+  await useDifferentAccount(user);
+  await user.click(await screen.findByRole("button", { name: SIGN_IN }));
+  await screen.findByRole("alert");
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  await screen.findByRole("heading", { name: "Connect to a community" });
+  expect(refreshedBackup).toHaveBeenCalledExactlyOnceWith(viewer);
+  expect(connect.mock.calls.map(([, options]) => options)).toEqual([
+    plainSignIn,
+    switchedSignIn,
+    plainSignIn,
+  ]);
+  identity.dispose();
+});
+
+it.each([
+  ["leaves the session unavailable", "unavailable"],
+  ["is refused", "refused"],
+] as const)(
+  "Use a different account stays on Welcome back when ending the organization session %s",
+  async (_label, outcome) => {
+    vi.mocked(invoke).mockImplementation(noKeyYet);
+    const fi = federatedFixture();
+    fi.publish({ status: "signed-in", revision: "user:a" });
+    vi.mocked(fi.service.signOut).mockImplementationOnce(async () => {
+      if (outcome === "refused") throw new Error("storage-unavailable");
+      fi.publish({ status: "unavailable", failure: "storage-unavailable" });
+    });
+    const connect = vi.fn(
+      async (_signal: AbortSignal, _options: SignInOptions) => credential,
+    );
+    const identity = createIdentity();
+    const user = userEvent.setup();
+    await welcomeBackPage(user, identity, linkedTo(owned.pubkey), {
+      connect,
+      federatedIdentity: fi.service,
+    });
+    await useDifferentAccount(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn’t switch accounts. Try again.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Continue with this key" }),
+    ).toBeVisible();
+    expect(fi.service.signOut).toHaveBeenCalledOnce();
+    expect(connect).toHaveBeenCalledOnce();
+    identity.dispose();
+  },
+);
 
 it("Automatic backup backs the linked key up before Connect to a community", async () => {
   vi.mocked(invoke).mockImplementation((command) => {
@@ -5073,9 +5239,9 @@ it.each(["same", "different", "canceled"])(
     await user.click(screen.getByRole("button", { name: "Try again" }));
     // The retry signs in to the account Create account made.
     await waitFor(() =>
-      expect(connect.mock.calls.map(([, signup]) => signup)).toEqual([
-        true,
-        false,
+      expect(connect.mock.calls.map(([, options]) => options)).toEqual([
+        createAccount,
+        plainSignIn,
       ]),
     );
     if (outcome === "same") {

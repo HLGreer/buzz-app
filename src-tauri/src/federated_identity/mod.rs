@@ -634,11 +634,11 @@ impl FederatedIdentity {
         revision
     }
     /// A renewal that fails returns its failure code; it changes nothing else.
-    /// `signup` opens the identity provider's sign-up screen (`login_start`).
+    /// `start` is what the browser step asks of the identity provider.
     pub(crate) async fn sign_in<R: tauri::Runtime>(
         &self,
         app: &tauri::AppHandle<R>,
-        signup: bool,
+        start: LoginStart,
     ) -> Result<Snapshot, &'static str> {
         let (observed, attempt) = {
             let state = self.state();
@@ -678,7 +678,7 @@ impl FederatedIdentity {
                 )
             }
         };
-        let result = self.login(app, &revision, &cancel, operation, signup).await;
+        let result = self.login(app, &revision, &cancel, operation, start).await;
         if renewing {
             self.renewed(&revision, &cancel, result)?;
         } else if let Err(failure) = result {
@@ -710,7 +710,7 @@ impl FederatedIdentity {
         revision: &str,
         cancel: &CancellationToken,
         operation: tokio::sync::MutexGuard<'_, ()>,
-        signup: bool,
+        start: LoginStart,
     ) -> Result<(), Failure> {
         if cancel.is_cancelled() {
             return Err("sign-in-canceled".into());
@@ -720,7 +720,7 @@ impl FederatedIdentity {
         getrandom::fill(bytes.as_mut()).map_err(|_| "random-unavailable")?;
         let secret = Zeroizing::new(URL_SAFE_NO_PAD.encode(bytes.as_ref()));
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(secret.as_bytes()));
-        let login = login_start(config, &challenge, signup);
+        let login = login_start(config, &challenge, start);
         let callback = app.state::<crate::oauth_callback::OAuthCallbackHost>();
         let attempt = callback
             .begin_federated(login.to_string(), |url| {
@@ -991,17 +991,30 @@ fn due(now: i64, warn: i64, expires: i64, warned: bool) -> Due {
     }
 }
 
-/// The browser step's start URL. Only an explicit Create account asks for the
-/// sign-up screen: kgoose answers the hint with Auth0's sign-up even over an
-/// existing session, so a restart, which usually follows sign-up, must not.
-fn login_start(config: &Config, challenge: &str, signup: bool) -> url::Url {
+/// What the browser step asks of the identity provider (`login_start`).
+#[derive(Clone, Copy)]
+pub(crate) struct LoginStart {
+    /// The sign-up screen. Only an explicit Create account asks for it: kgoose
+    /// answers the hint with Auth0's sign-up even over an existing session, so
+    /// a restart, which usually follows sign-up, must not.
+    signup: bool,
+    /// Credentials over the browser's session, which would otherwise finish
+    /// the sign-in as the account Use a different account just left.
+    force_login: bool,
+}
+
+/// The browser step's start URL.
+fn login_start(config: &Config, challenge: &str, start: LoginStart) -> url::Url {
     let mut login = config.endpoint("/v1/login/start");
     login
         .query_pairs_mut()
         .append_pair("handoff_challenge", challenge)
         .append_pair("handoff_challenge_method", "S256");
-    if signup {
+    if start.signup {
         login.query_pairs_mut().append_pair("screen_hint", "signup");
+    }
+    if start.force_login {
+        login.query_pairs_mut().append_pair("prompt", "login");
     }
     login
 }
@@ -1017,10 +1030,13 @@ pub(crate) async fn federated_identity_sign_in<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     host: tauri::State<'_, FederatedIdentity>,
     signup: Option<bool>,
+    force_login: Option<bool>,
 ) -> Result<Snapshot, String> {
-    host.sign_in(&app, signup.unwrap_or(false))
-        .await
-        .map_err(String::from)
+    let start = LoginStart {
+        signup: signup.unwrap_or(false),
+        force_login: force_login.unwrap_or(false),
+    };
+    host.sign_in(&app, start).await.map_err(String::from)
 }
 #[tauri::command]
 pub(crate) fn federated_identity_cancel_sign_in(host: tauri::State<'_, FederatedIdentity>) {

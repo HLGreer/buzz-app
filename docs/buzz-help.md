@@ -36,6 +36,9 @@ the interface unless an available tool actually supports that action.
   and links it to the signed-in account. A device set up through Builderlab asks
   you to sign in again on relaunch; **Continue without signing in** opens Buzz
   without it. An existing private key can be entered from **Welcome back**.
+  Its **Use a different account** signs Buzz out of that account; the next
+  sign-in asks the browser to sign in again rather than reuse the account it
+  remembers.
   Builderlab setup backs the key up automatically;
   if backup fails temporarily, retry to complete setup. If backup is not supported
   by the build or account, choose **Continue without backup** to finish setup.

@@ -248,9 +248,14 @@ describe("an FI build", () => {
     ).rejects.toThrow(new Error(message));
   });
 
-  it.each([true, false])(
-    "asks the native sign-in for the sign-up screen only for Create account (signup: %s)",
-    async (signup) => {
+  it.each([
+    {},
+    { signup: true },
+    { forceLogin: true },
+    { signup: true, forceLogin: true },
+  ])(
+    "asks the native sign-in for the sign-up screen and a forced login only as Welcome chose (%o)",
+    async (options) => {
       vi.mocked(invoke).mockResolvedValueOnce(catalog(true));
       const fi = federatedFixture();
       fi.request.mockResolvedValueOnce({
@@ -261,9 +266,9 @@ describe("an FI build", () => {
       await firstRunCredential(
         new AbortController().signal,
         fi.service,
-        signup,
+        options,
       );
-      expect(vi.mocked(fi.service.signIn).mock.calls).toEqual([[{ signup }]]);
+      expect(vi.mocked(fi.service.signIn).mock.calls).toEqual([[options]]);
     },
   );
 
@@ -338,16 +343,17 @@ describe("an FI build", () => {
         fi.publish({ status: "signed-in", revision: "stored", failure: null });
         return fi.service.snapshot();
       });
+      const options = { signup: true, forceLogin: true };
       const credential = await firstRunCredential(
         new AbortController().signal,
         fi.service,
-        true,
+        options,
       );
       expect(credential.value).toBe("user:1");
-      // The renewal is the one that opens the browser: it keeps the choice.
+      // The renewal is the one that opens the browser: it keeps the choices.
       expect(vi.mocked(fi.service.signIn).mock.calls).toEqual([
-        [{ signup: true }],
-        [{ signup: true }],
+        [options],
+        [options],
       ]);
     });
 
