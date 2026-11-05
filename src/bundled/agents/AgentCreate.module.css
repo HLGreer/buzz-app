@@ -485,7 +485,9 @@
   min-width: 0;
 }
 .remoteSpeechWord {
-  white-space: nowrap;
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
 }
 .remoteSpeechCharacter {
   display: inline-block;
