@@ -8,6 +8,8 @@ import { useChannelWindow } from "../../features/relay/react";
 import { useRecoveryOwns } from "../../features/relay/RecoveryNotice";
 import { headRecovering } from "../../features/relay/live-recovery";
 import { clientMetrics } from "../../features/developer/client-metrics";
+import { CommunityWelcomeCard } from "../../features/communities/WelcomeCard";
+import type { CommunityReader } from "../../features/communities/service";
 import { Button } from "../../shared/design-system/ui/Button";
 import styles from "./Channels.module.css";
 
@@ -21,8 +23,17 @@ export const ChannelBody = memo(function ChannelBody({
   onOpenThread,
   navigation,
   onContentReady,
+  landing,
+  welcomeMessage,
+  communities,
 }: {
   onContentReady?(channelId: string): void;
+  /** The community's welcome channel: its timeline starts with a welcome. */
+  landing?: boolean | undefined;
+  /** Custom welcome text; absent shows the default. */
+  welcomeMessage?: string | undefined;
+  /** Names the community in the welcome. */
+  communities?: CommunityReader | undefined;
   cached: boolean;
   viewer?: string | undefined;
   navigation?: PageNavigation | undefined;
@@ -137,6 +148,15 @@ export const ChannelBody = memo(function ChannelBody({
       navigation={navigation}
       chatPresentation={solo}
       historyControl={solo ? "scroll" : "button"}
+      start={
+        landing && (
+          <CommunityWelcomeCard
+            communities={communities}
+            scope={queries.scope}
+            message={welcomeMessage}
+          />
+        )
+      }
     />
   );
 });

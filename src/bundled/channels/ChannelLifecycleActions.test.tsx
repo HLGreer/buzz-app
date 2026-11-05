@@ -33,6 +33,8 @@ function capability() {
     subscribe: () => () => {},
     observeRemoval: () => () => {},
     refreshVisibility: async () => {},
+    readLanding: vi.fn(),
+    setLanding: vi.fn(),
   } satisfies ChannelLifecycleCapability;
 }
 it("waits for fresh permission then hands the trigger to the existing confirmation, without writing", async () => {

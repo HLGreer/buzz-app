@@ -52,6 +52,8 @@ function capability() {
     subscribe: () => () => {},
     observeRemoval: () => () => {},
     refreshVisibility: async () => {},
+    readLanding: vi.fn(),
+    setLanding: vi.fn(),
   } satisfies ChannelLifecycleCapability;
 }
 it("waits silently for fresh permissions and preserves the last-owner boundary", async () => {
