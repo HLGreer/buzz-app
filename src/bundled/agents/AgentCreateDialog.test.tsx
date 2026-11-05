@@ -194,67 +194,58 @@ const remoteEcho = {
   remote: {},
 } as RegisteredAgentType;
 
-it("gates submission on the selected harness action, including configuration changes and sign-out during the introduction", async () => {
-  let access = (_ready: boolean) => {};
-  let configuration = (_ready: boolean) => {};
-  const protectedType: RegisteredAgentType = {
+it("places the provider action beside Harness and disables it while creating", async () => {
+  let finish = (_agent: Agent) => {};
+  const type: RegisteredAgentType = {
+    ...echo,
+    CreateAction: ({ disabled }) => (
+      <button type="button" disabled={disabled}>
+        Sign in
+      </button>
+    ),
+  };
+  const { dialog, user } = setup(
+    [type],
+    () =>
+      new Promise<Agent>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const action = within(dialog).getByRole("button", { name: "Sign in" });
+  const harness = within(dialog).getByRole("combobox", { name: "Harness" });
+  expect(harness.closest(".buzz-preference-row")).toContainElement(action);
+  expect(action).toBeEnabled();
+  await user.type(within(dialog).getByLabelText("Name"), "Nova");
+  await user.click(createButton());
+  expect(action).toBeDisabled();
+  await act(async () => finish(made));
+});
+
+it("keeps configuration readiness active during the remote introduction", async () => {
+  let report = (_ready: boolean) => {};
+  const type: RegisteredAgentType = {
     ...remoteEcho,
     CreateConfiguration: ({ harnessControl, onReadyChange }) => {
       useLayoutEffect(() => {
-        configuration = onReadyChange ?? (() => {});
-        onReadyChange?.(false);
+        report = onReadyChange ?? (() => {});
+        onReadyChange?.(true);
       }, [onReadyChange]);
       return harnessControl;
     },
-    CreateAction: ({
-      onReadyChange,
-    }: {
-      onReadyChange(ready: boolean): void;
-    }) => {
-      useLayoutEffect(() => {
-        access = onReadyChange;
-        onReadyChange(false);
-      }, [onReadyChange]);
-      return (
-        <button type="button" onClick={() => onReadyChange(true)}>
-          Sign in
-        </button>
-      );
-    },
   };
-  const { agents, dialog, user } = setup([protectedType, notes]);
+  const { agents, dialog, user } = setup([type]);
   await user.type(within(dialog).getByLabelText("Name"), "Nova");
-  expect(createButton()).toBeDisabled();
-  fireEvent.submit(within(dialog).getByRole("form", { name: "New agent" }));
-  expect(agents.create).not.toHaveBeenCalled();
-  expect(
-    screen.queryByRole("dialog", { name: "Meet your remote agent" }),
-  ).not.toBeInTheDocument();
-  await user.click(within(dialog).getByRole("button", { name: "Sign in" }));
-  expect(createButton()).toBeDisabled();
-  act(() => configuration(true));
-  expect(createButton()).toBeEnabled();
   await user.click(createButton());
-  const intro = await screen.findByRole("dialog", {
-    name: "Meet your remote agent",
-  });
+  const intro = screen.getByRole("dialog", { name: "Meet your remote agent" });
   const proceed = within(intro).getByRole("button", { name: "Let’s go" });
-  act(() => configuration(false));
-  expect(proceed).toBeDisabled();
-  act(() => configuration(true));
-  expect(proceed).toBeEnabled();
-  act(() => access(false));
+  act(() => report(false));
   expect(proceed).toBeDisabled();
   await user.click(proceed);
   expect(agents.create).not.toHaveBeenCalled();
+  act(() => report(true));
+  expect(proceed).toBeEnabled();
   await user.click(within(intro).getByRole("button", { name: "Back" }));
-  expect(createButton()).toBeDisabled();
-  const harness = within(dialog).getByRole("combobox", { name: "Harness" });
-  await user.click(harness);
-  await user.click(await screen.findByRole("option", { name: "Notes" }));
-  expect(createButton()).toBeEnabled();
-  await user.click(within(dialog).getByRole("combobox", { name: "Harness" }));
-  await user.click(await screen.findByRole("option", { name: "Builderlab" }));
+  act(() => report(false));
   expect(createButton()).toBeDisabled();
 });
 

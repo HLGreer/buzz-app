@@ -73,7 +73,6 @@ async function fixture(signedIn = true) {
   const submit = vi.fn();
   const ready = vi.fn();
   const Action = createCreationAction(session);
-  const accessReady = vi.fn();
   let draft = { ...EMPTY_CREATION };
   function Form() {
     const [config, setConfig] = useState(draft);
@@ -86,7 +85,7 @@ async function fixture(signedIn = true) {
           submit();
         }}
       >
-        <Action disabled={false} onReadyChange={accessReady} />
+        <Action disabled={false} />
         <CreateConfiguration
           config={config}
           onChange={setConfig}
@@ -107,7 +106,6 @@ async function fixture(signedIn = true) {
     pending,
     submit,
     ready,
-    accessReady,
     draft: () => draft,
     fail: (value: boolean) => {
       fail = value;
@@ -353,7 +351,7 @@ it("waits for explicit sign-in before loading the creation catalog", async () =>
   const h = await fixture(false);
   expect(h.acquire).not.toHaveBeenCalled();
   expect(h.request).not.toHaveBeenCalled();
-  expect(h.accessReady).toHaveBeenLastCalledWith(false);
+  expect(h.ready).toHaveBeenLastCalledWith(false);
   expect(
     screen.getByRole("button", { name: "Model: Choose a model" }),
   ).toBeDisabled();
@@ -369,12 +367,13 @@ it("waits for explicit sign-in before loading the creation catalog", async () =>
     ).toBeEnabled(),
   );
   expect(h.acquire).toHaveBeenCalledTimes(1);
-  expect(h.accessReady).toHaveBeenLastCalledWith(true);
+  // Sign-in enables choices; creation still waits for a model and thinking level.
+  expect(h.ready).toHaveBeenLastCalledWith(false);
   expect(
     screen.queryByRole("button", { name: "Sign in to Builderlab" }),
   ).not.toBeInTheDocument();
   await act(async () => h.session.signOut());
-  expect(h.accessReady).toHaveBeenLastCalledWith(false);
+  expect(h.ready).toHaveBeenLastCalledWith(false);
   expect(
     screen.getByRole("button", { name: "Model: Choose a model" }),
   ).toBeDisabled();
@@ -399,7 +398,7 @@ it("matches pane sign-in: spinner first, then browser guidance and cancellation 
   const Action = createCreationAction(session);
   render(
     <>
-      <Action disabled onReadyChange={() => {}} />
+      <Action disabled />
       <CreateConfiguration
         config={{ ...EMPTY_CREATION }}
         disabled
@@ -481,7 +480,7 @@ it("keeps account verification non-cancellable beyond the browser deadline", asy
     snapshot: () => checking,
     cancel,
   });
-  render(<Action disabled={false} onReadyChange={() => {}} />);
+  render(<Action disabled={false} />);
   await act(() => vi.advanceTimersByTimeAsync(30_000));
   const progress = screen.getByRole("button", {
     name: "Sign in to Builderlab",

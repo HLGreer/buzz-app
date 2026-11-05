@@ -52,18 +52,9 @@ export function creationConfig(value: unknown): CreationConfig {
 }
 
 export function createCreationAction(session: BuilderlabSession) {
-  return function CreationAction({
-    disabled,
-    onReadyChange,
-  }: {
-    disabled: boolean;
-    onReadyChange(ready: boolean): void;
-  }) {
+  return function CreationAction({ disabled }: { disabled: boolean }) {
     const login = useSyncExternalStore(session.subscribe, session.snapshot);
     const { pending, waiting } = useSignInProgress(login);
-    useLayoutEffect(() => {
-      onReadyChange(login.status === "signed-in");
-    }, [login.status, onReadyChange]);
     if (login.status === "signed-in") return null;
     return (
       <>

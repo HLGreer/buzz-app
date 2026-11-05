@@ -1,12 +1,5 @@
 // Avatar selection above the agent identity and type-owned setup fields.
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { randomAgentAvatar } from "../../features/agents/avatar-packs";
 import type {
   Agent,
@@ -169,18 +162,7 @@ export function AgentCreateDialog({
       ?.focus();
   }, [harnessId, type?.key]);
   const CreateAction = type?.CreateAction;
-  const [creationAccess, setCreationAccess] = useState<{
-    type: string;
-    ready: boolean;
-  }>();
-  const accessChanged = useCallback(
-    (ready: boolean) => setCreationAccess({ type: type?.key ?? "", ready }),
-    [type?.key],
-  );
-  const canCreate =
-    (!CreateAction ||
-      (creationAccess?.type === type?.key && creationAccess?.ready === true)) &&
-    (!Configuration || configurationReady);
+  const canCreate = !Configuration || configurationReady;
   const close = () => setOpen(false);
   const chooseModel = (item: RegisteredAgentType, next: unknown) => {
     setTypeKey(item.key);
@@ -260,11 +242,7 @@ export function AgentCreateDialog({
             onValueChange={choose}
           />
           {CreateAction && (
-            <CreateAction
-              key={type.key}
-              disabled={pending || avatarBusy}
-              onReadyChange={accessChanged}
-            />
+            <CreateAction key={type.key} disabled={pending || avatarBusy} />
           )}
         </div>
       }

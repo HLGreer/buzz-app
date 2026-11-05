@@ -786,11 +786,10 @@ export type AgentType<Config = unknown> = {
       onReadyChange?: (ready: boolean) => void;
     }
   >;
-  /** Compact provider-owned action beside Harness. Until it reports ready,
-   * the creation host disables submission; sign-in stays with the provider. */
+  /** Compact provider-owned action beside Harness. Readiness belongs to
+   * CreateConfiguration; this slot only presents the provider's action. */
   CreateAction?: ComponentType<{
     disabled: boolean;
-    onReadyChange(ready: boolean): void;
   }>;
   /** Provider-owned account notice, pinned across the agent's tabs.
    * Return null when no account notice is needed. The active settings view may
