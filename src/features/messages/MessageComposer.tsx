@@ -3579,7 +3579,7 @@ function Composer({
         {(error || editing.error) && (
           <p role="alert">{error ?? editing.error}</p>
         )}
-        {stickyPicks && (
+        {stickyPicks && (pickReadPending || pickReadFailed) && (
           <LoadingRegion
             pending={pickReadPending}
             label="Loading saved model and effort…"
