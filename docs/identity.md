@@ -44,11 +44,10 @@ its first sign-in server, and a community is hosted by it when that server's
 end reads native's compiled server list and matches with native's own rules
 (`community-hosts.ts`, kept equal to `matches_relay` by shared fixtures): an
 exact host, or one label under a wildcard on the default port. A relay's NIP-11
-`self` key never decides. A build without a sign-in server whose
-`BUZZ_BUILDERLAB_URL` is the built-in Builderlab (`isBuiltInBuilderlab`: the
-pinned development broker, or FI set empty) matches the built-in server's
-`communityHosts` from `built-in-server.json`, as on main; with another or an
-empty Builderlab URL it hosts none. The answer applies only to the lookup that
+`self` key never decides. A build without a sign-in server (FI set empty,
+another or an empty `BUZZ_BUILDERLAB_URL`, or `tauri dev` with the development
+broker pinned) has no Builderlab sign-in, so it hosts none, whatever its
+Builderlab URL. The answer applies only to the lookup that
 asked: Cancel, another address or leaving the screen discards it. Such a
 community requires Builderlab sign-in, so it starts at once there, exactly as
 the welcome screen's own button does, and the welcome screen shows it pending
@@ -58,9 +57,7 @@ instead. Cancel sign-in, and **Back** from a sign-in or setup failure, return
 to the welcome screen with the address kept and do not look it up again. A
 canceled sign-in that finishes later is ignored: it cannot restart setup or use
 a later sign-in's account. Any other found community, including one run by
-another Builderlab deployment, and every community in a build with neither a
-sign-in server nor the built-in Builderlab URL, pauses on **Connect to
-{host}**: nothing a relay publishes names its sign-in portal, so the user
+another Builderlab deployment, pauses on **Connect to {host}**: nothing a relay publishes names its sign-in portal, so the user
 chooses. The page says only that Buzz relies on a key for the user's identity; its choices are
 **Sign in with Builderlab**, which signs in at `BUZZ_BUILDERLAB_URL` and
 continues exactly as the welcome screen's own button does (the landing shows
@@ -71,7 +68,9 @@ the address;
 signed in, continues from there with no link step and no backup offer (once the
 app opens, the key's backup choice is
 [filled in like any missing one](#automatic-backup-consent-hooks)); **Back**
-returns to the welcome screen with the address kept.
+returns to the welcome screen with the address kept. A build without a sign-in
+server skips that page: with no Builderlab sign-in to offer, every found
+community opens **Enter your private key**.
 
 Success continues to **Getting ready**, with an animated bee. Detailed operation
 status remains available to screen readers without a visible second line. It first runs **Checking your account**, a real read of the
@@ -983,16 +982,24 @@ standard endpoints defined by NIP-FI/NIP-FA. NIP-FI defines the
 `nip-fi-agent+jwt` assertion class and owner checks; that does not establish
 interoperability with another adapter's enrollment endpoints.
 
-Builderlab's remote-agent, hosted-community, known-community, Decisions, Apps
-viewer and backup calls all go through the native FI session; there is no other
-Builderlab sign-in, except the development broker's in live development. The renderer
-names only the public session revision. For API calls, native checks the
-plugin's authority/operation grant, enabled artifact revision, live
-registration and that revision; the Apps viewer exchange and backup check only
-that the revision is current. Each sends the adapter session as
-`Authorization: Bearer` to the identity origin only. A 401 fails that call
-without ending the session; native then checks the adapter's `GET /v1/session`
-once and ends the session only if the adapter refuses it there. Builderlab's
+Builderlab's remote-agent, hosted-community, known-community, Decisions, Apps,
+Apps viewer and backup calls all use the native FI session of the build's first
+sign-in server. The only other Builderlab sign-ins are the development broker's
+in live development and key recovery's own browser sign-in
+([above](#automatic-backup-and-optional-recovery)), which may pick a different
+account. The renderer names only the public session revision. For API calls,
+native checks the plugin's authority/operation grant, enabled artifact
+revision, live registration and that revision; the Apps viewer exchange and
+backup check only that the revision is current. Apps agent tools send the
+session to the Apps control plane (below); other API calls and Decisions send
+it as `Authorization: Bearer` to the server's identity origin. The Apps viewer
+exchange sends it as `X-BB-Session-Credential` to the identity origin's
+hosted-site native-session route, with no `Authorization` header, which that
+route refuses. Backup sends it as `Authorization: Bearer` to the backup
+service, used only when that service is the identity origin and API base path.
+A 401 on an API or Decisions call fails that call without ending the session;
+native then checks the adapter's `GET /v1/session` once and ends the session
+only if the adapter refuses it there. Builderlab's
 Settings card has no sign-out of its own: it links to Identity →
 Organization sign-in, which ends the shared session.
 

@@ -40,7 +40,8 @@ const INVALID: &str = "Invalid BUZZ_BUILD_FEDERATED_IDENTITY_CONFIG";
 /// The sign-in server every build trusts unless it opts out: Builderlab for
 /// the public hosted communities. Shaped like the descriptors that builds add.
 #[allow(dead_code)] // Compiled in by build.rs.
-/// The front end reads the same file (`builderlab-hosted.ts`).
+/// Only native reads it; `BUILT_IN_BUILDERLAB` in vite.config.ts repeats its
+/// origin.
 pub(crate) const BUILT_IN: &str =
     include_str!("../../../src/features/federated-identity/built-in-server.json");
 
@@ -61,10 +62,10 @@ const MAX_SERVERS: usize = 16;
 /// Unset: the built-in server only. Empty: none. A descriptor or a list of
 /// them: those servers, then the built-in one. A Builderlab URL for another
 /// deployment turns the built-in server off when nothing is added, so that
-/// build keeps its own Builderlab sign-in. The first server is the build's
-/// Builderlab, used by the Builderlab plugin. A development build with a
-/// pinned viewer (`dev_viewer`) and nothing added keeps the development
-/// broker's Builderlab sign-in, as before the built-in server.
+/// build has no Builderlab sign-in outside live development. The first server
+/// is the build's Builderlab, used by the Builderlab plugin. A development
+/// build with a pinned viewer (`dev_viewer`) and nothing added keeps the
+/// development broker's Builderlab sign-in, as before the built-in server.
 #[allow(dead_code)] // Called by build.rs.
 pub(crate) fn compiled(
     added: Option<&str>,
