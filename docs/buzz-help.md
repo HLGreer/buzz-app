@@ -267,6 +267,10 @@ that agent in Buzz; they do not notify the external app through this connection.
   **Settings → Shortcuts → Sending messages → Send with ⌘ Enter** (Ctrl+Enter
   outside Apple platforms) swaps that on this device: Enter adds a line and
   ⌘/Ctrl+Enter sends. It starts off.
+- **Settings → Shortcuts → Editing messages → Edit last message with Up Arrow**
+  makes plain Up Arrow edit your most recent editable message when the channel
+  or thread composer is empty. This device-local choice starts off. On macOS,
+  Command+Up Arrow keeps editing directly from an empty composer with either choice.
 - **File sharing** is available through **Attach files** in the composer when
   uploads are available. Files and media are shared with the conversation's
   members. If an upload fails, its attachment shows the reason, **Retry**, and
@@ -289,7 +293,7 @@ that agent in Buzz; they do not notify the external app through this connection.
 - **Keyboard shortcuts** follow Slack where they can. Press ⌘/ (Ctrl+/ on
   Windows and Linux) to open **Settings → Shortcuts**, which lists them, lets
   you change most of them and also shows the fixed message-formatting keys. In
-  an empty composer, Up selects a message. Then E edits it, R reacts, T or →
+  an empty composer, Up selects a message by default. Then E edits it, R reacts, T or →
   replies in thread, U marks it unread, and Delete deletes your own message.
   ⌘1–9 switch communities, and ⇧Esc marks everything read. If a plugin uses
   the same key as another shortcut, Settings → Shortcuts marks it "Also used
