@@ -827,6 +827,53 @@ fn signed_in_at(
 }
 
 #[tokio::test]
+async fn signing_in_adopts_a_session_another_copy_saved() {
+    let (base, server) = adapter(vec![
+        serde_json::json!({"expires_at":"2099-01-01T00:00:00Z","email":"a@example.com"}),
+    ])
+    .await;
+    let store = Arc::new(Memory::default());
+    let host = at_adapter(store.clone(), base);
+    assert!(host.restore().await.status == Status::SignedOut);
+    // Another Buzz copy sharing the item signs in after this one restored.
+    let other = record();
+    *store.raw.lock().unwrap() = Some(other.raw.clone());
+    // The fixture's plain-HTTP login URL fails a browser sign-in at once.
+    let app = tauri::test::mock_builder()
+        .manage(crate::oauth_callback::OAuthCallbackHost::default())
+        .build(crate::app_context())
+        .unwrap();
+    let snapshot = host.sign_in(app.handle()).await.unwrap();
+    assert!(snapshot.status == Status::SignedIn);
+    assert_eq!(snapshot.failure, None);
+    assert_eq!(snapshot.revision, other.record.revision);
+    assert_eq!(snapshot.email.as_deref(), Some("a@example.com"));
+    let seen = server.await.unwrap();
+    assert_eq!(seen[0].target, "GET /mount/v1/session HTTP/1.1");
+}
+
+#[tokio::test]
+async fn signing_out_after_another_copy_ended_or_replaced_the_session_is_signed_out() {
+    for newer in [None, Some(record())] {
+        let store = Arc::new(Memory::default());
+        let (host, _) = signed_in_at(
+            store.clone(),
+            "https://identity.example".into(),
+            "a@example.com",
+        );
+        // Another Buzz copy sharing the item signed out, or in again.
+        *store.raw.lock().unwrap() = newer.as_ref().map(|session| session.raw.clone());
+        let snapshot = host.sign_out().await;
+        assert!(snapshot.status == Status::SignedOut);
+        assert_eq!(snapshot.failure, None);
+        assert_eq!(
+            store.raw.lock().unwrap().as_deref(),
+            newer.as_ref().map(|session| &*session.raw)
+        );
+    }
+}
+
+#[tokio::test]
 async fn the_expiry_watch_warns_then_ends_the_session_at_expiry() {
     let store = Arc::new(Memory::default());
     let (host, _) = signed_in_at(

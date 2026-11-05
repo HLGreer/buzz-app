@@ -76,6 +76,11 @@ the interface unless an available tool actually supports that action.
   lists each one you're signed in to, with the communities it's used by, and
   each **Sign out** ends only that server's sign-in. **Sign out of Buzz** still
   ends them all.
+- Buzz apps on this computer that use the same organization server, such as
+  Buzz and Buzz Staging, share its sign-in, like the private key. After you sign
+  in in one, **Sign in** in the other finishes without the browser. Signing out
+  or switching account in one also applies to the other, but an app that's
+  already open keeps its sign-in until it restarts.
 - If a community doesn't accept the account you signed in with, its prompt
   names the server and offers **Switch account**: Buzz signs out of that server
   only and opens its sign-in again, so other servers stay signed in. It also

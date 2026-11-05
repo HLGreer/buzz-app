@@ -734,6 +734,20 @@ impl FederatedIdentity {
         if !self.current(&observed.revision) {
             return Ok(self.snapshot());
         }
+        // Other Buzz copies share this item: when one signed in after this
+        // copy restored, restore its session instead of a browser sign-in.
+        let signed_out = {
+            let state = self.state();
+            state.restored && state.session.is_none()
+        };
+        let attempt =
+            if signed_out && matches!(self.storage(|store| store.read()).await, Ok(Some(_))) {
+                let mut state = self.state();
+                state.restored = false;
+                state.restore_attempt
+            } else {
+                attempt
+            };
         let observed = self.restore_locked(attempt).await;
         let (revision, cancel, renewing) = {
             let mut state = self.state();
@@ -1015,7 +1029,13 @@ impl FederatedIdentity {
     ) -> Snapshot {
         let _operation = self.0.operation.lock().await;
         let result = if let Some(session) = session {
-            self.remove(session).await
+            match self.remove(session).await {
+                // Another Buzz copy already ended or replaced this session.
+                // Its refusal marker stays, so it can't restore here, and
+                // the newer session is left alone.
+                Err(failure) if failure.code == "session-changed" => Ok(()),
+                result => result,
+            }
         } else {
             // Also retries an incomplete deletion or sign-out during restore.
             self.storage(|store| {

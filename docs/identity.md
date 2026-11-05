@@ -914,7 +914,14 @@ replacement. Local expiry, cancellation, and sign-out fence stale work.
 FI records use the OS secure-store service
 `xyz.block.buzz.desktop.federated-session` (with `.debug` for Rust debug
 builds), keyed by profile and each server's deployment fingerprint, so a build's
-first server keeps the sessions it saved as the only server. On macOS one item per
+first server keeps the sessions it saved as the only server. Neither includes the
+app identifier: like the human key, copies in one debug/release namespace that
+use the same server (Buzz and Buzz Staging both use the public server) share its
+session. A signed-out copy reads the item again before a browser sign-in and
+adopts a session another copy saved. A sign-out after another copy already ended
+or replaced the session finishes signed out and leaves the newer session alone.
+A signed-in copy keeps its session until it restarts, even after another copy
+signs out. On macOS one item per
 profile and deployment holds the session and every agent grant, so Keychain
 prompts once; Windows and Linux keep one item per record. Older macOS items
 move into it on read. This is a one-way development migration: close older
