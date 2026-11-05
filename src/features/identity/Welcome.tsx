@@ -77,6 +77,7 @@ import {
   checkBackup,
   checkCreation,
   createKey,
+  keyForAccount,
   createSetup,
   findCommunities,
   importKey,
@@ -363,7 +364,9 @@ export function Welcome({
   }, [page]);
   const legacyOffer = useLegacyIdentityOffer(
     identity,
-    page === "landing" && !relaunch && auth.status !== "pending",
+    // Builderlab setup uses old Buzz's identity by itself, so only the
+    // self-hosted route, behind Other options, offers it.
+    otherOptions && !relaunch && auth.status !== "pending",
   );
   if (inApp) {
     // Already in the app: a request has nothing to finish, so drop it.
@@ -434,11 +437,11 @@ export function Welcome({
                 ]
               : [];
           // No key on the account: this device's key becomes the account's,
-          // or a new one is made for it, with no choice to make.
+          // then old Buzz's from this device, or a new one, with no choice to make.
           if (!checkedKey)
             return {
               next: [
-                ...(onDevice ? [] : [createKey(identity)]),
+                ...(onDevice ? [] : [keyForAccount(identity)]),
                 linkKey(identity, current),
                 backupKey(current),
                 ...finish(undefined),
@@ -1000,6 +1003,7 @@ export function Welcome({
             }, true)
           }
         />
+        {legacyOffer}
       </OnboardingScreen>
     );
   // A device set up through Builderlab before leads with Sign in; a new
@@ -1070,7 +1074,6 @@ export function Welcome({
             </Button>
           </>
         )}
-        {legacyOffer}
       </OnboardingScreen>
     );
   // The key pages and Join a community bring their own onboarding layouts;

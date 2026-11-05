@@ -1170,7 +1170,10 @@ it.each([
   },
 );
 
-it("old Buzz's identity is offered over the landing once its folder is found, read only on Continue, and enters the app with no sign-in", async () => {
+const otherOptions = async (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(await screen.findByRole("button", { name: "Other options" }));
+
+it("old Buzz's identity is offered only behind Other options, read only on Continue, and enters the app with no sign-in", async () => {
   const legacy = deferred<boolean>();
   const imported = deferred<string>();
   const connect = vi.fn();
@@ -1183,8 +1186,11 @@ it("old Buzz's identity is offered over the landing once its folder is found, re
   // The landing's actions do not wait on the folder check.
   expect(await screen.findByRole("button", { name: SIGN_IN })).toBeEnabled();
   expect(invoke).toHaveBeenCalledWith("identity_legacy_available");
-  expect(screen.queryByRole("alertdialog")).toBeNull();
   legacy.resolve(true);
+  await legacyChecked(legacy.promise);
+  // Builderlab setup brings old Buzz's identity over by itself, so the landing never asks.
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  await otherOptions(user);
   const offer = await legacyOffer();
   expect(offer).toHaveAccessibleDescription(
     "Old Buzz was used on this device. Continue with the identity it saved instead of setting up a new one. Your computer may ask you to allow access.",
@@ -1216,33 +1222,22 @@ it("old Buzz's identity is offered over the landing once its folder is found, re
 });
 
 it.each(["Not now", "Escape"])(
-  "%s dismisses the old Buzz offer for this launch: the landing keeps focus on its heading, nothing is imported, and a return from another page does not reopen it",
+  "%s dismisses the old Buzz offer behind Other options, and nothing is imported",
   async (dismissal) => {
-    const connect = vi
-      .fn()
-      .mockRejectedValue(new Error("Browser could not open."));
-    const { identity } = legacyLaunch(
-      Promise.resolve(true),
-      undefined,
-      connect,
-    );
+    const { identity } = legacyLaunch(Promise.resolve(true));
     const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Other options" }),
+    );
     const offer = await legacyOffer();
     await focusInside(offer);
     if (dismissal === "Escape") await user.keyboard("{Escape}");
     else
       await user.click(within(offer).getByRole("button", { name: "Not now" }));
-    await waitFor(() => expect(welcomeHeading()).toHaveFocus());
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(landingSignIn()).toBeEnabled();
-    await user.click(landingSignIn());
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(
-      await screen.findByRole("heading", { name: "Couldn’t sign in" }),
+      screen.getByRole("heading", { name: "Join a community" }),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(welcomeHeading()).toHaveFocus();
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-    // The folder was checked once, and old Buzz's identity never read.
     expect(commands()).toEqual([
       "identity_restore",
       "identity_legacy_available",
@@ -1260,6 +1255,9 @@ it("a failed bring-over shows its error in the dialog, and Continue tries again"
     .mockResolvedValueOnce(viewer);
   const { identity } = legacyLaunch(Promise.resolve(true), imported);
   const user = userEvent.setup();
+  await user.click(
+    await screen.findByRole("button", { name: "Other options" }),
+  );
   const offer = await legacyOffer();
   const bringOver = within(offer).getByRole("button", { name: BRING_OVER });
   await user.click(bringOver);
@@ -1280,44 +1278,56 @@ it("a failed bring-over shows its error in the dialog, and Continue tries again"
   identity.dispose();
 });
 
-it("the old Buzz offer waits through a pending sign-in and setup, then opens with focus over the landing setup returns to, without setup's error", async () => {
-  const legacy = deferred<boolean>();
+it("Builderlab sign-in uses old Buzz's identity for an account with none, without asking", async () => {
   const attempt = deferred<Credential>();
   const { identity } = legacyLaunch(
-    legacy.promise,
-    undefined,
+    Promise.resolve(true),
+    () => Promise.resolve(viewer),
+    () => attempt.promise,
+  );
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: SIGN_IN }));
+  await act(async () => attempt.resolve(credential));
+  expect(
+    await screen.findByRole("heading", { name: "Connect to a community" }),
+  ).toBeVisible();
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(identity.snapshot()).toEqual({ status: "ready", viewer });
+  expect(commands()).toEqual([
+    "identity_restore",
+    "identity_legacy_available",
+    "identity_legacy_available",
+    "identity_import_legacy",
+  ]);
+  identity.dispose();
+});
+
+it("Builderlab sign-in makes a new identity when old Buzz's can't be read", async () => {
+  const attempt = deferred<Credential>();
+  const { identity } = legacyLaunch(
+    Promise.resolve(true),
+    () => Promise.reject("The user denied access to old Buzz's key"),
     () => attempt.promise,
   );
   const answers = vi.mocked(invoke).getMockImplementation();
   if (!answers) throw new Error("legacyLaunch installed no answers");
   vi.mocked(invoke).mockImplementation((command, args) =>
     command === "identity_create"
-      ? Promise.reject("Keychain refused to save the key")
+      ? Promise.resolve(viewer)
       : answers(command, args),
   );
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: SIGN_IN }));
-  expect(screen.getByRole("button", { name: "Other options" })).toBeEnabled();
-  legacy.resolve(true);
-  await legacyChecked(legacy.promise);
-  // An import now would lift the gate under the pending sign-in.
-  expect(screen.queryByRole("alertdialog")).toBeNull();
   await act(async () => attempt.resolve(credential));
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Keychain refused to save the key",
-  );
-  expect(screen.queryByRole("alertdialog")).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Back" }));
-  // The landing's heading focus yields to the dialog opening over it, and
-  // the failed creation's error stays out of it.
-  const offer = await legacyOffer();
-  await focusInside(offer);
-  expect(within(offer).queryByRole("alert")).toBeNull();
-  await user.click(within(offer).getByRole("button", { name: "Not now" }));
-  await waitFor(() => expect(welcomeHeading()).toHaveFocus());
+  expect(
+    await screen.findByRole("heading", { name: "Connect to a community" }),
+  ).toBeVisible();
+  expect(identity.snapshot()).toEqual({ status: "ready", viewer });
   expect(commands()).toEqual([
     "identity_restore",
     "identity_legacy_available",
+    "identity_legacy_available",
+    "identity_import_legacy",
     "identity_create",
   ]);
   identity.dispose();
@@ -1328,6 +1338,7 @@ it("after Sign out, the next launch offers old Buzz's identity again while its f
   const first = legacyLaunch(Promise.resolve(true), () =>
     Promise.resolve(viewer),
   );
+  await otherOptions(user);
   await user.click(
     within(await legacyOffer()).getByRole("button", { name: BRING_OVER }),
   );
@@ -1337,6 +1348,9 @@ it("after Sign out, the next launch offers old Buzz's identity again while its f
   first.identity.dispose();
   vi.mocked(invoke).mockClear();
   const { identity } = legacyLaunch(Promise.resolve(true));
+  await user.click(
+    await screen.findByRole("button", { name: "Other options" }),
+  );
   expect(await legacyOffer()).toBeVisible();
   expect(commands()).toEqual(["identity_restore", "identity_legacy_available"]);
   identity.dispose();
@@ -1346,7 +1360,7 @@ it("after Sign out, the next launch offers old Buzz's identity again while its f
  * A relay that answers the two unauthenticated reads a landing URL triggers,
  * before any key exists. `info` holds the NIP-11 answer so the page can be
  * observed waiting on it; the policy is missing, as on most deployments.
- * `created` holds key creation so "Creating your key…" can be observed.
+ * `created` holds key creation so "Preparing your identity…" can be observed.
  */
 function landingRelay(
   origin = "https://relay.example.com:8443",
@@ -1634,6 +1648,7 @@ it("Sign in with Builderlab from the choice signs in at the build portal, runs t
     "identity_legacy_available",
     "relay_http",
     "relay_http",
+    "identity_legacy_available",
     "identity_create",
     "relay_http",
     "relay_http",
@@ -2238,7 +2253,9 @@ it("Sign in with Builderlab runs sign-in, creates the key mid-setup, and lands o
   await release([]);
   // The lookup found nothing and the account has no key: setup goes on to
   // create one by itself, with no choice to make.
-  expect(screen.getByRole("status")).toHaveTextContent("Creating your key…");
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Preparing your identity…",
+  );
   expect(invoke).toHaveBeenCalledWith("identity_create", {});
   expect(bind).not.toHaveBeenCalled();
   await act(async () => created.resolve(viewer));
@@ -2274,6 +2291,7 @@ it("Sign in with Builderlab runs sign-in, creates the key mid-setup, and lands o
   expect(backupStatus).toHaveBeenCalledTimes(1);
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
     "identity_restore",
+    "identity_legacy_available",
     "identity_legacy_available",
     "identity_create",
   ]);
@@ -2408,6 +2426,7 @@ it("a link that fails after the key is created blocks setup with only Try again,
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
     "identity_restore",
     "identity_legacy_available",
+    "identity_legacy_available",
     "identity_create",
   ]);
   identity.dispose();
@@ -2478,6 +2497,7 @@ it("a backup that times out after the key is made offers Try again, which re-run
     "identity_legacy_available",
     "relay_http",
     "relay_http",
+    "identity_legacy_available",
     "identity_create",
     "relay_http",
     "relay_http",
@@ -4455,6 +4475,7 @@ it("a key creation failure stops setup and Back returns to the first-launch scre
   vi.mocked(invoke)
     .mockResolvedValueOnce(null)
     .mockResolvedValueOnce(false)
+    .mockResolvedValueOnce(false)
     .mockRejectedValueOnce("Keychain refused to save the key");
   const connect = vi.fn().mockResolvedValue(credential);
   const { backupStatus, release } = gatedStatus();
@@ -4495,6 +4516,7 @@ it("a key creation failure stops setup and Back returns to the first-launch scre
   expect(landingSignIn()).toBeEnabled();
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
     "identity_restore",
+    "identity_legacy_available",
     "identity_legacy_available",
     "identity_create",
   ]);
@@ -6543,6 +6565,7 @@ it("the development seed links and backs up a created key without a request, a n
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
     "identity_restore",
     "identity_legacy_available",
+    "identity_legacy_available",
     "identity_create",
   ]);
   identity.dispose();
@@ -6586,6 +6609,7 @@ it("a development seed's backup kind fails the backup with that kind's page, sti
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
     "identity_restore",
     "identity_legacy_available",
+    "identity_legacy_available",
     "identity_create",
   ]);
   identity.dispose();
@@ -6628,6 +6652,7 @@ it("a development seed's fail-once backup fails only the first backup, and Try a
   ).toBeVisible();
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
     "identity_restore",
+    "identity_legacy_available",
     "identity_legacy_available",
     "identity_create",
   ]);

@@ -73,6 +73,26 @@ function saved(identity: Identity) {
   );
 }
 
+/**
+ * The key for an account that has none: old Buzz's, when it was used on this
+ * device, so someone who used Buzz before stays the same person; otherwise a
+ * new one. Reading old Buzz's secure storage may bring up an OS prompt, and if
+ * it can't be read a new key is made rather than stopping setup.
+ */
+export function keyForAccount(identity: Identity): SetupStep {
+  return {
+    label: "Preparing your identity…",
+    run: async () => {
+      if (await identity.legacyAvailable().catch(() => false)) {
+        await identity.importLegacy();
+        if (identity.snapshot().status === "ready") return;
+      }
+      await identity.create();
+      saved(identity);
+    },
+  };
+}
+
 /** Creates a key on this device, which the account steps then act on. */
 export function createKey(identity: Identity): SetupStep {
   return {
