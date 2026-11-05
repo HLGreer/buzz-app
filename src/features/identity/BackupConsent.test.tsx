@@ -45,6 +45,7 @@ const publicServers = async () =>
       failure: null,
       expiresAt: null,
       expiring: false,
+      cleanup: false,
     },
   ] as const;
 const HOSTED = "https://communities.buzz.xyz";

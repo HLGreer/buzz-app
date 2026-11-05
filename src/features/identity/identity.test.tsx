@@ -1697,6 +1697,7 @@ const publicServers = async (): Promise<SessionSnapshot[]> => [
     failure: null,
     expiresAt: null,
     expiring: false,
+    cleanup: false,
   },
 ];
 

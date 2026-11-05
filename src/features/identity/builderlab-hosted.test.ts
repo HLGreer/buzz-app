@@ -22,6 +22,7 @@ const server = (id: string, communityHosts: string[]) =>
     failure: null,
     expiresAt: null,
     expiring: false,
+    cleanup: false,
   }) satisfies SessionSnapshot;
 const PUBLIC = server("bb-public", [
   "*.communities.buzz.xyz",

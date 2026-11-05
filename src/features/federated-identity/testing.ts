@@ -26,6 +26,7 @@ export function federatedFixture(
     failure: null,
     expiresAt: null,
     expiring: false,
+    cleanup: false,
   };
   const listeners = new Set<() => void>();
   const publish = (next: Partial<SessionSnapshot>) => {
@@ -101,6 +102,7 @@ export function forwardingSession(
     failure: null,
     expiresAt: null,
     expiring: false,
+    cleanup: false,
   };
   return {
     snapshot: () => snapshot,

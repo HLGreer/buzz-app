@@ -563,7 +563,11 @@ it("keeps a per-server sign-out that native couldn't finish visible, named, with
   pub.publish({ status: "signed-in", email: "will@example.com" });
   // Native resolves a storage failure as an unavailable snapshot.
   vi.mocked(pub.service.signOut).mockImplementation(async () => {
-    pub.publish({ status: "unavailable", failure: "storage-denied" });
+    pub.publish({
+      status: "unavailable",
+      failure: "storage-denied",
+      cleanup: true,
+    });
   });
   render(
     <IdentitySettings
@@ -587,7 +591,7 @@ it("keeps a per-server sign-out that native couldn't finish visible, named, with
   expect(screen.getByText("Block (block.builderlab.xyz)")).toBeVisible();
   expect(block.service.snapshot().status).toBe("signed-in");
   vi.mocked(pub.service.signOut).mockImplementation(async () => {
-    pub.publish({ status: "signed-out", failure: null });
+    pub.publish({ status: "signed-out", failure: null, cleanup: false });
   });
   await user.click(screen.getByRole("button", { name: "Try again" }));
   expect(pub.service.signOut).toHaveBeenCalledTimes(2);
@@ -600,7 +604,11 @@ it("restores an unfinished per-server sign-out's Try again when Settings opens a
   block.publish({ status: "signed-in", email: "will@block.xyz" });
   pub.publish({ status: "signed-in", email: "will@example.com" });
   vi.mocked(pub.service.signOut).mockImplementation(async () => {
-    pub.publish({ status: "unavailable", failure: "storage-denied" });
+    pub.publish({
+      status: "unavailable",
+      failure: "storage-denied",
+      cleanup: true,
+    });
   });
   const settings = () => (
     <IdentitySettings
@@ -626,11 +634,57 @@ it("restores an unfinished per-server sign-out's Try again when Settings opens a
   );
   expect(screen.getByText("Block (block.builderlab.xyz)")).toBeVisible();
   vi.mocked(pub.service.signOut).mockImplementation(async () => {
-    pub.publish({ status: "signed-out", failure: null });
+    pub.publish({ status: "signed-out", failure: null, cleanup: false });
   });
   await user.click(screen.getByRole("button", { name: "Try again" }));
   expect(pub.service.signOut).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+// A failed restore keeps a stored session that may still be valid.
+it("offers no sign-out retry for a server whose restore failed", async () => {
+  const { block, pub, root, servers } = twoServers();
+  block.publish({ status: "signed-in", email: "will@block.xyz" });
+  pub.publish({ status: "unavailable", failure: "network-unavailable" });
+  render(
+    <IdentitySettings
+      viewer={viewer}
+      federatedIdentity={root}
+      memberships={memberships}
+      servers={servers}
+    />,
+    { wrapper: ToastProvider },
+  );
+  expect(await screen.findByText("Block (block.builderlab.xyz)")).toBeVisible();
+  expect(screen.queryByText(/Couldn’t sign out/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  expect(pub.service.signOut).not.toHaveBeenCalled();
+});
+
+it("shows the first server's failed restore as its own recovery text", async () => {
+  const { block, root, servers } = twoServers();
+  block.publish({ status: "unavailable", failure: "network-unavailable" });
+  const listed = vi.fn(servers);
+  render(
+    <IdentitySettings
+      viewer={viewer}
+      federatedIdentity={root}
+      servers={listed}
+    />,
+    { wrapper: ToastProvider },
+  );
+  // Settings reads each server's session only once the list arrives.
+  await waitFor(() => expect(listed).toHaveBeenCalledOnce());
+  await act(async () => {
+    await listed.mock.results[0]?.value;
+  });
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    /^Sign-in did not finish\. Try again\.$/,
+  );
+  // Neither a sign-out retry nor a sign-in while the record is unchecked.
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+  expect(block.service.signOut).not.toHaveBeenCalled();
 });
 
 it("shows only the account's linked backed-up key with its last activity, read-only", async () => {

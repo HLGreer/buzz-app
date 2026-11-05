@@ -283,6 +283,8 @@ async fn failed_sign_out_refuses_the_record_on_restart_until_deletion_succeeds()
     let signed_out = host.sign_out().await;
     assert!(signed_out.status == Status::Unavailable);
     assert_eq!(signed_out.failure, Some("storage-denied"));
+    // Settings offers Sign out again for it.
+    assert_eq!(serde_json::to_value(&signed_out).unwrap()["cleanup"], true);
     assert!(!host.current(&old_revision));
     assert!(host.state().session.is_none());
     assert_eq!(
@@ -336,8 +338,25 @@ async fn corrupt_storage_is_unavailable_and_public_snapshots_have_no_secret() {
         state.snapshot.status = Status::SignedIn;
     }
     let public = serde_json::to_value(host.snapshot()).unwrap();
-    assert_eq!(public.as_object().unwrap().len(), 7);
+    assert_eq!(public.as_object().unwrap().len(), 8);
     assert!(!public.to_string().contains("fixture-session-token"));
+}
+
+#[tokio::test]
+async fn a_restore_that_fails_upstream_keeps_the_record_and_is_not_an_unfinished_sign_out() {
+    let store = Arc::new(Memory::default());
+    let session = record();
+    *store.raw.lock().unwrap() = Some(session.raw.clone());
+    let (base, server) =
+        adapter_with_status(vec![(503, serde_json::json!({"error":"unavailable"})); 3]).await;
+    let host = at_adapter(store.clone(), base);
+    let snapshot = host.restore().await;
+    assert!(snapshot.status == Status::Unavailable);
+    assert_eq!(snapshot.failure, Some("network-unavailable"));
+    // Signing out would delete a session that may still be valid.
+    assert_eq!(serde_json::to_value(&snapshot).unwrap()["cleanup"], false);
+    assert_eq!(store.raw.lock().unwrap().as_deref(), Some(&*session.raw));
+    server.await.unwrap();
 }
 
 #[tokio::test]
@@ -870,6 +889,40 @@ async fn signing_out_after_another_copy_ended_or_replaced_the_session_is_signed_
             store.raw.lock().unwrap().as_deref(),
             newer.as_ref().map(|session| &*session.raw)
         );
+    }
+}
+
+#[tokio::test]
+async fn an_expired_session_ends_without_removing_a_newer_one_another_copy_saved() {
+    let mut expired = record();
+    let session = Arc::get_mut(&mut expired).unwrap();
+    session.record.expires_at = "2000-01-01T00:00:00Z".into();
+    session.raw = Zeroizing::new(serde_json::to_vec(&session.record).unwrap());
+    let newer = record();
+    // Another Buzz copy replaced the record; or the removal itself fails.
+    for (stored, denied) in [(&newer, false), (&expired, true)] {
+        let store = Arc::new(Memory::default());
+        *store.raw.lock().unwrap() = Some(stored.raw.clone());
+        store.denied.store(denied, Ordering::SeqCst);
+        let host = host(store.clone());
+        {
+            let mut state = host.state();
+            state.session = Some(expired.clone());
+            state.snapshot.status = Status::SignedIn;
+            state.restored = true;
+        }
+        let snapshot = host.restore().await;
+        let cleanup = serde_json::to_value(&snapshot).unwrap()["cleanup"].clone();
+        if denied {
+            assert!(snapshot.status == Status::Unavailable);
+            assert_eq!(snapshot.failure, Some("storage-denied"));
+            assert_eq!(cleanup, true);
+        } else {
+            assert!(snapshot.status == Status::ReauthenticationRequired);
+            assert_eq!(snapshot.failure, Some("reauthentication-required"));
+            assert_eq!(cleanup, false);
+        }
+        assert_eq!(store.raw.lock().unwrap().as_deref(), Some(&*stored.raw));
     }
 }
 

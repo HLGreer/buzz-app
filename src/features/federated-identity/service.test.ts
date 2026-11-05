@@ -28,6 +28,7 @@ const signedOut: SessionSnapshot = {
   failure: null,
   expiresAt: null,
   expiring: false,
+  cleanup: false,
 };
 const signedIn: SessionSnapshot = {
   ...signedOut,

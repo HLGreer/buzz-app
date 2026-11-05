@@ -48,9 +48,6 @@ const WAITING = {
   not_linked: BACKUP_FAILURES.not_linked.message,
 } as const;
 
-/** Unavailable for want of native, not because a sign-out didn't finish. */
-const NOT_SIGN_OUT = new Set(["native-unavailable", "desktop-required"]);
-
 /** Running and complete show beside the row instead. */
 const INDICATOR = {
   running: "Syncing…",
@@ -562,16 +559,14 @@ function OrganizationSignIns({
       states[index]?.status === "signed-in" && states[index]?.authority,
   );
   // Native reports a sign-out it couldn't finish, such as a storage failure,
-  // as that server's unavailable snapshot rather than an error. Read from the
-  // session, it survives Settings closing and a reload until cleanup ends.
+  // as that server's snapshot with `cleanup` rather than an error. Read from
+  // the session, it survives Settings closing and a reload until cleanup ends.
+  // Any other unavailable session, such as a failed restore, still has a
+  // record that may be valid; signing out would delete it.
   const unfinished = new Map(failures);
   sessions.forEach((session, index) => {
     const state = states[index];
-    if (
-      state?.status === "unavailable" &&
-      state.authority &&
-      !NOT_SIGN_OUT.has(state.failure ?? "")
-    )
+    if (state?.cleanup && state.authority)
       unfinished.set(session, {
         authority: state.authority,
         failure: state.failure ?? "",

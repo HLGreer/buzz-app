@@ -31,6 +31,9 @@ export type SessionSnapshot = Readonly<{
   expiresAt: string | null;
   /** The session ends soon; signing in again now keeps the app open. */
   expiring: boolean;
+  /** A retired session's record is still stored because removing it
+   * failed (`unavailable`); signing out again retries the removal. */
+  cleanup: boolean;
 }>;
 export type AuthenticatedRequest = Readonly<{
   path: string;
@@ -87,6 +90,7 @@ export class FederatedIdentityService
       failure: nativeIdentityEnabled() ? null : "desktop-required",
       expiresAt: null,
       expiring: false,
+      cleanup: false,
     }) as SessionSnapshot,
     listeners: new Set<() => void>(),
     epoch: 0,
@@ -302,6 +306,7 @@ class CommunitySession implements FederatedIdentity {
     failure: null,
     expiresAt: null,
     expiring: false,
+    cleanup: false,
   }) as SessionSnapshot;
   private readonly listeners = new Set<() => void>();
   private started = false;

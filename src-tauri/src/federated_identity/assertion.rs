@@ -536,9 +536,7 @@ impl FederatedIdentity {
                     }
                 };
                 if let Some((session, revision)) = retired {
-                    if let Err(error) = self.remove(session).await {
-                        self.change_current(&revision, Status::Unavailable, Some(error.code));
-                    }
+                    self.remove_retired(session, &revision).await;
                 }
                 Err(failure.code.into())
             }

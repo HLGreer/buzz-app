@@ -65,6 +65,9 @@ pub(crate) struct Snapshot {
     expires_at: Option<String>,
     /// The session ends soon; signing in again now keeps the app open.
     expiring: bool,
+    /// A retired session's record is still stored because removing it
+    /// failed. Signing out again retries the removal.
+    cleanup: bool,
 }
 
 // No Debug, no IPC serialization. Only the secure store serializes this record.
@@ -213,6 +216,7 @@ impl FederatedIdentity {
             failure: None,
             expires_at: None,
             expiring: false,
+            cleanup: false,
         };
         let (changes, _) = watch::channel(snapshot.clone());
         let (account_changes, _) = watch::channel(None);
@@ -350,6 +354,7 @@ impl FederatedIdentity {
         state.snapshot.failure = None;
         state.snapshot.expires_at = Some(session.record.expires_at.clone());
         state.snapshot.expiring = false;
+        state.snapshot.cleanup = false;
         self.signed_in(state, session.record.email.clone());
         self.watch_expiry(&session, state.cancellation.clone());
         state.session = Some(session);
@@ -439,6 +444,18 @@ impl FederatedIdentity {
         }
         state.snapshot.status = status;
         state.snapshot.failure = failure;
+        state.snapshot.cleanup = false;
+        self.publish(&state);
+    }
+    /// Removing `revision`'s retired session from storage failed.
+    fn cleanup_failed(&self, revision: &str, failure: &'static str) {
+        let mut state = self.state();
+        if state.closed || state.snapshot.revision != revision {
+            return;
+        }
+        state.snapshot.status = Status::Unavailable;
+        state.snapshot.failure = Some(failure);
+        state.snapshot.cleanup = true;
         self.publish(&state);
     }
     fn retire_state(
@@ -454,6 +471,7 @@ impl FederatedIdentity {
         state.snapshot.failure = failure;
         state.snapshot.expires_at = None;
         state.snapshot.expiring = false;
+        state.snapshot.cleanup = false;
         let session = state.session.take();
         self.publish(state);
         session
@@ -494,6 +512,17 @@ impl FederatedIdentity {
     async fn remove(&self, session: Arc<Session>) -> Result<(), Failure> {
         self.storage(move |store| store.remove(&session.raw, &session.record.revision))
             .await
+    }
+    /// Remove the stored record of the session `revision` retired. Another
+    /// Buzz copy may already have ended or replaced it: its refusal marker
+    /// stays, so it can't restore here, and the newer session is left alone.
+    async fn remove_retired(&self, session: Arc<Session>, revision: &str) {
+        match self.remove(session).await {
+            Err(failure) if failure.code != "session-changed" => {
+                self.cleanup_failed(revision, failure.code)
+            }
+            _ => {}
+        }
     }
     async fn verify(&self, record: &Record) -> Result<Option<String>, Failure> {
         if expiry(&record.expires_at)? <= now()? {
@@ -565,9 +594,7 @@ impl FederatedIdentity {
             .map(|session| (session, state.snapshot.revision.clone()))
         };
         if let Some((session, revision)) = retired {
-            if let Err(error) = self.remove(session).await {
-                self.change_current(&revision, Status::Unavailable, Some(error.code));
-            }
+            self.remove_retired(session, &revision).await;
         }
     }
     pub(crate) async fn restore(&self) -> Snapshot {
@@ -606,9 +633,7 @@ impl FederatedIdentity {
             (session, state.snapshot.revision.clone())
         };
         if let Some((session, revision)) = expired {
-            if let Err(failure) = self.remove(session).await {
-                self.change_current(&revision, Status::Unavailable, Some(failure.code));
-            }
+            self.remove_retired(session, &revision).await;
         }
         {
             let state = self.state();
@@ -1029,13 +1054,8 @@ impl FederatedIdentity {
     ) -> Snapshot {
         let _operation = self.0.operation.lock().await;
         let result = if let Some(session) = session {
-            match self.remove(session).await {
-                // Another Buzz copy already ended or replaced this session.
-                // Its refusal marker stays, so it can't restore here, and
-                // the newer session is left alone.
-                Err(failure) if failure.code == "session-changed" => Ok(()),
-                result => result,
-            }
+            self.remove_retired(session, &revision).await;
+            Ok(())
         } else {
             // Also retries an incomplete deletion or sign-out during restore.
             self.storage(|store| {
@@ -1049,7 +1069,7 @@ impl FederatedIdentity {
             .await
         };
         if let Err(failure) = result {
-            self.change_current(&revision, Status::Unavailable, Some(failure.code));
+            self.cleanup_failed(&revision, failure.code);
         }
         self.snapshot()
     }
