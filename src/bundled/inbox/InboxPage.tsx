@@ -24,6 +24,7 @@ import type { Navigation } from "../../features/navigation/controller";
 import type { NavigationScope } from "../../features/navigation/targets";
 import type { PageNavigation } from "../../features/navigation/service";
 import { routeOf } from "./route";
+import { useInboxDrafts } from "./view";
 import {
   hasUnread,
   InboxRowButton,
@@ -352,7 +353,7 @@ function InboxList({
     setFilters(next);
     writeView(archiveScope, filtersKey, next);
   }
-  const [drafts, setDrafts] = useState(false);
+  const [drafts, setDrafts] = useInboxDrafts(session);
   // A shortcut's open carries filters; a plain open carries none and changes nothing.
   // biome-ignore lint/correctness/useExhaustiveDependencies: Only a new presentation applies its route; later filter edits are the user's.
   useEffect(() => {
