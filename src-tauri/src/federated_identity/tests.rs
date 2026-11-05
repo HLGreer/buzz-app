@@ -164,7 +164,9 @@ async fn signing_out_of_one_server_keeps_the_others_session() {
     )
     .unwrap()
     .into_iter();
-    let signed_in = |config: Config, peers| {
+    let signed_in = |mut config: Config, peers| {
+        // Sign-out revokes here, never at Builderlab.
+        config.identity_origin = UNREACHABLE.into();
         let store = Arc::new(Memory::default());
         let session = record();
         *store.raw.lock().unwrap() = Some(session.raw.clone());
@@ -195,6 +197,13 @@ async fn signing_out_of_one_server_keeps_the_others_session() {
     assert!(public_store.raw.lock().unwrap().is_none());
     assert!(first.snapshot().status == Status::SignedIn);
     assert!(first_store.raw.lock().unwrap().is_some());
+    // Only that server's session is revoked. Its logout fails, which
+    // changes nothing.
+    assert_eq!(super::agent::tests::bounded(revoked(&public)).await, 1);
+    assert_eq!(revoked(&first).await, 0);
+    let snapshot = public.snapshot();
+    assert!(snapshot.status == Status::SignedOut);
+    assert_eq!(snapshot.failure, None);
 }
 
 #[tokio::test]
@@ -386,6 +395,52 @@ async fn local_expiry_retires_a_cached_session_without_sending_it_upstream() {
     assert!(!host.current(&revision));
     assert!(host.state().session.is_none());
     assert!(store.raw.lock().unwrap().is_none());
+    assert_eq!(revoked(&host).await, 0);
+}
+
+#[tokio::test]
+async fn sign_out_of_buzz_revokes_nothing() {
+    let (host, _) = signed_in_at(Arc::default(), UNREACHABLE.into(), "a@example.com");
+    // Sign out of Buzz closes every server and removes their records itself.
+    host.close();
+    assert!(host.snapshot().status == Status::SignedOut);
+    assert_eq!(revoked(&host).await, 0);
+}
+
+#[tokio::test]
+async fn signing_out_revokes_the_session_at_the_server_once_without_waiting() {
+    use super::agent::tests::bounded;
+    use tokio::io::AsyncWriteExt;
+    // Kgoose answers a session's logout with a redirect to its identity
+    // provider. Following it would wait on `followed`, which never answers,
+    // as a retry would wait on the logout route.
+    let followed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let redirect = format!(
+        "HTTP/1.1 302 Found\r\nLocation: http://{}/v2/logout\r\nContent-Length: 0\r\n\r\n",
+        followed.local_addr().unwrap()
+    );
+    let failed = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n".to_owned();
+    for reply in [redirect, failed] {
+        let logout = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let store = Arc::new(Memory::default());
+        let (host, session) = signed_in_at(
+            store.clone(),
+            format!("http://{}", logout.local_addr().unwrap()),
+            "a@example.com",
+        );
+        // Sign-out returns before the server answers its logout.
+        let snapshot = bounded(host.sign_out()).await;
+        assert!(snapshot.status == Status::SignedOut);
+        assert_eq!(snapshot.failure, None);
+        assert!(store.raw.lock().unwrap().is_none());
+        let (credential, mut stream) = logout_request(&logout).await;
+        assert_eq!(credential, session.record.session_token);
+        stream.write_all(reply.as_bytes()).await.unwrap();
+        assert_eq!(bounded(revoked(&host)).await, 1);
+        let snapshot = host.snapshot();
+        assert!(snapshot.status == Status::SignedOut);
+        assert_eq!(snapshot.failure, None);
+    }
 }
 
 #[tokio::test]
@@ -542,6 +597,52 @@ pub(super) async fn adapter_with_status(
         seen
     });
     (base, task)
+}
+/// A loopback origin no connection reaches, so a logout there fails at once.
+pub(super) const UNREACHABLE: &str = "http://127.0.0.1:0";
+/// Waits for every logout `host` started, and says how many there were.
+pub(super) async fn revoked(host: &FederatedIdentity) -> usize {
+    let started = std::mem::take(&mut *host.0.revocations.lock().unwrap());
+    let count = started.len();
+    for revocation in started {
+        revocation.await.unwrap();
+    }
+    count
+}
+/// Reads the next request at `listener`, which must be the logout route
+/// carrying a session only in `X-BB-Session-Credential`. Returns that
+/// session, and the stream to answer on.
+pub(super) async fn logout_request(
+    listener: &tokio::net::TcpListener,
+) -> (String, tokio::net::TcpStream) {
+    use tokio::io::AsyncReadExt;
+    let (mut stream, _) = super::agent::tests::bounded(listener.accept())
+        .await
+        .unwrap();
+    let mut head = Vec::new();
+    while !head.ends_with(b"\r\n\r\n") {
+        head.push(stream.read_u8().await.unwrap());
+    }
+    let head = String::from_utf8(head).unwrap();
+    let mut lines = head.split("\r\n");
+    assert_eq!(lines.next(), Some("POST /api/v1/auth/logout HTTP/1.1"));
+    let headers: Vec<_> = lines
+        .filter_map(|line| line.split_once(':'))
+        .map(|(name, value)| (name.to_ascii_lowercase(), value.trim().to_owned()))
+        .collect();
+    assert!(
+        headers
+            .iter()
+            .all(|(name, _)| name != "authorization" && name != "cookie"),
+        "{head}"
+    );
+    let credentials: Vec<_> = headers
+        .into_iter()
+        .filter(|(name, _)| name == "x-bb-session-credential")
+        .map(|(_, value)| value)
+        .collect();
+    assert_eq!(credentials.len(), 1, "{head}");
+    (credentials[0].clone(), stream)
 }
 pub(super) fn at_adapter(store: Arc<Memory>, base: String) -> FederatedIdentity {
     let mut owner = host(store);
@@ -833,12 +934,23 @@ fn expiry_watch_follows_the_wall_clock_across_sleep() {
     assert_eq!(due(5_000, warn, expires, false), Due::Expire);
 }
 
+/// Signed in at `base`, which serves both the adapter and the identity origin.
 fn signed_in_at(
     store: Arc<Memory>,
     base: String,
     email: &str,
 ) -> (FederatedIdentity, Arc<Session>) {
-    let host = at_adapter(store.clone(), base);
+    let origin = url::Url::parse(&base)
+        .unwrap()
+        .origin()
+        .ascii_serialization();
+    let mut host = at_adapter(store.clone(), base);
+    Arc::get_mut(&mut host.0)
+        .unwrap()
+        .config
+        .as_mut()
+        .unwrap()
+        .identity_origin = origin;
     let mut current = record();
     let session = Arc::get_mut(&mut current).unwrap();
     session.record.email = Some(email.into());
@@ -945,11 +1057,16 @@ async fn a_sign_out_refuses_a_restore_begun_before_it() {
 
 #[tokio::test]
 async fn signing_out_after_another_copy_ended_or_replaced_the_session_is_signed_out() {
-    for newer in [None, Some(record())] {
+    let mut replacement = record();
+    let session = Arc::get_mut(&mut replacement).unwrap();
+    session.record.session_token = "newer-session-token".into();
+    session.raw = Zeroizing::new(serde_json::to_vec(&session.record).unwrap());
+    for newer in [None, Some(replacement)] {
+        let logout = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let store = Arc::new(Memory::default());
-        let (host, _) = signed_in_at(
+        let (host, current) = signed_in_at(
             store.clone(),
-            "https://identity.example".into(),
+            format!("http://{}", logout.local_addr().unwrap()),
             "a@example.com",
         );
         // Another Buzz copy sharing the item signed out, or in again.
@@ -961,6 +1078,10 @@ async fn signing_out_after_another_copy_ended_or_replaced_the_session_is_signed_
             store.raw.lock().unwrap().as_deref(),
             newer.as_ref().map(|session| &*session.raw)
         );
+        // This copy's session is revoked, never the newer one.
+        let (credential, _) = logout_request(&logout).await;
+        assert_eq!(credential, current.record.session_token);
+        assert_eq!(super::agent::tests::bounded(revoked(&host)).await, 1);
     }
 }
 

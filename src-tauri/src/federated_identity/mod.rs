@@ -136,6 +136,9 @@ struct Inner {
     /// The build's other sign-in servers, each with its own session. Only the
     /// first server, the build's Builderlab, has them.
     peers: Vec<FederatedIdentity>,
+    /// Each detached logout `revoke` started, so tests can wait for it.
+    #[cfg(test)]
+    revocations: Mutex<Vec<tauri::async_runtime::JoinHandle<()>>>,
 }
 /// A sign-in server's session. The app holds the build's first server, which
 /// routes each community to its own server (`server_for`).
@@ -246,6 +249,8 @@ impl FederatedIdentity {
             assertions: Mutex::new(Default::default()),
             discoveries: Mutex::new(Default::default()),
             peers,
+            #[cfg(test)]
+            revocations: Mutex::default(),
         }))
     }
     /// The server for a canonical relay, chosen by its host from the
@@ -1074,7 +1079,10 @@ impl FederatedIdentity {
     ) -> Snapshot {
         let _operation = self.0.operation.lock().await;
         let result = if let Some(session) = session {
-            self.remove_retired(session, &revision).await;
+            self.remove_retired(session.clone(), &revision).await;
+            // Whatever the removal found: this copy's token only, never a
+            // record read back from the item, which may be another copy's.
+            self.revoke(&session);
             Ok(())
         } else {
             // Also retries an incomplete deletion or sign-out during restore.
@@ -1092,6 +1100,35 @@ impl FederatedIdentity {
             self.cleanup_failed(&revision, failure.code);
         }
         self.snapshot()
+    }
+    /// Ask the server to end a signed-out session, so no copy of its token
+    /// still works. Best effort: one detached attempt whose result is ignored,
+    /// so sign-out never waits for it and works offline. Kgoose takes the
+    /// session only in this header and answers with a redirect, not followed.
+    fn revoke(&self, session: &Session) {
+        let Some(config) = &self.0.config else { return };
+        let (Ok(client), Ok(mut credential)) = (
+            protocol::client(),
+            reqwest::header::HeaderValue::from_str(&session.record.session_token),
+        ) else {
+            return;
+        };
+        credential.set_sensitive(true);
+        let request = client
+            .post(format!(
+                "{}{}v1/auth/logout",
+                config.identity_origin, config.api_base_path
+            ))
+            .header("X-BB-Session-Credential", credential);
+        let _revocation = tauri::async_runtime::spawn(async move {
+            let _ = request.send().await;
+        });
+        #[cfg(test)]
+        self.0
+            .revocations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(_revocation);
     }
 }
 

@@ -974,6 +974,23 @@ fn restarted(f: &Fixture, base: String) -> AgentTokens {
 }
 
 #[tokio::test]
+async fn an_organization_sign_out_revokes_its_session_at_the_server() {
+    use crate::federated_identity::tests::{logout_request, revoked};
+    let logout = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let identity = crate::federated_identity::testing::signed_in_at(format!(
+        "http://{}",
+        logout.local_addr().unwrap()
+    ));
+    let tokens = AgentTokens::with_store(identity.clone(), Arc::new(MemoryGrants::default()));
+    let _ = tokens.0.agents.set(Arc::new(|| Ok(Vec::new())));
+    let snapshot = tokens.sign_out().await.unwrap();
+    assert!(snapshot.status == crate::federated_identity::Status::SignedOut);
+    let (credential, _) = logout_request(&logout).await;
+    assert_eq!(credential, "fixture-session-token");
+    assert_eq!(bounded(revoked(&identity)).await, 1);
+}
+
+#[tokio::test]
 async fn an_organization_sign_out_whose_grant_deletion_fails_resumes_it_after_restart() {
     let (base, served) = issuer(vec![]).await;
     let f = fixture(base.clone());

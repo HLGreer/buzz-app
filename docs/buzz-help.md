@@ -80,8 +80,10 @@ the interface unless an available tool actually supports that action.
 - Buzz apps on this computer that use the same organization server, such as
   Buzz and Buzz Staging, share its sign-in, like the private key. After you sign
   in in one, **Sign in** in the other finishes without the browser. Signing out
-  or switching account in one also applies to the other, but an app that's
-  already open keeps its sign-in until it restarts.
+  or switching account in one also applies to the other. Signing out also ends
+  that sign-in at the organization server, so an app that's already open asks
+  you to sign in again the next time it uses it. If the server couldn't be
+  reached, that app keeps its sign-in until it restarts.
 - If a community doesn't accept the account you signed in with, its prompt
   names the server and offers **Switch account**: Buzz signs out of that server
   only and opens its sign-in again, so other servers stay signed in. It also

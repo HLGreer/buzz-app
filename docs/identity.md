@@ -910,6 +910,12 @@ and an S256 handoff challenge, exchanges the code natively, and verifies the
 fixed session expiry before persistence. Restore checks the stored credential
 against `/v1/session`; failed reads and unrecognized refusals do not authorize
 replacement. Local expiry, cancellation, and sign-out fence stale work.
+Sign-out also asks the server to end the session, best effort: one `POST` to
+`v1/auth/logout` under the identity origin's API base path, with the session as
+`X-BB-Session-Credential` and no `Authorization`. Native follows no redirect
+and ignores the result, so sign-out never waits for it and works offline. It
+ends only the session this copy held, never one read back from the secure
+store. Sign out of Buzz, expiry and refusals end nothing at the server.
 
 FI records use the OS secure-store service
 `xyz.block.buzz.desktop.federated-session` (with `.debug` for Rust debug
@@ -923,7 +929,8 @@ renewal, saves over whatever session the item holds. When another copy already
 ended or replaced the session, a sign-out here finishes signed out, and an
 expiry or refusal here ends it as expired; both leave the newer session alone.
 A signed-in copy keeps its session until it restarts, even after another copy
-signs out. On macOS one item per
+signs out, unless that sign-out ended the same session at the server: this
+copy then ends it when the server next refuses it. On macOS one item per
 profile and deployment holds the session and every agent grant, so Keychain
 prompts once; Windows and Linux keep one item per record. Older macOS items
 move into it on read. This is a one-way development migration: close older
