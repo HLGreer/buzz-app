@@ -2,6 +2,7 @@
 import { StrictMode, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { channelTabs } from "../../src/bundled/channels/useChannelTabState";
+import { ForwardMessageProvider } from "../../src/features/messages/ForwardMessage";
 import { BestieConversation } from "../../src/bundled/bestie/BestieConversation";
 import { createNavigationController } from "../../src/features/navigation/controller";
 import { createMemoryHistory } from "../../src/features/navigation/history";
@@ -56,6 +57,9 @@ const owner = createRelaySession(
     relayAuthor: authority.pubkey,
     scope: "https://test.example",
     media: () => undefined,
+    openDirectMessage: async () => {
+      throw new Error("This fixture only exercises opening the forward dialog");
+    },
     writer: {
       kinds: [9, 9000],
       sign: async (event) => signed(viewer, event),
@@ -244,6 +248,15 @@ function Fixture() {
           navigation={navigation}
         />
       </div>
+      {/* Separate dialog owner: Bestie must supply its own action context. */}
+      <ForwardMessageProvider
+        session={owner.session}
+        scope={scope}
+        navigation={navigator}
+        renderDialog
+      >
+        {null}
+      </ForwardMessageProvider>
     </ToastProvider>
   );
 }

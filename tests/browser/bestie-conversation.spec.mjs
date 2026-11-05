@@ -1,4 +1,5 @@
 import { test, expect } from "./source-fixture.mjs";
+import { hoverMessage } from "./message-actions.mjs";
 
 // Browser-only integration: native layout, split geometry, retained DOM while
 // dragging a thread between panes, focus, and responsive/theme/text-size treatment.
@@ -367,4 +368,52 @@ test("pointer pane moves show the shared drag preview and drop indicator", async
       .locator("[data-main-workspace]")
       .getByRole("tab", { name: "Planning the day", exact: true }),
   ).toBeVisible();
+});
+
+// Browser integration: the floating action/menu must route from Bestie to the
+// separate dialog owner, including messages rendered through thread portals.
+test("Bestie main and thread messages open the shared forwarding dialog", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/bestie-conversation.html");
+  const root = page
+    .locator("[data-main-workspace] [data-message-id]")
+    .filter({ hasText: "Planning the day" })
+    .first();
+  const rootId = await root.getAttribute("data-message-id");
+  await hoverMessage(root);
+  await root
+    .getByRole("button", { name: "Forward message", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Forward message",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  expect(
+    await page.evaluate(() => window.bestieFixture.target()),
+  ).toMatchObject({ kind: "conversation", forward: rootId });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await page
+    .getByRole("button", { name: "View thread: 1 reply" })
+    .first()
+    .click();
+  const reply = page
+    .getByLabel("Thread", { exact: true })
+    .locator("[data-message-id]")
+    .filter({ hasText: "Reply 1" })
+    .first();
+  const replyId = await reply.getAttribute("data-message-id");
+  await hoverMessage(reply);
+  await reply
+    .getByRole("button", { name: "More message actions", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "Forward message", exact: true })
+    .click();
+  await expect(dialog).toBeVisible();
+  expect(
+    await page.evaluate(() => window.bestieFixture.target()),
+  ).toMatchObject({ kind: "conversation", forward: replyId });
 });
