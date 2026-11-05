@@ -4,6 +4,7 @@ import type { ActivityRowPresentation } from "./activity-presentation";
 import { ShimmerText } from "../../shared/design-system/ui/ShimmerText";
 import { Collapsible } from "@base-ui/react/collapsible";
 import { formatItemTimestamp } from "../../shared/datetime";
+import { useClockPreference } from "../../shared/clock-preference";
 import { ProfilePeek } from "../profiles/ProfilePeek";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import {
@@ -86,6 +87,7 @@ import {
   MessageReadStateItem,
 } from "./MessageManagement";
 import { MessageActionBar } from "./MessageActionBar";
+import { useForwardMessage } from "./ForwardMessage";
 import { FlagIcon, ListBulletsIcon } from "../../shared/design-system/icons";
 import {
   MenuIcon,
@@ -102,6 +104,8 @@ export type MessageRowProps = {
   row: ChannelMessage;
   recordedActivity?: ActivityRowPresentation | undefined;
   representedAgents?: readonly string[] | undefined;
+  repliedAgents?: readonly string[] | undefined;
+  stoppedRequest?: ChannelMessage | undefined;
   staticMentions?: boolean | undefined;
   getThreadRoot?: (() => ChannelMessage | undefined) | undefined;
   session?: RelaySession | undefined;
@@ -200,6 +204,8 @@ function MessageRowContent({
   stackPrevious = layout === "continuation",
   stackNext = false,
   representedAgents,
+  repliedAgents,
+  stoppedRequest,
   alignViewer = true,
 
   mediaMode = "inline",
@@ -254,6 +260,15 @@ function MessageRowContent({
     row.channelId,
     (channel) => !!channel?.readOnly,
   );
+  const { messageTimestamps } = useClockPreference();
+  const solo = useListedChannel(
+    references?.channels,
+    row.channelId,
+    (channel) => channel?.channelType === "solo",
+  );
+  const showTime =
+    messageTimestamps === "show" ||
+    (messageTimestamps === "hide-solo" && !solo);
   const unreadLabel =
     threadUnread?.manual === "local-only"
       ? "Thread marked unread on this device only"
@@ -367,6 +382,7 @@ function MessageRowContent({
   const rowRef = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const active = useConversationPresentation();
+  const forward = useForwardMessage();
   const [reporting, setReporting] = useState<"open" | "sent">();
   const registeredActions = useSyncExternalStore(
     extensions?.actions?.subscribe ?? noSubscribe,
@@ -630,6 +646,7 @@ function MessageRowContent({
       rowRef={rowRef}
       menuTriggerRef={menuTrigger}
       messageId={row.id}
+      onForward={forward ? () => forward(row) : undefined}
       onReply={
         (onReply ? () => onReply(row.id) : undefined) ??
         (onOpenThread && startsThreads
@@ -668,7 +685,7 @@ function MessageRowContent({
       }
       quickControls={
         <>
-          {stackPrevious && (
+          {stackPrevious && showTime && (
             <span
               className={styles.keyboardMessageTime}
               data-message-keyboard-time
@@ -1014,7 +1031,10 @@ function MessageRowContent({
                   </span>
                 )}
                 {!stackPrevious && (
-                  <MessageTimestamp createdAt={row.createdAt} />
+                  <MessageTimestamp
+                    createdAt={row.createdAt}
+                    visible={showTime}
+                  />
                 )}
                 {session &&
                   actions.map(
@@ -1202,6 +1222,20 @@ function MessageRowContent({
                         );
                       }
                       if (attachment.kind === "image") {
+                        // biome-ignore lint/plugin: Attachment thumbnails, not avatars.
+                        const small = media(url, "small");
+                        // Third-party URLs map to themselves: no thumbnail. JPEG
+                        // drops alpha, so these formats use the WebP variant.
+                        const alpha =
+                          /^(.+\/[0-9a-f]{64})\.(?:png|gif|webp|avif)$/.exec(
+                            url,
+                          );
+                        const thumbnail =
+                          small === source
+                            ? undefined
+                            : alpha
+                              ? media(`${alpha[1]}.thumb.webp`)
+                              : small;
                         const image = (
                           <AttachmentImage
                             onOpenLink={
@@ -1213,6 +1247,7 @@ function MessageRowContent({
                             session={session}
                             attachment={{ ...attachment, url }}
                             source={source}
+                            thumbnail={thumbnail}
                             cached={cached}
                             compact={group.length >= 4}
                             overlayCount={
@@ -1356,7 +1391,7 @@ function MessageRowContent({
                   : undefined
               }
               canOpen={canOpenLink ?? (() => false)}
-              open={onOpenLink}
+              open={openLink}
             />
           )}
           {!(active && session && scope && extensions?.accessories) &&
@@ -1368,6 +1403,8 @@ function MessageRowContent({
           registry={extensions.accessories}
           placement="response"
           representedAgents={representedAgents}
+          repliedAgents={repliedAgents}
+          stoppedRequest={stoppedRequest}
           messageLayout={layout}
           session={session}
           scope={scope}
@@ -1386,7 +1423,7 @@ function MessageRowContent({
               : undefined
           }
           canOpen={canOpenLink ?? (() => false)}
-          open={onOpenLink}
+          open={openLink}
         />
       )}
     </div>

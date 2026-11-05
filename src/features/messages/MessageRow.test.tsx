@@ -33,6 +33,7 @@ import {
 import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { ConversationPresentation } from "../conversation/ConversationPresentation";
 import { MessageRow } from "./MessageRow";
+import { setClockPreference } from "../../shared/clock-preference";
 import { MessageManagement } from "./MessageManagement";
 import type { ChannelMessage, Profile } from "../relay/contracts";
 import type { UnreadCapability, UnreadSnapshot } from "../relay/unread";
@@ -1366,7 +1367,11 @@ it.each(["peer", "own"] as const)(
     const operations: never[] = [];
     const session = {
       viewer: author === "own" ? row.authorId : "viewer",
-      channels: { list: () => snapshot, subscribeList: () => () => {} },
+      channels: {
+        list: () => snapshot,
+        subscribeList: () => () => {},
+        window: () => ({ rows: [row] }),
+      },
       messages: { report: vi.fn(async () => {}) },
       profiles: { subscribe: () => () => {}, event: () => undefined },
       outbox: {
@@ -1376,6 +1381,8 @@ it.each(["peer", "own"] as const)(
         snapshot: () => operations,
       },
       unread: {
+        revision: () => 0,
+        sync: () => ({ capability: "unsupported" }),
         subscribe: () => () => {},
         subscribeSync: () => () => {},
         snapshot: () => undefined,
@@ -1485,6 +1492,32 @@ function renderMessage(
     />,
   );
 }
+
+it.each([
+  { channelType: "solo", visible: false },
+  { channelType: "stream", visible: true },
+] as const)(
+  "Hide in Solo chats keeps only the accessible date in Solo (%o)",
+  ({ channelType, visible }) => {
+    setClockPreference({ messageTimestamps: "hide-solo" });
+    const list = {
+      channels: [{ id: row.channelId, channelType }],
+      status: "ready",
+    };
+    const references = {
+      channels: { list: () => list, subscribeList: () => () => {} },
+    } as unknown as RelaySession;
+    const view = renderMessage({ references });
+    try {
+      const time = view.container.querySelector("time");
+      expect(time?.querySelector(".sr-only")).toHaveTextContent(/19(69|70)/);
+      expect(!!time?.querySelector('[aria-hidden="true"]')).toBe(visible);
+    } finally {
+      view.unmount();
+      setClockPreference({ messageTimestamps: "show" });
+    }
+  },
+);
 
 it.each([true, false])(
   "offers thread starts only where the conversation starts threads (startsThreads=%s)",
@@ -1634,6 +1667,129 @@ it.each(
   },
 );
 
+it("forwards replied agents and the stopped request to response accessories", () => {
+  const subscribe = () => () => {};
+  const channels = { channels: [], status: "ready" };
+  const noTyping: never[] = [];
+  const catalog = { entries: [] };
+  const profiles = new Map();
+  const library = { identities: [] };
+  const session = {
+    channels: { list: () => channels, subscribeList: subscribe },
+    messages: {},
+    emoji: { snapshot: () => catalog, subscribe },
+    profiles: { snapshot: () => profiles, subscribe },
+    agentChoices: { snapshot: () => library, subscribe },
+    typing: { snapshot: () => noTyping, subscribe },
+  } as unknown as RelaySession;
+  const seen = vi.fn();
+  const noEntries: never[] = [];
+  const empty = { snapshot: () => noEntries, subscribe };
+  const entries = [
+    {
+      id: "activity",
+      key: "test:activity",
+      pluginId: "test",
+      revision: "1",
+      title: "Agent activity",
+      placement: "response" as const,
+      component: (
+        props: import("../conversation/contracts").ComposerAccessoryProps,
+      ) => {
+        seen(props.repliedAgents, props.stoppedRequest);
+        return null;
+      },
+    },
+  ];
+  const agent = "a".repeat(64);
+  const repliedAgents = [agent];
+  const request = { ...row, id: "request" };
+  const view = renderMessage({
+    session,
+    scope: "test",
+    repliedAgents,
+    stoppedRequest: request,
+    extensions: {
+      inline: empty,
+      links: empty,
+      messages: empty,
+      tools: empty,
+      accessories: { snapshot: () => entries, subscribe },
+    },
+  });
+  try {
+    expect(seen).toHaveBeenLastCalledWith(repliedAgents, request);
+  } finally {
+    view.unmount();
+  }
+});
+
+it.each(
+  (["message", "response"] as const).flatMap((placement) => [
+    { placement, threadRootId: undefined, rootId: "root" },
+    { placement, threadRootId: "parent", rootId: "parent" },
+  ]),
+)(
+  "opens message accessory targets in the row's own thread (%o)",
+  ({ placement, threadRootId, rootId }) => {
+    const subscribe = () => () => {};
+    const channels = { channels: [], status: "ready" };
+    const noTyping: never[] = [];
+    const catalog = { entries: [] };
+    const profiles = new Map();
+    const library = { identities: [] };
+    const session = {
+      channels: { list: () => channels, subscribeList: subscribe },
+      messages: {},
+      emoji: { snapshot: () => catalog, subscribe },
+      profiles: { snapshot: () => profiles, subscribe },
+      agentChoices: { snapshot: () => library, subscribe },
+      typing: { snapshot: () => noTyping, subscribe },
+    } as unknown as RelaySession;
+    const noEntries: never[] = [];
+    const empty = { snapshot: () => noEntries, subscribe };
+    const target = `buzz:profile?agent=${"a".repeat(64)}&tab=activity`;
+    const entries = [
+      {
+        id: "activity",
+        key: "test:activity",
+        pluginId: "test",
+        revision: "1",
+        title: "Agent activity",
+        placement,
+        component: ({
+          open,
+        }: import("../conversation/contracts").ComposerAccessoryProps) => (
+          <button type="button" onClick={() => open(target)}>
+            View activity
+          </button>
+        ),
+      },
+    ];
+    const onOpenLink = vi.fn(() => true);
+    const view = renderMessage({
+      row: { ...row, threadRootId },
+      session,
+      scope: "test",
+      onOpenLink,
+      extensions: {
+        inline: empty,
+        links: empty,
+        messages: empty,
+        tools: empty,
+        accessories: { snapshot: () => entries, subscribe },
+      },
+    });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "View activity" }));
+      // The transcript belongs to this message's conversation, not the view's.
+      expect(onOpenLink).toHaveBeenCalledExactlyOnceWith(target, { rootId });
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
 it("rejects attachment URLs outside the shared safe-link policy", () => {
   const media = vi.fn((url: string) => url);
   const view = renderMessage({
@@ -1651,10 +1807,36 @@ it("rejects attachment URLs outside the shared safe-link policy", () => {
     const links = screen.getAllByRole("link", {
       name: "Open image attachment",
     });
-    expect(media).toHaveBeenCalledExactlyOnceWith("https://safe.test/a.png");
+    expect(media.mock.calls).toEqual([
+      ["https://safe.test/a.png"],
+      ["https://safe.test/a.png", "small"],
+    ]);
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute("href", "https://safe.test/a.png");
     expect(view.container.innerHTML).not.toContain("unsafe.test");
+  } finally {
+    view.unmount();
+  }
+});
+
+it.each([
+  ["jpg", "small:.jpg"],
+  ["png", ".thumb.webp"],
+  ["gif", ".thumb.webp"],
+])("passes a %s image attachment its relay thumbnail", (extension, suffix) => {
+  const hash = "a".repeat(64);
+  const url = `https://relay.test/media/${hash}.${extension}`;
+  const view = renderMessage({
+    row: { ...row, attachments: [{ url, kind: "image" }] },
+    media: (value, size) => (size ? `small:${value}` : value),
+  });
+  try {
+    expect(view.container.querySelector("img[data-thumbnail]")).toHaveAttribute(
+      "src",
+      suffix.startsWith("small:")
+        ? `small:${url}`
+        : `https://relay.test/media/${hash}${suffix}`,
+    );
   } finally {
     view.unmount();
   }
