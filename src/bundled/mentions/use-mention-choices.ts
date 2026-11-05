@@ -425,27 +425,30 @@ export function useMentionChoices(
     [owners, profiles, session.viewer],
   );
   const matches = matchingMentions(candidates, query);
+  // At most 50 rows show, so ranking only ever needs the first 50.
   const rank = (choices: readonly MentionChoice[]) =>
     rankMentions(
       choices,
       query,
       mentionHistory(session, channelId),
       (key) => session.presence?.status(key) ?? "unknown",
+      50,
     );
-  const outside = open
-    ? rank(matches.filter((c) => !local.has(c.recipient.pubkey)))
-    : [];
+  // Ranked only when read: 50 installed rows never need outside choices.
+  let outsideRows: readonly MentionChoice[] | undefined;
+  const outside = () =>
+    (outsideRows ??= open
+      ? rank(matches.filter((c) => !local.has(c.recipient.pubkey)))
+      : []);
   // A member a completed read found no profile for has no name to be a namesake.
   const missingNames =
     open &&
     channel?.members?.some((key) => !profiles.has(key) && !unnamed?.has(key));
   if (open && !rows && !membersPending) {
-    const ranked = rank(
-      matches.filter((c) => local.has(c.recipient.pubkey)),
-    ).slice(0, 50);
+    const ranked = rank(matches.filter((c) => local.has(c.recipient.pubkey)));
     if (
       ranked.length ||
-      outside.length ||
+      outside().length ||
       (!pending &&
         !missingNames &&
         (!invite || !agents.pending) &&
@@ -461,7 +464,7 @@ export function useMentionChoices(
     // Append-only: late invited agents and directory pages never move shown rows.
     // Member-list changes keep their installed set until the query changes.
     const shown = new Set(rows.map((row) => row.recipient.pubkey));
-    const added = (invite ? rank(matches.filter((c) => c.agent)) : outside)
+    const added = (invite ? rank(matches.filter((c) => c.agent)) : outside())
       .filter((c) => !shown.has(c.recipient.pubkey))
       .slice(0, 50 - rows.length);
     if (added.length) {
