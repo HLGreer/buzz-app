@@ -94,7 +94,8 @@ test("joined header seams, drag feedback, and pointer-only overlay motion", asyn
   await close.click();
   await expect(dock).toHaveCount(0);
 
-  // Keep the scrollbar unclipped and the capsule centered on the joined seam.
+  // The hit target starts at the seam; the painted capsule stays centered on it.
+  // This keeps the scrollbar and sidebar actions clear of the resize target.
   const navigation = page.getByRole("navigation", {
     name: "Subscribed channels",
   });
@@ -105,7 +106,7 @@ test("joined header seams, drag feedback, and pointer-only overlay motion", asyn
     .boundingBox();
   const mainBounds = await page.locator("#main-content > .panel").boundingBox();
   expect(mainBounds.x).toBeCloseTo(sidebarBounds.x + sidebarBounds.width);
-  const railCenter = resizeBounds.x + resizeBounds.width / 2;
+  const railCenter = resizeBounds.x;
   expect(railCenter).toBeCloseTo(
     (sidebarBounds.x + sidebarBounds.width + mainBounds.x) / 2,
   );

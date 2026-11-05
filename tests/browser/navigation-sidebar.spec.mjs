@@ -301,11 +301,9 @@ test("channel sidebar resizes from the full gutter and persists", async ({
     geometry.panelGap,
     0,
   );
-  expect(grip.x + grip.width / 2).toBeCloseTo(
-    before.x + before.width + geometry.panelGap / 2,
-    0,
-  );
-  expect(grip.width).toBeGreaterThanOrEqual(16);
+  // The resize target begins at the seam, outside sidebar action targets.
+  expect(grip.x).toBeCloseTo(before.x + before.width, 0);
+  expect(grip.width).toBe(8);
   expect(grip.height).toBeGreaterThan(500);
   // Joined regions retain the 2px scrollbar inset without an inner panel border.
   expect(before.x + before.width - (listBox.x + listBox.width)).toBeCloseTo(

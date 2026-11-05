@@ -68,7 +68,7 @@ semantic tokens, UI authoring rules and the local component reference.
 - `AppShell.tsx` owns the header, contributed panel launchers, Settings access,
   community switcher, and page frames. Sidebar/history controls sit at the left,
   Search centers in wide windows and fills the available space in compact windows,
-  and community/profile controls sit at the right. Search retains 24pt side gaps
+  and community/profile controls sit at the bottom of the left dock. Search retains 24pt side gaps
   and wraps only when its compact control cannot fit. The left app dock uses
   theme-accent selection and stable icon tiles. Outer content padding uses the
   same panel-gap token as the space between panes. The community trigger opens

@@ -324,6 +324,14 @@ test("a page sidebar uses the shell slot, generic toggle, theme, and narrow draw
       .first()
       .focus();
     await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: /^Community switcher:/ }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "Your profile", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(action).toBeFocused();
     await page.getByRole("button", { name: "Hide sidebar" }).click();
     await expect(shellNavigation).toHaveAttribute("aria-hidden", "true");

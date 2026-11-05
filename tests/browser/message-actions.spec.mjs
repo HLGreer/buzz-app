@@ -673,9 +673,16 @@ test("narrow timeline continuation actions never cover prose or move adjacent ro
     await expect
       .poll(() =>
         link.evaluate((node) => {
-          const rect = node.getBoundingClientRect();
-          return node.contains(
-            document.elementFromPoint(rect.x + rect.width / 2, rect.y + 1),
+          // Wrapped inline links have separate hit regions; the union box
+          // includes empty space beside shorter lines.
+          const fragments = Array.from(node.getClientRects());
+          return (
+            fragments.length > 0 &&
+            fragments.every((rect) =>
+              node.contains(
+                document.elementFromPoint(rect.x + rect.width / 2, rect.y + 1),
+              ),
+            )
           );
         }),
       )

@@ -361,7 +361,8 @@ that agent in Buzz; they do not notify the external app through this connection.
   on the right. Compact avatars sit before the name on the left; Solo chats show
   the included agents.
 - **App navigation**: use the left dock to switch apps. Bestie is first, Inbox
-  second, followed by the other apps. Search stays wide in the top bar.
+  second, followed by the other apps. Community and profile controls sit at the
+  bottom of the dock. Search stays wide in the top bar.
   Messages has All / Solo / Team sidebar filters; other apps use their main
   view unless they provide their own sidebar. The sidebar and message pane
   share one surface with a persistent divider; panel headers also have bottom

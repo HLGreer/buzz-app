@@ -159,9 +159,17 @@ async function shellFits(page, width) {
     page.getByRole("navigation", { name: "Communities", exact: true }),
   );
   expect(actions.x + actions.width).toBeLessThanOrEqual(width);
-  expect(communities.x).toBeGreaterThanOrEqual(actions.x);
   const profile = await box(button(page, "Your profile"));
-  expect(communities.x + communities.width).toBeLessThanOrEqual(profile.x);
+  // Account controls remain reachable below the independently scrolling apps.
+  for (const control of [communities, profile]) {
+    expect(control.x).toBeGreaterThanOrEqual(dock.x);
+    expect(control.x + control.width).toBeLessThanOrEqual(dock.x + dock.width);
+    expect(control.y).toBeGreaterThanOrEqual(dock.y);
+    expect(control.y + control.height).toBeLessThanOrEqual(
+      dock.y + dock.height,
+    );
+  }
+  expect(communities.y + communities.height).toBeLessThanOrEqual(profile.y);
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBe(width);
@@ -270,13 +278,12 @@ test("joined sidebar and workspace surface, real link panel and compact communit
   const rail = await box(
     page.getByRole("navigation", { name: "Communities", exact: true }),
   );
-  near(rail.width, 32);
   const appDock = await box(
     page.getByRole("navigation", { name: "Apps dock" }),
   );
   near(sidebar.x, appDock.x + appDock.width + 1);
   const profile = await box(button(page, "Your profile"));
-  near(rail.x + rail.width, profile.x);
+  near(rail.x + rail.width / 2, profile.x + profile.width / 2);
   near(before.x, sidebar.x + sidebar.width);
   near(
     before.y,
