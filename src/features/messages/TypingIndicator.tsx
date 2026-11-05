@@ -95,7 +95,6 @@ export function useLiveConversationAgents(
   threadRootId: string | undefined,
   includeThreads = true,
 ): readonly string[] {
-  const replaced = useReplacedTypers(session, channelId, threadRootId);
   const watchChannel = !threadRootId && !includeThreads;
   const subscribe = useCallback(
     (listener: () => void) => {
@@ -129,10 +128,7 @@ export function useLiveConversationAgents(
       includeThreads,
       threadRootsOf(channelRowsOf(session, channelId, watchChannel)),
     );
-    return [...details.keys()]
-      .filter((key) => !replaced.has(key))
-      .sort()
-      .join(",");
+    return [...details.keys()].sort().join(",");
   };
   const key = useSyncExternalStore(subscribe, getKey, getKey);
   return useMemo(() => (key ? key.split(",") : []), [key]);

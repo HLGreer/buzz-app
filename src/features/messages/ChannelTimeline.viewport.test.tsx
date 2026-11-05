@@ -19,6 +19,19 @@ import { writeView } from "../../shared/view-state";
 import { foldMessages } from "../relay/fold";
 import { keypair, message } from "../relay/testing";
 import type { ChannelMessage, ChannelWindow } from "../relay/contracts";
+import {
+  TypingPresentation,
+  useTypingReplacement,
+} from "../conversation/typing-presentation";
+import type { RelaySession } from "../relay/session";
+
+function RecordedTyping({ session }: { session: RelaySession }) {
+  useTypingReplacement(
+    { session, channelId: "alpha", threadRootId: undefined, pubkey: "agent" },
+    true,
+  );
+  return null;
+}
 
 const viewport = vi.hoisted(() => ({
   size: 0,
@@ -321,60 +334,66 @@ it.each([1, 4])(
   },
 );
 
-it("keeps ongoing typing in the reply group after completed history", () => {
-  const { owner, updates, content } = activityFixture();
-  try {
-    const history = updates(2);
-    const last = history.at(-1);
-    if (!last) throw new Error("Missing activity");
-    const { audience: _audience, ...reply } = last;
-    const activity = owner.session.agentActivity.snapshot();
-    const snapshot = {
-      ...activity,
-      local: [
-        {
-          scope: "test",
-          agent: reply.authorId,
-          channelId: "alpha",
-          messageId: "request",
-          threadRootId: "request",
-          state: "working" as const,
-          startedAt: 1,
+it.each([false, true])(
+  "keeps ongoing typing in the reply group after completed history (replaced=%s)",
+  (replaced) => {
+    const { owner, updates, content } = activityFixture();
+    try {
+      const history = updates(2);
+      const last = history.at(-1);
+      if (!last) throw new Error("Missing activity");
+      const { audience: _audience, ...reply } = last;
+      const activity = owner.session.agentActivity.snapshot();
+      const snapshot = {
+        ...activity,
+        local: [
+          {
+            scope: "test",
+            agent: reply.authorId,
+            channelId: "alpha",
+            messageId: "request",
+            threadRootId: "request",
+            state: "working" as const,
+            startedAt: 1,
+          },
+        ],
+      };
+      const queries = {
+        ...owner.session,
+        agentActivity: {
+          ...owner.session.agentActivity,
+          snapshot: () => snapshot,
         },
-      ],
-    };
-    const queries = {
-      ...owner.session,
-      agentActivity: {
-        ...owner.session.agentActivity,
-        snapshot: () => snapshot,
-      },
-    };
-    const view = render(
-      content(
-        [...history, { ...reply, id: "reply", content: "Main reply" }],
-        undefined,
-        true,
-        queries,
-      ),
-    );
-    expect(screen.queryByText("2 completed steps")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: /Activity: .*working/ }),
-    ).toBeVisible();
-    expect(
-      view.container.querySelector(
-        "[data-conversation-activity] [data-agent-response-preview]",
-      ),
-    ).toHaveAttribute("data-stack-previous", "true");
-    expect(screen.getByText("Main reply").closest("li")).toHaveAttribute(
-      "data-stack-next",
-      "true",
-    );
-  } finally {
-    owner.dispose();
-  }
-});
+      };
+      const view = render(
+        <TypingPresentation active>
+          {replaced && <RecordedTyping session={queries} />}
+          {content(
+            [...history, { ...reply, id: "reply", content: "Main reply" }],
+            undefined,
+            true,
+            queries,
+          )}
+        </TypingPresentation>,
+      );
+      expect(screen.queryByText("2 completed steps")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /Activity: .*working/ }),
+      ).toBeVisible();
+      expect(
+        view.container.querySelector(
+          "[data-conversation-activity] [data-agent-response-preview]",
+        ),
+      ).toHaveAttribute("data-stack-previous", "true");
+      expect(screen.getByText("Main reply").closest("li")).toHaveAttribute(
+        "data-stack-next",
+        "true",
+      );
+    } finally {
+      owner.dispose();
+    }
+  },
+);
 
 it.each([
   { anchor: "activity-8", expanded: true },
