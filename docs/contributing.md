@@ -837,7 +837,12 @@ the complete correctness suite still runs with `pnpm test` / `just scan`:
   files after it can still join; the step summary names the highest-ranked
   skipped files.
   Journeys run as the longest run in rank order that fits, since more
-  journeys can mean more shards and a shorter lane. The prediction reads
+  journeys can mean more shards and a shorter lane. Two gaps remain: a journey
+  that loads the full app (`page.goto(app.origin)`) is reached only through
+  modules its own imports reach, such as helpers, not through the app's module
+  graph; and a patch under `patches/` reaches browser specs but no Vitest
+  files. When a change touches such code, run the related tests yourself.
+  The prediction reads
   per-journey and per-file durations from
   `scripts/flake-check-costs.json`; `scripts/flake-check.mjs costs` regenerates
   it from recent green `main` runs. `flake_vitest`
