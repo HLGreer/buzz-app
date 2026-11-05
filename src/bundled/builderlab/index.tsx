@@ -15,6 +15,7 @@ import { brokerBuilderlab, createDevSession } from "./dev-session";
 import { createOAuthSession } from "./oauth/session";
 import { createNativeSession, nativeBuilderlab } from "./session";
 import { createAgentClient } from "./agents/client";
+import { startTurnStatusRecovery } from "./agents/turn-status";
 import { RemoteAgents } from "./agents/RemoteAgents";
 import { builderlabType } from "./adapter-type";
 import { createKnownCommunitiesClient } from "./known-communities/client";
@@ -121,6 +122,10 @@ export const apply: PluginModule["apply"] = (ctx) => {
       }),
     );
   const agents = createAgentClient(session);
+  if (loginAvailable)
+    ctx.effect(() =>
+      startTurnStatusRecovery({ relay: ctx.relay, session, client: agents }),
+    );
   if (!unavailable) {
     let providerState: AgentProviderSnapshot = {
       readiness: "attention",
