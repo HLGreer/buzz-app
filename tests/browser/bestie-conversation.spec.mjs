@@ -265,6 +265,7 @@ test("application Close All closes Bestie tabs but leaves modal ownership intact
   await page.getByRole("link", { name: "View profile" }).click();
   const note = page.getByRole("textbox", { name: "Profile note" });
   await expect(note).toBeVisible();
+  await note.focus();
   // A modal must retain ownership of the application command.
   expect(
     await page.evaluate(() => {
@@ -294,6 +295,40 @@ test("application Close All closes Bestie tabs but leaves modal ownership intact
   await expect(
     page.getByRole("textbox", { name: "Message Bestie" }),
   ).toBeInViewport();
+  const conversation = page
+    .locator("[data-main-workspace]")
+    .getByRole("tab", { name: "Bestie", exact: true });
+  await expect(page.locator("[data-main-workspace] :focus")).toHaveCount(1);
+  // The context-menu action must make the same focus handoff.
+  await page
+    .getByRole("button", { name: "View thread: 1 reply" })
+    .first()
+    .click();
+  await page
+    .getByRole("tab", { name: "Planning the day", exact: true })
+    .click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Close all tabs", exact: true })
+    .click();
+  await expect(
+    page.getByRole("tab", { name: "Planning the day", exact: true }),
+  ).toHaveCount(0);
+  await expect(conversation).toBeFocused();
+  // Closing the remaining tabs from the application command keeps typing focus
+  // and selection when its main composer survives.
+  await page
+    .getByRole("button", { name: "View thread: 1 reply" })
+    .first()
+    .click();
+  const composer = page.getByRole("textbox", { name: "Message Bestie" });
+  await composer.fill("Keep typing");
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new Event("buzz:close-all-tabs", { cancelable: true }),
+    );
+  });
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveText("Keep typing");
 });
 
 test("pointer pane moves show the shared drag preview and drop indicator", async ({

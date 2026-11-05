@@ -353,9 +353,15 @@ export function BestieConversation({
     COMPANION_SPLIT.min,
   );
   const paneOpen = state.paneOpen && secondary.items.length > 0;
+  const focusAfterClose = useRef(false);
+  const closeAll = () => {
+    if (!secondary.closeAllTabs()) return false;
+    focusAfterClose.current = true;
+    return true;
+  };
   const tabMenu = {
     key: `bestie:${scope}:${channel.id}`,
-    closeAll: secondary.closeAllTabs,
+    closeAll,
     closeOthers: secondary.closeOtherTabs,
   };
   useLayoutEffect(() => {
@@ -371,14 +377,30 @@ export function BestieConversation({
       )
         return;
       flushSync(() => {
-        if (secondary.closeAllTabs()) {
-          event.preventDefault();
-          focusComposer((value) => value + 1);
-        }
+        if (closeAll()) event.preventDefault();
       });
     };
     window.addEventListener("buzz:close-all-tabs", close);
     return () => window.removeEventListener("buzz:close-all-tabs", close);
+  });
+  // Close All can remove both the focused content and its context menu.
+  // Keep surviving controls focused; otherwise return to the main conversation.
+  useLayoutEffect(() => {
+    if (!focusAfterClose.current) return;
+    focusAfterClose.current = false;
+    const focused = document.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      focused !== document.body &&
+      focused.isConnected &&
+      !focused.closest('[inert], [hidden], [aria-hidden="true"], [role="menu"]')
+    )
+      return;
+    (
+      main.current?.querySelector<HTMLElement>(
+        '[data-main-workspace] [role="tab"][data-tab-value="conversation"]',
+      ) ?? main.current
+    )?.focus({ preventScroll: true });
   });
   const toggle = (expanded: boolean) => (
     <IconButton
