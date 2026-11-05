@@ -85,15 +85,9 @@ it("reads terminal task status only for the requested task IDs", async () => {
       },
     }),
   );
-  const place = {
-    community: "wss://primary.example",
-    channelId: "channel",
-    sessionId: "session",
-  };
   expect(
     await h.client.turnStatus(
-      { id: "agent" },
-      place,
+      "session",
       ["done", "failed", "stopped", "terminated"],
       h.signal,
     ),
@@ -113,7 +107,7 @@ it("reads terminal task status only for the requested task IDs", async () => {
   ]) {
     vi.mocked(h.host.request).mockResolvedValueOnce(response({ outcomes }));
     await expect(
-      h.client.turnStatus({ id: "agent" }, place, ["done"], h.signal),
+      h.client.turnStatus("session", ["done"], h.signal),
     ).rejects.toThrow("invalid turn status");
   }
 });
