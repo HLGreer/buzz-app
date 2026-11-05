@@ -969,21 +969,28 @@ impl FederatedIdentity {
             raw,
             issued_at: now()?,
         });
-        // A renewal replaces the current session's record in one step.
-        let replacing = self.state().session.clone();
-        let (saved, expected) = (session.clone(), replacing.clone());
+        // A completed sign-in, including a renewal, is the newest choice: it
+        // saves over whatever the shared item now holds, which another Buzz
+        // copy may have written since this one restored. A write between the
+        // read and the swap still fails as session-changed.
+        let saved = session.clone();
         let written = self
             .storage(move |store| {
+                let replacing = store.read()?;
                 store.compare(
-                    expected.as_ref().map(|session| session.raw.as_slice()),
+                    replacing.as_ref().map(|raw| raw.as_slice()),
                     Some(&saved.raw),
-                )
+                )?;
+                Ok(replacing)
             })
             .await;
-        if let Err(failure) = written {
-            abandon().await;
-            return Err(failure);
-        }
+        let replacing = match written {
+            Ok(replacing) => replacing,
+            Err(failure) => {
+                abandon().await;
+                return Err(failure);
+            }
+        };
         if !self.current(revision) {
             self.unsave(session, replacing).await?;
             abandon().await;
@@ -1011,18 +1018,19 @@ impl FederatedIdentity {
     }
     /// The session `session` was saved for ended before it was installed.
     /// Refuse `session` durably first, so a failure below never lets a restart
-    /// restore it, then put back the record it replaced for whoever ended that
-    /// session to remove. A failure leaves that removal to fail and report it.
+    /// restore it, then put back the record it replaced, which may be another
+    /// copy's, for whoever ended that session to remove or leave alone. A
+    /// failure leaves that removal to fail and report it.
     async fn unsave(
         &self,
         session: Arc<Session>,
-        replaced: Option<Arc<Session>>,
+        replaced: Option<Zeroizing<Vec<u8>>>,
     ) -> Result<(), Failure> {
         self.remove(session).await?;
         let Some(replaced) = replaced else {
             return Ok(());
         };
-        self.storage(move |store| store.compare(None, Some(&replaced.raw)))
+        self.storage(move |store| store.compare(None, Some(&replaced)))
             .await
     }
     pub(crate) fn cancel_sign_in(&self) {

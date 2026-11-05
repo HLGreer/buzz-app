@@ -918,9 +918,10 @@ first server keeps the sessions it saved as the only server. Neither includes th
 app identifier: like the human key, copies in one debug/release namespace that
 use the same server (Buzz and Buzz Staging both use the public server) share its
 session. A signed-out copy reads the item again before a browser sign-in and
-adopts a session another copy saved. When another copy already ended or
-replaced the session, a sign-out here finishes signed out, and an expiry or
-refusal here ends it as expired; both leave the newer session alone.
+adopts a session another copy saved. A completed browser sign-in, including a
+renewal, saves over whatever session the item holds. When another copy already
+ended or replaced the session, a sign-out here finishes signed out, and an
+expiry or refusal here ends it as expired; both leave the newer session alone.
 A signed-in copy keeps its session until it restarts, even after another copy
 signs out. On macOS one item per
 profile and deployment holds the session and every agent grant, so Keychain

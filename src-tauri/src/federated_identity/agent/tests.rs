@@ -1305,15 +1305,18 @@ async fn an_abandoned_switch_withdraws_only_its_own_retirement() {
         let identity = &f.tokens.0.identity;
         let revision = identity.snapshot().revision;
         let cancel = identity.state().cancellation.child_token();
-        // A is live but its record isn't the stored one, so B's save fails
-        // after preparation marked A's grants for retirement.
+        // Storage refuses B's save after preparation marked A's grants for
+        // retirement.
+        f.session_store
+            .denied
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         assert_eq!(
             identity
                 .finish_login("code", "secret", &revision, &cancel)
                 .await
                 .unwrap_err()
                 .code,
-            "session-changed"
+            "storage-denied"
         );
         assert!(f.session_store.raw.lock().unwrap().is_none());
         assert_eq!(f.grants.pending(&f.tokens.retiring_key()).unwrap(), already);

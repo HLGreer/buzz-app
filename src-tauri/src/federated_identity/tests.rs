@@ -6,7 +6,7 @@ pub(super) struct Memory {
     pub(super) raw: Mutex<Option<Zeroizing<Vec<u8>>>>,
     pub(super) compare_gate: Mutex<Option<super::agent::grant::tests::Gate>>,
     refusal: Mutex<Option<String>>,
-    denied: AtomicBool,
+    pub(super) denied: AtomicBool,
     reads: AtomicUsize,
 }
 impl Store for Memory {
@@ -1077,9 +1077,11 @@ async fn a_renewal_into_another_account_retires_derived_state() {
     server.await.unwrap();
 }
 
-/// Holds `host`'s renewal into b@example.com once its record is saved, runs
+/// Holds `host`'s renewal into b@example.com once its record is saved over
+/// `shared`, another copy's record (with none, `host`'s own), runs
 /// `meanwhile`, then lets it finish.
 async fn renewal_held_after_saving(
+    shared: Option<Arc<Session>>,
     meanwhile: impl FnOnce(&FederatedIdentity, &Memory),
 ) -> (
     FederatedIdentity,
@@ -1095,6 +1097,9 @@ async fn renewal_held_after_saving(
     .await;
     let store = Arc::new(Memory::default());
     let (host, old) = signed_in_at(store.clone(), base, "a@example.com");
+    if let Some(shared) = shared {
+        *store.raw.lock().unwrap() = Some(shared.raw.clone());
+    }
     let revision = host.snapshot().revision;
     let cancel = {
         let mut state = host.state();
@@ -1125,7 +1130,7 @@ async fn renewal_held_after_saving(
 #[tokio::test]
 async fn a_renewal_past_its_commit_point_ignores_cancel() {
     let (host, store, old, revision, result) =
-        renewal_held_after_saving(|host, _| host.cancel_sign_in()).await;
+        renewal_held_after_saving(None, |host, _| host.cancel_sign_in()).await;
     // Cancel came too late to stop it, so it completes whole.
     assert!(result.is_ok());
     let snapshot = host.snapshot();
@@ -1139,7 +1144,7 @@ async fn a_renewal_past_its_commit_point_ignores_cancel() {
 
 #[tokio::test]
 async fn a_renewal_whose_session_ends_while_saving_is_refused_even_if_rollback_fails() {
-    let (host, store, old, _, result) = renewal_held_after_saving(|host, store| {
+    let (host, store, old, _, result) = renewal_held_after_saving(None, |host, store| {
         // The session ends (as sign-out does) and storage starts failing.
         host.retire(Status::SignedOut, None);
         store.denied.store(true, Ordering::SeqCst);
@@ -1153,4 +1158,52 @@ async fn a_renewal_whose_session_ends_while_saving_is_refused_even_if_rollback_f
     let restarted = at_adapter(store.clone(), "https://identity.example".into());
     assert!(restarted.restore().await.status == Status::SignedOut);
     assert!(store.raw.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn a_stale_renewal_saves_over_the_session_another_copy_left() {
+    // Another Buzz copy sharing the item renewed, or signed out, since this
+    // copy restored.
+    for other in [Some(record()), None] {
+        let (base, server) = adapter(vec![
+            serde_json::json!({"session_token":"renewed-session-token","expires_at":"2099-02-01T00:00:00Z"}),
+            serde_json::json!({"expires_at":"2099-02-01T00:00:00Z","email":"a@example.com"}),
+        ])
+        .await;
+        let store = Arc::new(Memory::default());
+        let (host, _) = signed_in_at(store.clone(), base, "a@example.com");
+        *store.raw.lock().unwrap() = other.as_ref().map(|session| session.raw.clone());
+        let revision = host.snapshot().revision;
+        let cancel = {
+            let mut state = host.state();
+            let cancel = state.cancellation.child_token();
+            state.renewal = Some(cancel.clone());
+            cancel
+        };
+        let result = host
+            .finish_login("code", "secret", &revision, &cancel)
+            .await;
+        assert_eq!(host.renewed(&revision, &cancel, result), Ok(()));
+        let snapshot = host.snapshot();
+        assert!(snapshot.status == Status::SignedIn);
+        assert_ne!(snapshot.revision, revision);
+        let current = host.state().session.clone().unwrap();
+        assert_eq!(current.record.session_token, "renewed-session-token");
+        assert_eq!(store.raw.lock().unwrap().as_deref(), Some(&*current.raw));
+        server.await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_renewal_ended_after_saving_puts_back_the_session_it_replaced() {
+    // Another Buzz copy renewed since this one restored.
+    let other = record();
+    let (host, store, _, _, result) = renewal_held_after_saving(Some(other.clone()), |host, _| {
+        host.retire(Status::SignedOut, None);
+    })
+    .await;
+    assert_eq!(result.unwrap_err().code, "session-changed");
+    assert!(host.state().session.is_none());
+    // The other copy's record is back, not this copy's old one.
+    assert_eq!(store.raw.lock().unwrap().as_deref(), Some(&*other.raw));
 }
