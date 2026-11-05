@@ -28,7 +28,7 @@ export function createProfileActions(session: BuilderlabSession) {
     if (login.status === "signed-in") return children;
     return (
       <span className="inline-flex items-center rounded-full bg-panel px-3 py-1 text-body-sm text-secondary">
-        Offline
+        Signed out of Builderlab
       </span>
     );
   };

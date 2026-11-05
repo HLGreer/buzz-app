@@ -111,14 +111,14 @@ it("shows account status with one footer sign-in action and restores profile con
   );
   expect(screen.queryByRole("button", { name: "Edit profile" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Message" })).toBeNull();
-  expect(screen.getByText("Offline")).toBeVisible();
+  expect(screen.getByText("Signed out of Builderlab")).toBeVisible();
   expect(acquire).not.toHaveBeenCalled();
   const signIn = screen.getByRole("button", {
     name: "Sign in to Builderlab",
   });
   fireEvent.click(signIn);
   expect(acquire).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("Offline")).toBeVisible();
+  expect(screen.getByText("Signed out of Builderlab")).toBeVisible();
   await waitFor(() => expect(signIn).toBeVisible());
   expect(signIn).toHaveAttribute("aria-busy", "true");
   expect(screen.queryByRole("button", { name: "Cancel sign-in" })).toBeNull();
