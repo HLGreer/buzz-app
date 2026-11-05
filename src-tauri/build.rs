@@ -170,6 +170,8 @@ fn main() {
             "plugin_host_process_spawn",
             "plugin_host_process_write",
             "plugin_host_process_kill",
+            "plugin_host_process_bind_agent",
+            "plugin_host_process_tool_credential",
             "plugin_host_mcp_serve",
             "plugin_host_mcp_authorize",
             "plugin_host_mcp_pairing",

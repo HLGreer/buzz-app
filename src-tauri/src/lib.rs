@@ -1257,6 +1257,35 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 
 #[cfg(test)]
 mod tests {
+    /// Tauri refuses a registered command its app manifest does not list, so
+    /// every handler must be in `build.rs` and allowed by a capability.
+    #[test]
+    fn every_registered_command_is_listed_and_allowed() {
+        let lib = include_str!("lib.rs");
+        let start = lib.find("generate_handler![").unwrap();
+        let handlers = &lib[start..][..lib[start..].find(']').unwrap()];
+        let manifest = include_str!("../build.rs");
+        let capabilities = [
+            include_str!("../capabilities/default.json"),
+            include_str!("../capabilities/desktop-window.json"),
+            include_str!("../capabilities/huddle.json"),
+        ]
+        .concat();
+        let commands = handlers["generate_handler![".len()..]
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.starts_with("#[") && !line.is_empty())
+            .map(|line| line.trim_end_matches(',').rsplit("::").next().unwrap());
+        for command in commands {
+            assert!(
+                manifest.contains(&format!("\"{command}\"")),
+                "{command} is not in build.rs"
+            );
+            let allow = format!("\"allow-{}\"", command.replace('_', "-"));
+            assert!(capabilities.contains(&allow), "{command} has no capability");
+        }
+    }
+
     use super::{
         title_bar_double_click_action, title_bar_fill_target, TitleBarDoubleClickAction,
         TitleBarFillFrame, TitleBarFrame,
