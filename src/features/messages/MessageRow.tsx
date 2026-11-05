@@ -12,7 +12,11 @@ import {
 } from "../conversation/typing-presentation";
 import { breathing, localActivity } from "../agents/local-activity";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
-import { LightningIcon, RobotIcon } from "../../shared/design-system/icons";
+import {
+  LightningIcon,
+  RobotIcon,
+  WarningCircleIcon,
+} from "../../shared/design-system/icons";
 import { useProfileOwner } from "../profiles/useProfileOwner";
 import { messagePreviewText } from "../conversation/message-preview-text";
 import { profileMentionParts } from "./profile-mentions";
@@ -1421,7 +1425,11 @@ export const MessageRow = memo(function AudienceMessageRow(
       canOpen={(target) => canOpenLink?.(target) ?? false}
       open={(target) => onOpenLink(target, { rootId })}
     >
-      {row.audience === "agents" ? (
+      {row.notice === "execution-failure" &&
+      !row.edited &&
+      !row.attachments.length ? (
+        <AgentsMessageRow {...props} failure />
+      ) : row.audience === "agents" ? (
         <AgentsMessageRow {...props} />
       ) : (
         <FullMessageRow {...props} />
@@ -1430,11 +1438,18 @@ export const MessageRow = memo(function AudienceMessageRow(
   );
 });
 
-function AgentsMessageRow(props: MessageRowProps) {
-  const { row, session, media, participantProfiles, agentPubkeys } = props;
+function AgentsMessageRow(props: MessageRowProps & { failure?: boolean }) {
+  const {
+    row,
+    session,
+    media,
+    participantProfiles,
+    agentPubkeys,
+    failure = false,
+  } = props;
   const references = props.references ?? session;
   const [open, setOpen] = useState(false);
-  const activity = props.recordedActivity;
+  const activity = failure ? undefined : props.recordedActivity;
   const bubble =
     activity?.container === "bubble" || activity?.container === "standalone";
   const live = useActivityIndicator(
@@ -1516,7 +1531,8 @@ function AgentsMessageRow(props: MessageRowProps) {
       renderMessage={(message, trigger) => (
         <div
           className={styles.audienceRow}
-          data-audience="agents"
+          data-audience={failure ? undefined : "agents"}
+          data-message-notice={failure ? "execution-failure" : undefined}
           data-coordination={to.length > 0 || undefined}
           data-layout={props.layout ?? "timeline"}
           data-stack-previous={props.stackPrevious || undefined}
@@ -1560,11 +1576,27 @@ function AgentsMessageRow(props: MessageRowProps) {
               ref={trigger}
               data-buzz-ui=""
               className={styles.audienceLine}
-              aria-label={`${author.name}${to.length ? ` to ${to.map((who) => who.name).join(", ")}` : ""}: ${preview}${row.edited ? " (edited)" : ""}`}
+              aria-label={
+                failure
+                  ? `${author.name}: Couldn’t finish · ${open ? "Hide details" : "Details"}`
+                  : `${author.name}${to.length ? ` to ${to.map((who) => who.name).join(", ")}` : ""}: ${preview}${row.edited ? " (edited)" : ""}`
+              }
             >
               {!bubble && avatar(author)}
-              {open && bubble && "Collapse"}
-              {!open && (
+              {failure && (
+                <span className={styles.failureNotice}>
+                  <span className="text-subtle">{author.name} ·</span>
+                  <span className={styles.failureNotice}>
+                    <WarningCircleIcon size={12} aria-hidden="true" />
+                    <span className="text-danger">Couldn’t finish</span>
+                  </span>
+                  <span className="text-subtle">
+                    {open ? "Hide details" : "Details"}
+                  </span>
+                </span>
+              )}
+              {!failure && open && bubble && "Collapse"}
+              {!failure && !open && (
                 <span className={styles.audiencePreviewText}>
                   <ShimmerText active={active}>{visiblePreview}</ShimmerText>
                 </span>

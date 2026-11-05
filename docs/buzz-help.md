@@ -391,8 +391,16 @@ available rather than silently discarding it.
   open its transcript or **Stop** the running request; before any work updates
   arrive, those controls appear on the live indicator. Stop availability depends
   on the agent type.
-- When a request to an agent running on this device fails, the activity under
-  the message offers **Retry**, which asks the agent again, and **Dismiss**,
+- A request that ends unsuccessfully shows **Couldn’t finish**; a cancelled request
+  shows **Stopped**. Captions follow the agent’s latest public reply, or stay with
+  your request when there is no reply.
+  **Status unavailable** means Buzz
+  cannot confirm the outcome. Choose **Details** for available status information.
+  New automatic failure replies appear as a compact status line; failures of channel
+  requests also appear directly in the channel. **Details** expands the original
+  explanation inline. Ordinary replies and partial results stay visible.
+- When a request to an agent running on this device fails, its **Details** offer
+  **Retry**, which asks the agent again, and **Dismiss**,
   which hides the failure.
 
 Saved teams from **Your teams** appear in the inline `@` suggestions and the
