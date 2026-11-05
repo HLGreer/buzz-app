@@ -438,7 +438,7 @@ force every plugin into one universal page component. Read the
 
 ## Direction
 
-Buzz adopts Block UI's visual language and semantic color grammar. Base UI
+Buzz has its own visual language and semantic color grammar. Base UI
 remains the behavior layer; Buzz owns styles, composition and product semantics.
 Use Inter and JetBrains Mono, public dependencies and generic examples. Do not
 copy private packages, proprietary fonts, internal product data or private source.

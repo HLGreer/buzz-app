@@ -11,8 +11,9 @@ import {
 } from "./src/features/communities/destination.ts";
 import { parseFirstRunAccountSeed } from "./src/features/identity/first-run-seed.ts";
 
-function sharedBuilderlabUrl() {
-  const key = "BUZZ_BUILDERLAB_URL";
+/** A value native builds also read: process first, then repository-root
+ * .env.local, never Vite mode files. */
+function sharedBuildValue(key: string, fallback: string) {
   if (process.env[key] !== undefined) return process.env[key];
   let local: string;
   try {
@@ -24,12 +25,26 @@ function sharedBuilderlabUrl() {
       "code" in error &&
       error.code === "ENOENT"
     )
-      return "https://app.builderlab.xyz";
+      return fallback;
     throw new Error("Could not read shared Builderlab build configuration.");
   }
-  return (
-    parseEnv(local.replace(/^\uFEFF/, ""))[key] ?? "https://app.builderlab.xyz"
-  );
+  return parseEnv(local.replace(/^\uFEFF/, ""))[key] ?? fallback;
+}
+
+/** The Apps control plane for the build's login origin, checked as native's
+ * `build.rs` checks it. */
+function sharedAppsControlPlane(login: string) {
+  const raw = sharedBuildValue("BUZZ_BUILDERLAB_APPS_CONTROL_PLANE", "");
+  if (!raw) return "";
+  let url: URL | undefined;
+  try {
+    url = new URL(raw);
+  } catch {}
+  if (!login || url?.protocol !== "https:" || url.origin !== raw)
+    throw new Error(
+      "Builderlab Apps control plane must be an HTTPS origin with a login origin",
+    );
+  return raw;
 }
 
 /** An FI build signs in to Builderlab through its NIP-FI identity origin and
@@ -58,7 +73,10 @@ export default defineConfig(async ({ command, mode }) => {
   // Keep this frontend value on the same source so Vite mode files cannot
   // select a different same-origin deployment path.
   const federatedUrl = federatedBuilderlabUrl();
-  const builderlabUrl = federatedUrl ?? sharedBuilderlabUrl();
+  const builderlabUrl =
+    federatedUrl ??
+    sharedBuildValue("BUZZ_BUILDERLAB_URL", "https://app.builderlab.xyz");
+  const appsControlPlane = sharedAppsControlPlane(builderlabUrl);
   // The development broker is the dev server's default: it runs whenever the
   // developer has pinned their public key. Production builds (`pnpm build`,
   // `pnpm tauri build`) never load it, regardless of .env.local contents.
@@ -127,11 +145,7 @@ export default defineConfig(async ({ command, mode }) => {
           api: `${builderlabUrl.replace(/\/$/, "")}/api/goose`,
           appsBase: (
             await import("./src/bundled/builderlab/apps/environment.ts")
-          ).controlPlane(
-            builderlabUrl,
-            builderlabUrl,
-            env.BUZZ_BUILDERLAB_APPS_CONTROL_PLANE ?? "",
-          ),
+          ).controlPlane(builderlabUrl, builderlabUrl, appsControlPlane),
         },
       }),
     );
@@ -166,9 +180,8 @@ export default defineConfig(async ({ command, mode }) => {
       ),
       "import.meta.env.VITE_BUZZ_BUILDERLAB_APPS_DOMAIN":
         JSON.stringify(env.BUZZ_BUILDERLAB_APPS_DOMAIN) ?? "undefined",
-      "import.meta.env.VITE_BUZZ_BUILDERLAB_APPS_CONTROL_PLANE": JSON.stringify(
-        env.BUZZ_BUILDERLAB_APPS_CONTROL_PLANE ?? "",
-      ),
+      "import.meta.env.VITE_BUZZ_BUILDERLAB_APPS_CONTROL_PLANE":
+        JSON.stringify(appsControlPlane),
       "import.meta.env.VITE_BUZZ_OPEN_RELAY": JSON.stringify(openOrigin),
       "import.meta.env.VITE_BUZZ_DATABRICKS_HOST":
         JSON.stringify(databricksHost),

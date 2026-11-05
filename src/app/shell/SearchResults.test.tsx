@@ -3213,7 +3213,7 @@ it("runs operator-only date and author searches without a text predicate", async
   }
 });
 
-it.each(["from:ba", "from:@ba"])(
+it.each(["from:br", "from:@br"])(
   "%s opens the same prefix picker and never reads messages before identity selection",
   async (query) => {
     const relay = keypair(),
@@ -3226,7 +3226,7 @@ it.each(["from:ba", "from:@ba"])(
         if (filters.some((filter) => filter.kinds?.includes(9)))
           reads.push(filters as Filter[]);
         if (filters.some((filter) => filter.kinds?.includes(0)))
-          return Promise.resolve([profile(human, { display_name: "Baxen" })]);
+          return Promise.resolve([profile(human, { display_name: "Bramble" })]);
         return Promise.resolve([]);
       },
     });
@@ -3243,7 +3243,7 @@ it.each(["from:ba", "from:@ba"])(
         />,
       );
       const people = within(screen.getByRole("group", { name: "People" }));
-      const choice = await people.findByRole("option", { name: /Baxen/ });
+      const choice = await people.findByRole("option", { name: /Bramble/ });
       expect(reads).toHaveLength(0);
       fireEvent.click(choice);
       expect(change).toHaveBeenCalledWith(`from:${human.pubkey} `);
@@ -3388,8 +3388,8 @@ it("offers a bounded from:@ picker with distinct identities and selects an exact
     query(filters) {
       if (filters.some((filter) => filter.kinds?.includes(0)))
         return Promise.resolve([
-          profile(first, { display_name: "Baxen" }),
-          profile(second, { display_name: "Baxen" }),
+          profile(first, { display_name: "Bramble" }),
+          profile(second, { display_name: "Bramble" }),
         ]);
       if (filters.some((filter) => filter.kinds?.includes(9))) {
         reads.push(filters as Filter[]);
@@ -3409,7 +3409,7 @@ it("offers a bounded from:@ picker with distinct identities and selects an exact
     const mounted = render(
       <SearchResults
         session={owner.session}
-        query="from:@baxen"
+        query="from:@bramble"
         onQueryChange={change}
         input={createRef()}
         pages={[]}
@@ -3422,7 +3422,7 @@ it("offers a bounded from:@ picker with distinct identities and selects an exact
     mounted.rerender(
       <SearchResults
         session={owner.session}
-        query="from:baxen"
+        query="from:bramble"
         onQueryChange={change}
         input={createRef()}
         pages={[]}
@@ -3643,9 +3643,9 @@ it("opens the identity picker for bare from: without an unfiltered message read"
 });
 
 it.each([
-  "from:baxen deploy",
-  "from:@baxen ",
-  "deploy from:baxen after:2024-01-15",
+  "from:bramble deploy",
+  "from:@bramble ",
+  "deploy from:bramble after:2024-01-15",
 ])(
   "resolves a completed ambiguous %s without losing surrounding query text",
   async (query) => {
@@ -3658,8 +3658,8 @@ it.each([
       query(filters) {
         if (filters.some((filter) => filter.kinds?.includes(0)))
           return Promise.resolve([
-            profile(first, { display_name: "Baxen" }),
-            profile(second, { display_name: "Baxen" }),
+            profile(first, { display_name: "Bramble" }),
+            profile(second, { display_name: "Bramble" }),
           ]);
         return Promise.resolve([]);
       },
@@ -3682,7 +3682,7 @@ it.each([
       expect(await people.findAllByRole("option")).toHaveLength(2);
       fireEvent.click(people.getAllByRole("option")[1] as HTMLElement);
       expect(change).toHaveBeenCalledWith(
-        `from:${second.pubkey} ${query.replace(/from:@?baxen\s*/i, "")}`,
+        `from:${second.pubkey} ${query.replace(/from:@?bramble\s*/i, "")}`,
       );
     } finally {
       cleanup();
@@ -4356,7 +4356,7 @@ it("offers during: periods and an on: calendar that insert local dates", async (
 it("picks an in: channel from the joined channels and an in:@ person like from:@", async () => {
   const relay = keypair(),
     viewer = keypair(),
-    baxen = keypair();
+    bramble = keypair();
   const { owner } = operatorSession(viewer, relay, [
     metadata(relay, "bugs", "buzz-bugs"),
     roster(relay, "bugs", [viewer.pubkey]),
@@ -4364,12 +4364,12 @@ it("picks an in: channel from the joined channels and an in:@ person like from:@
     roster(relay, "builds", [viewer.pubkey]),
     metadata(relay, "crew", "crew"),
     roster(relay, "crew", [viewer.pubkey]),
-    profile(baxen, { display_name: "Baxen" }),
+    profile(bramble, { display_name: "Bramble" }),
   ]);
   const session = {
     ...owner.session,
     searchProfiles: async () => [
-      eventDto(profile(baxen, { display_name: "Baxen" })),
+      eventDto(profile(bramble, { display_name: "Bramble" })),
     ],
   };
   const change = vi.fn();
@@ -4398,10 +4398,10 @@ it("picks an in: channel from the joined channels and an in:@ person like from:@
         await screen.findByRole("group", { name: "Channels" }),
       ).findAllByRole("option"),
     ).toHaveLength(3);
-    view.rerender(<SearchResults {...props} query="deploy in:@bax" />);
+    view.rerender(<SearchResults {...props} query="deploy in:@bra" />);
     const people = within(await screen.findByRole("group", { name: "People" }));
-    fireEvent.click(await people.findByRole("option", { name: /Baxen/ }));
-    expect(change).toHaveBeenLastCalledWith(`in:@${baxen.pubkey} deploy `);
+    fireEvent.click(await people.findByRole("option", { name: /Bramble/ }));
+    expect(change).toHaveBeenLastCalledWith(`in:@${bramble.pubkey} deploy `);
   } finally {
     cleanup();
     owner.dispose();

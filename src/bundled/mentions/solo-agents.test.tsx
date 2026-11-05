@@ -2823,11 +2823,11 @@ it("uses base matches and visible lexical ties for Fizz in both chooser surfaces
   const test = setup();
   const rows = [
     { key: "3".repeat(64), name: "Fast Fizz", label: "Fast Fizz" },
-    { key: "0".repeat(64), name: "Fizz", label: "baxen’s Fizz · oncp" },
-    { key: "4".repeat(64), name: "Fizz", label: "baxen’s Fizz · s03j" },
-    { key: "5".repeat(64), name: "Fizz", label: "Kenny Lopez’s Fizz" },
-    { key: "b".repeat(64), name: "Fizz", label: "baxen’s Fizz · 4prr" },
-    { key: "c".repeat(64), name: "Fizz", label: "baxen’s Fizz · 06pl" },
+    { key: "0".repeat(64), name: "Fizz", label: "bramble’s Fizz · oncp" },
+    { key: "4".repeat(64), name: "Fizz", label: "bramble’s Fizz · s03j" },
+    { key: "5".repeat(64), name: "Fizz", label: "Kestrel Vane’s Fizz" },
+    { key: "b".repeat(64), name: "Fizz", label: "bramble’s Fizz · 4prr" },
+    { key: "c".repeat(64), name: "Fizz", label: "bramble’s Fizz · 06pl" },
   ];
   const profiles = new Map(
     rows.map((row) => [row.key, { name: row.name, isAgent: true as const }]),

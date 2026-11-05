@@ -62,7 +62,7 @@ function respond(
   }
   const { checks } = pull;
   const data: Record<string, unknown> = query.includes("viewer{login}")
-    ? { viewer: { login: "baxen" } }
+    ? { viewer: { login: "bramble" } }
     : {};
   for (let i = 0; `n${i}` in variables; i++)
     data[`r${i}`] = {
@@ -1335,8 +1335,8 @@ describe("github_watch_pr", () => {
     app.gh(
       answer({
         comments: [
-          { id: "I1", login: "baxen", body: " 🤖 body-agent" },
-          { id: "I2", login: "Baxen", body: "body-owner" },
+          { id: "I1", login: "bramble", body: " 🤖 body-agent" },
+          { id: "I2", login: "Bramble", body: "body-owner" },
           { id: "I3", login: "stranger", body: "🤖 body-stranger" },
         ],
       }),
@@ -1369,7 +1369,7 @@ allow org:example-org author:/^ada_/`);
           { id: "I3", login: "bob", body: "body-bob" },
           { id: "I4", login: "copilot-x", body: "body-copilot" },
           { id: "I5", login: "alice", body: "Nit: body-nit" },
-          { id: "I6", login: "baxen", body: "body-owner" },
+          { id: "I6", login: "bramble", body: "body-owner" },
         ],
       }),
     );

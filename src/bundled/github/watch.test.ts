@@ -25,7 +25,7 @@ const comment = (
 });
 const snap = (over: Partial<PullSnapshot> = {}): PullSnapshot => ({
   state: "OPEN",
-  viewer: "baxen",
+  viewer: "bramble",
   head: "1111111111aaaa",
   settled: false,
   failed: [],
@@ -74,7 +74,7 @@ describe("step", () => {
 
   it("batches new feedback until it has been quiet", () => {
     const base = step(watch, snap(), 0).watch;
-    const owners = comment("4", "baxen", "Please also rename it");
+    const owners = comment("4", "bramble", "Please also rename it");
     const first = step(base, snap({ feedback: [comment("1")] }), 1_000);
     expect(first.wake).toBeUndefined();
     expect(first.watch.pending?.map((item) => item.id)).toEqual(["1"]);
@@ -97,7 +97,7 @@ describe("step", () => {
         "  > note 1",
         `- comment by wen ${url}#3:`,
         "  > note 3",
-        `- comment by baxen ${url}#4:`,
+        `- comment by bramble ${url}#4:`,
         "  > Please also rename it",
       ].join("\n"),
     );
@@ -226,7 +226,7 @@ describe("snapshotOf", () => {
     settled: true,
     failed: ["unit"],
     feedback: {
-      viewer: "baxen",
+      viewer: "bramble",
       ids: ["review/R1", "inline/C2", "comment/I3", "comment/I4"],
       items: [
         comment("review/R1", "wen", " "),
@@ -239,7 +239,7 @@ describe("snapshotOf", () => {
   it("learns everything listed on a first read", () => {
     expect(snapshotOf(state())).toMatchObject({
       state: "OPEN",
-      viewer: "baxen",
+      viewer: "bramble",
       head: "abc",
       settled: true,
       failed: ["unit"],
@@ -252,7 +252,7 @@ describe("snapshotOf", () => {
     const found = snapshotOf(
       state({
         feedback: {
-          viewer: "baxen",
+          viewer: "bramble",
           ids: ["review/R1", "inline/C2", "comment/I3", "comment/I4"],
           items: [wrapper, { ...comment("inline/C2"), path: "src/a.ts" }],
         },

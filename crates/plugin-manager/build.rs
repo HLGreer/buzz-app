@@ -18,7 +18,8 @@ const BUILDERLAB_APPS_CONTROL_PLANE_KEY: &str = "BUZZ_BUILDERLAB_APPS_CONTROL_PL
 const REPOSITORY_ACCESS_KEY: &str = "BUZZ_BUILD_REPOSITORY_ACCESS";
 
 /// Default repository access rules, in `repository-access.json`'s schema. Every rule
-/// must be usable, so a typo fails the build instead of dropping a rule.
+/// must be usable, so a typo fails the build instead of dropping a rule. Cargo reads
+/// `rustc-env` one line at a time, so the value is emitted as compact JSON.
 fn repository_access(raw: Option<String>) -> Result<String, String> {
     let Some(raw) = raw.filter(|raw| !raw.is_empty()) else {
         return Ok(String::new());
@@ -27,7 +28,9 @@ fn repository_access(raw: Option<String>) -> Result<String, String> {
     match file.problems.first() {
         Some(problem) => Err(problem.clone()),
         None if file.rules.is_empty() => Err("rules must not be empty".into()),
-        None => Ok(raw),
+        None => Ok(serde_json::from_str::<serde_json::Value>(&raw)
+            .map_err(|error| error.to_string())?
+            .to_string()),
     }
 }
 
@@ -392,7 +395,16 @@ mod tests {
         assert_eq!(repository_access(None).unwrap(), "");
         assert_eq!(repository_access(Some(String::new())).unwrap(), "");
         let rule = r#"{"version": 1, "rules": [{"host": "git.example.com", "pathPrefix": "/team/", "sshUser": "git"}]}"#;
-        assert_eq!(repository_access(Some(rule.into())).unwrap(), rule);
+        let compact = r#"{"rules":[{"host":"git.example.com","pathPrefix":"/team/","sshUser":"git"}],"version":1}"#;
+        assert_eq!(repository_access(Some(rule.into())).unwrap(), compact);
+        // Pretty-printed input reaches `env!` whole: one line, the same rules.
+        let pretty = "{\n  \"version\": 1,\n  \"rules\": [\n    {\"host\": \"git.example.com\", \"pathPrefix\": \"/team/\", \"sshUser\": \"git\"}\n  ]\n}\n";
+        let emitted = repository_access(Some(pretty.into())).unwrap();
+        assert_eq!(emitted, compact);
+        assert!(!emitted.contains(['\n', '\r']));
+        let parsed = repository_access::parse(&emitted).unwrap();
+        assert_eq!(parsed.rules.len(), 1);
+        assert!(parsed.problems.is_empty());
         for raw in [
             "{",
             r#"{"version": 2}"#,
@@ -413,6 +425,30 @@ mod tests {
         assert_eq!(
             builderlab_apps_control_plane(&local, login, None).unwrap(),
             ""
+        );
+        assert_eq!(
+            plane("https://ctrl.example", login).unwrap(),
+            "https://ctrl.example"
+        );
+        // Like the frontend: .env.local applies, process overrides it, and Vite
+        // mode files are never read.
+        std::fs::write(
+            directory.path().join(".env.production"),
+            "BUZZ_BUILDERLAB_APPS_CONTROL_PLANE=https://mode.example\n",
+        )
+        .unwrap();
+        assert_eq!(
+            builderlab_apps_control_plane(&local, login, None).unwrap(),
+            ""
+        );
+        std::fs::write(
+            &local,
+            "BUZZ_BUILDERLAB_APPS_CONTROL_PLANE=https://local.example\n",
+        )
+        .unwrap();
+        assert_eq!(
+            builderlab_apps_control_plane(&local, login, None).unwrap(),
+            "https://local.example"
         );
         assert_eq!(
             plane("https://ctrl.example", login).unwrap(),

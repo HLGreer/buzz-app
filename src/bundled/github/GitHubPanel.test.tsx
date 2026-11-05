@@ -373,7 +373,7 @@ function pullData(over: Record<string, unknown> = {}) {
         state: "OPEN",
         isDraft: false,
         body: "Why it changes",
-        author: { login: "baxen" },
+        author: { login: "bramble" },
         baseRefName: "main",
         headRefName: "fix",
         headRefOid: "abc123",
@@ -557,7 +557,7 @@ it("merges after confirming, at the head it showed, then shows it merged", async
     return merged
       ? pullData({
           state: "MERGED",
-          mergedBy: { login: "baxen" },
+          mergedBy: { login: "bramble" },
           mergedAt: new Date().toISOString(),
         })
       : pullData();
@@ -580,7 +580,7 @@ it("merges after confirming, at the head it showed, then shows it merged", async
   await user.click(within(dialog).getByRole("button", { name: "Merge" }));
   await screen.findByText(/Merged into/);
   expect(screen.getByText(/Merged into/)).toHaveTextContent(
-    "Merged into main by baxen",
+    "Merged into main by bramble",
   );
   expect(gh.mock.calls[1]).toEqual([
     "mutation($input:MergePullRequestInput!){mergePullRequest(input:$input){clientMutationId}}",
@@ -1405,7 +1405,7 @@ it("asks before a review goes in against a push that arrived mid-draft", async (
                 : {
                     headRefOid: "def456",
                     state: "MERGED",
-                    mergedBy: { login: "baxen" },
+                    mergedBy: { login: "bramble" },
                   },
           ),
     );

@@ -792,35 +792,35 @@
         {
           "pubkey": "0000000000000000000000000000000000000000000000000000000000000000",
           "name": "Fizz",
-          "label": "baxen’s Fizz · oncp",
+          "label": "bramble’s Fizz · oncp",
           "member": true,
           "agent": true
         },
         {
           "pubkey": "4444444444444444444444444444444444444444444444444444444444444444",
           "name": "Fizz",
-          "label": "baxen’s Fizz · s03j",
+          "label": "bramble’s Fizz · s03j",
           "member": true,
           "agent": true
         },
         {
           "pubkey": "5555555555555555555555555555555555555555555555555555555555555555",
           "name": "Fizz",
-          "label": "Kenny Lopez’s Fizz",
+          "label": "Kestrel Vane’s Fizz",
           "member": true,
           "agent": true
         },
         {
           "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "name": "Fizz",
-          "label": "baxen’s Fizz · 4prr",
+          "label": "bramble’s Fizz · 4prr",
           "member": true,
           "agent": true
         },
         {
           "pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "name": "Fizz",
-          "label": "baxen’s Fizz · 06pl",
+          "label": "bramble’s Fizz · 06pl",
           "member": true,
           "agent": true
         }

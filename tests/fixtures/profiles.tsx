@@ -80,9 +80,9 @@ const reply = message(viewer, "one", "Thread @Pippa", 12, [
   ["p", pippa.pubkey],
 ]);
 const picture = "https://images.test/avatar.png";
-const pinkyPicture = "https://images.test/pippa-animated.gif";
+const pippaPicture = "https://images.test/pippa-animated.gif";
 const pictureFixture = "/tests/fixtures/design-system/assets/avatar.png";
-const pinkyPictureFixture = "/tests/fixtures/design-system/assets/avatar.png";
+const pippaPictureFixture = "/tests/fixtures/design-system/assets/avatar.png";
 const report = {
   profileReads: [] as string[][],
   media: [] as [string, "small" | undefined][],
@@ -102,7 +102,7 @@ let data = [
       nip05: "pippa@example.test",
       about: "Agent profile",
       is_agent: true,
-      picture: pinkyPicture,
+      picture: pippaPicture,
     }),
     tags: [],
   }),
@@ -193,8 +193,8 @@ function session() {
         report.media.push([url, size]);
         return url === picture
           ? pictureFixture
-          : url === pinkyPicture
-            ? pinkyPictureFixture
+          : url === pippaPicture
+            ? pippaPictureFixture
             : url;
       },
       async query(filters) {
