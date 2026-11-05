@@ -317,6 +317,9 @@ that agent in Buzz; they do not notify the external app through this connection.
   opens it directly; **Open Inbox** opens the page. The card's **Unread only**
   switch is separate from the Inbox page's filters. The preview is not shown on
   touch devices or while the Inbox page is open.
+- **Channel activity**: rest the pointer on a channel or Solo chat in the
+  sidebar to see its working agents and **Unread threads**. Choosing an unread
+  thread opens it at the reply shown, expanding the replies it is nested under.
 - **Sidebar width**: drag the sidebar's right edge, or focus its resize handle
   and use the Left/Right arrow keys. Double-click the handle to reset the width.
   Messages and plugin pages share the saved width within the same community
