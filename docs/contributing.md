@@ -834,7 +834,8 @@ the complete correctness suite still runs with `pnpm test` / `just scan`:
   changes reach, most specific first, while each lane's predicted wall time
   stays within nine minutes and the additions stay near 40 journeys and 20
   Vitest files. A Vitest file that would overrun the time is skipped, and
-  files after it can still join; the step summary names the skipped files.
+  files after it can still join; the step summary names the highest-ranked
+  skipped files.
   Journeys run as the longest run in rank order that fits, since more
   journeys can mean more shards and a shorter lane. The prediction reads
   per-journey and per-file durations from

@@ -1135,7 +1135,7 @@ test("a related file joins only while the edited tests' lane time plus its own f
   assert.equal(take(vitestLaneSeconds([20, 8])).taken.length, 1);
 });
 
-test("an edited file filtered by line that is too slow to run whole keeps its filter and does not stop the related files after it", () => {
+test("an edited file filtered by line that cannot run whole keeps its filter, is unwidened rather than dropped, and does not stop the related files after it", () => {
   const costs = costModel({
     browser: {},
     vitest: { "src/A.test.ts": 600, "src/C.test.ts": 8 },
@@ -1155,19 +1155,22 @@ test("an edited file filtered by line that is too slow to run whole keeps its fi
     reach: 1,
     size: 1,
   });
-  const result = addRelated(
-    { vitest: new Map([["src/A.test.ts", filtered]]), browser: new Map() },
-    {
-      vitest: [
-        { file: "src/A.test.ts", route: route(0) },
-        { file: "src/C.test.ts", route: route(1) },
-      ],
-      browser: [],
-    },
-    { specs: new Map(), costs, budget: LANE_BUDGET_MINUTES * 60 },
+  const add = (related, budget) =>
+    addRelated(
+      { vitest: new Map([["src/A.test.ts", filtered]]), browser: new Map() },
+      { vitest: related, browser: [] },
+      { specs: new Map(), costs, budget },
+    );
+  const result = add(
+    [
+      { file: "src/A.test.ts", route: route(0) },
+      { file: "src/C.test.ts", route: route(1) },
+    ],
+    LANE_BUDGET_MINUTES * 60,
   );
   const files = (candidates) => candidates.map(({ file }) => file);
-  assert.deepEqual(files(result.take.vitest.overBudget), ["src/A.test.ts"]);
+  assert.deepEqual(files(result.take.vitest.unwidened), ["src/A.test.ts"]);
+  assert.deepEqual(result.take.vitest.overBudget, []);
   assert.deepEqual(files(result.take.vitest.taken), ["src/C.test.ts"]);
   assert.deepEqual(
     [...result.selected.vitest].map(([file, { tier, entries }]) => [
@@ -1180,10 +1183,32 @@ test("an edited file filtered by line that is too slow to run whole keeps its fi
       ["src/C.test.ts", "2", ["src/C.test.ts"]],
     ],
   );
+  assert.equal(
+    result.selected.vitest.get("src/A.test.ts").note,
+    "1 changed test(s); also related, not run whole for time",
+  );
   assert.deepEqual(result.lanes.vitest, [
     vitestLaneSeconds([6, 8]),
     vitestLaneSeconds([6]),
   ]);
+  // Ranked after the cap fills, it is unwidened for the cap.
+  const capped = add(
+    [
+      { file: "src/A.test.ts", route: route(1) },
+      ...Array.from({ length: RELATED_VITEST_FILES }, (_, i) => ({
+        file: `src/F${i}.test.ts`,
+        route: route(0),
+      })),
+    ],
+    Number.POSITIVE_INFINITY,
+  );
+  assert.equal(capped.take.vitest.taken.length, RELATED_VITEST_FILES);
+  assert.deepEqual(files(capped.take.vitest.unwidened), ["src/A.test.ts"]);
+  assert.deepEqual(capped.take.vitest.overCap, []);
+  assert.equal(
+    capped.selected.vitest.get("src/A.test.ts").note,
+    "1 changed test(s); also related, not run whole for the cap",
+  );
 });
 
 test("a related Vitest file too slow to fit beside the edited tests alone neither ends the picks after it nor takes a cap slot", () => {

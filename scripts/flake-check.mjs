@@ -765,7 +765,8 @@ const reason = ({ file, route, namesake }) =>
 // `selected` holds tier 1's selections by runner and file: a Vitest file's
 // `share` of its listed tests and a spec's journey `lines`. `specs` lists
 // each spec's journeys; `costs` is a costModel. Returns the merged
-// selections, what each runner took and dropped, and each lane's predicted
+// selections, what each runner took and dropped (and the related Vitest files
+// tier 1 filtered by line that it left unwidened), and each lane's predicted
 // seconds as [with tier 2, tier 1 alone].
 export function addRelated(selected, related, { specs, costs, budget }) {
   const journeySeconds = (file, lines) =>
@@ -856,6 +857,22 @@ export function addRelated(selected, related, { specs, costs, budget }) {
       entries: [candidate.file],
       note: `whole file (${reason(candidate)})`,
     });
+  // A line-filtered edited file that tier 2 could not widen still runs its
+  // changed tests, so it is unwidened rather than dropped.
+  const filtered = ({ file }) => selected.vitest.has(file);
+  const unwidened = [];
+  for (const [key, why] of [
+    ["overBudget", "time"],
+    ["overCap", "the cap"],
+  ])
+    for (const candidate of take.vitest[key].filter(filtered)) {
+      const entry = selected.vitest.get(candidate.file);
+      merged.vitest.set(candidate.file, {
+        ...entry,
+        note: `${entry.note}; also related, not run whole for ${why}`,
+      });
+      unwidened.push(candidate);
+    }
   for (const candidate of take.browser.taken)
     merged.browser.set(candidate.file, {
       tier: selected.browser.has(candidate.file) ? "1, 2" : "2",
@@ -865,7 +882,15 @@ export function addRelated(selected, related, { specs, costs, budget }) {
     });
   return {
     selected: merged,
-    take,
+    take: {
+      browser: take.browser,
+      vitest: {
+        taken: take.vitest.taken,
+        overBudget: take.vitest.overBudget.filter((c) => !filtered(c)),
+        overCap: take.vitest.overCap.filter((c) => !filtered(c)),
+        unwidened,
+      },
+    },
     lanes: {
       browser: [lane.browser(take.browser.taken), lane.browser([])],
       vitest: [lane.vitest(take.vitest.taken), lane.vitest([])],
@@ -1017,29 +1042,36 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
     `${minutes(lanes[runner][0])} (edited tests alone ${minutes(lanes[runner][1])})`;
   const journeys = (candidates) =>
     candidates.reduce((sum, { cost }) => sum + cost, 0);
-  // A line-filtered edited file that tier 2 could not widen still runs its
-  // changed tests, so it is not dropped.
-  const unwidened = new Map(
-    [
-      ...take.vitest.overBudget.map(({ file }) => [file, "time"]),
-      ...take.vitest.overCap.map(({ file }) => [file, "the cap"]),
-    ].filter(([file]) => selected.vitest.has(file)),
-  );
-  const dropped = Object.fromEntries(
-    ["overBudget", "overCap"].map((key) => [
-      key,
-      take.vitest[key].filter(({ file }) => !unwidened.has(file)),
-    ]),
-  );
   const rows = ["vitest", "browser"].flatMap((runner) =>
-    [...merged[runner]].map(([file, { tier, note }]) => {
-      const more =
-        runner === "vitest" && unwidened.has(file)
-          ? `; also related, not run whole for ${unwidened.get(file)}`
-          : "";
-      return `| ${cell(file)} | ${runner} | ${tier} | ${cell(note + more)} |`;
-    }),
+    [...merged[runner]].map(
+      ([file, { tier, note }]) =>
+        `| ${cell(file)} | ${runner} | ${tier} | ${cell(note)} |`,
+    ),
   );
+  // Once the Vitest lane fills, every later related file is dropped for time,
+  // so name only the highest ranked, namesakes first. When the edited tests
+  // alone fill it, none can join.
+  const { overBudget } = take.vitest;
+  const named = overBudget
+    .slice(0, 5)
+    .map(({ file, namesake }) =>
+      namesake ? `${file} (named after ${namesake})` : file,
+    );
+  const more = overBudget.length - named.length;
+  const vitestTotals =
+    overBudget.length && lanes.vitest[1] > budget * 60
+      ? [
+          `Related Vitest files: none of the ${overBudget.length} can join, since the edited tests alone exceed the budget.`,
+        ]
+      : [
+          `Related Vitest files: ${take.vitest.taken.length} selected; dropped ${overBudget.length} for time and ${take.vitest.overCap.length} for the cap of ${RELATED_VITEST_FILES}.`,
+          ...(overBudget.length
+            ? [
+                "",
+                `Related Vitest files dropped for time, highest ranked first: ${named.join(", ")}${more ? ` and ${more} more` : ""}.`,
+              ]
+            : []),
+        ];
   const totals = [
     ...(rows.length
       ? [
@@ -1051,18 +1083,8 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
       ? [
           `Related journeys: ${journeys(take.browser.taken)} selected in ${take.browser.taken.length} spec(s); dropped ${journeys(take.browser.overBudget)} in ${take.browser.overBudget.length} spec(s) for time and ${journeys(take.browser.overCap)} in ${take.browser.overCap.length} spec(s) for the cap of ${RELATED_JOURNEYS}.`,
           "",
-          `Related Vitest files: ${take.vitest.taken.length} selected; dropped ${dropped.overBudget.length} for time and ${dropped.overCap.length} for the cap of ${RELATED_VITEST_FILES}.`,
+          ...vitestTotals,
           "",
-          ...(dropped.overBudget.length
-            ? [
-                `Related Vitest files dropped for time: ${dropped.overBudget
-                  .map(({ file, namesake }) =>
-                    namesake ? `${file} (named after ${namesake})` : file,
-                  )
-                  .join(", ")}.`,
-                "",
-              ]
-            : []),
         ]
       : []),
   ];
