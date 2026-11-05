@@ -38,7 +38,7 @@ use hyper::{Method, Request, Response, StatusCode};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 use tauri::ipc::Channel;
@@ -46,6 +46,8 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 mod authorization;
 pub(crate) use authorization::plugin_host_mcp_authorize;
+pub(crate) mod pairing;
+pub(crate) use pairing::plugin_host_mcp_pairing;
 
 /// Servers running at once across all plugins.
 const MAX_SERVERS: usize = 64;
@@ -89,6 +91,8 @@ struct Shared {
     /// Explicitly let clients holding the token join the same session.
     shared_session: bool,
     authorization: Mutex<Option<authorization::Exchange>>,
+    pairing: Mutex<Option<pairing::Grant>>,
+    pairing_pending: AtomicBool,
     events: Channel<McpEvent>,
     stop: CancellationToken,
     pending: Mutex<Pending>,
@@ -166,6 +170,8 @@ impl HostMcpServers {
             claim: AtomicU8::new(UNCLAIMED),
             shared_session,
             authorization: Mutex::new(None),
+            pairing: Mutex::new(None),
+            pairing_pending: AtomicBool::new(false),
             events,
             stop: CancellationToken::new(),
             pending: Mutex::default(),
@@ -234,7 +240,7 @@ impl HostMcpServers {
 }
 
 async fn answer(
-    shared: &Shared,
+    shared: &Arc<Shared>,
     request: Request<Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     if request.uri().path() == "/authorize/exchange" {
@@ -301,9 +307,8 @@ async fn forward(shared: &Shared, body: String) -> (StatusCode, Option<String>) 
         request
     };
     let _waiting = Waiting(shared, request);
-    if shared
-        .events
-        .send(McpEvent::Message { request, body })
+    if pairing::forward(shared, McpEvent::Message { request, body })
+        .await
         .is_err()
     {
         // Nobody is listening: the page that started it is gone.
