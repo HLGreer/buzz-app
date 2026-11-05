@@ -1,5 +1,4 @@
 import { ChannelHeaderIdentity } from "./ChannelHeaderIdentity";
-import { ChannelMemberAvatars } from "./ChannelMemberAvatars";
 import {
   useVerifiedNames,
   withVerifiedNames,
@@ -446,13 +445,10 @@ export function ChannelMembersButton({
       {conversationName !== undefined ? (
         <ChannelHeaderIdentity
           ref={trigger}
+          session={session}
+          channelId={channelId}
           name={conversationName}
-          avatars={
-            <ChannelMemberAvatars session={session} channelId={channelId} />
-          }
-          aria-label={`Manage members of ${conversationName}${owner ? `, ${soloOwnerLabel(owner)}` : ""}`}
-          title={owner ? soloOwnerLabel(owner) : "Manage members"}
-          aria-haspopup="dialog"
+          detail={owner && soloOwnerLabel(owner)}
           aria-expanded={open}
           onClick={() => setOpen(true)}
         />

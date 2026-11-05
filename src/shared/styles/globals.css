@@ -429,6 +429,15 @@
     width: 1rem;
     height: 1rem;
   }
+  .shell-search-shortcut {
+    display: flex;
+    margin-inline-start: auto;
+  }
+  @container (width < 10rem) {
+    .shell-search-shortcut {
+      display: none;
+    }
+  }
   @container (width < 6rem) {
     .shell-search-label {
       display: none;
@@ -619,11 +628,9 @@
     opacity: 1;
     pointer-events: none;
   }
-}
-
-@layer components {
   /* Keep the retained navigation out of layout and keyboard traversal on apps
-     without a sidebar, including after a narrow drawer was open. */
+     without a sidebar, including after a narrow drawer was open. This must
+     follow the collapsible and narrow-drawer display rules above. */
   .shell-navigation[hidden] {
     display: none;
   }

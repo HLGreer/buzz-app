@@ -33,14 +33,13 @@ export function PageNavigation({
   selected,
   onSelect,
   placement = "sidebar",
-  orientation = "horizontal",
   previews = false,
 }: {
   pages: readonly RegisteredPage[];
   selected: string;
   onSelect(key: string, options?: Pick<NavigationOpenOptions, "focus">): void;
-  placement?: "sidebar" | "topbar";
-  orientation?: "horizontal" | "vertical";
+  /** The app dock is a vertical icon tablist; the sidebar lists rows. */
+  placement?: "sidebar" | "dock";
   /** Show inactive page previews in this navigation surface on hover-capable devices. */
   previews?: boolean;
 }) {
@@ -48,12 +47,12 @@ export function PageNavigation({
   const hover = useHoverPointer();
   const previewed = (page: RegisteredPage) =>
     previews && hover && page.key !== selected;
-  if (placement === "topbar") {
+  if (placement === "dock") {
     return (
       <Tabs
-        label="Topbar pages"
+        label="Apps"
         variant="dock"
-        orientation={orientation}
+        orientation="vertical"
         value={pages.some((page) => page.key === selected) ? selected : null}
         onValueChange={(key) => onSelect(key, { focus: "preserve" })}
         items={pages.map((page) => {
@@ -82,7 +81,7 @@ export function PageNavigation({
                     preview={Preview}
                     label={label}
                     enabled={previewed(page)}
-                    hintSide={orientation === "vertical" ? "right" : "bottom"}
+                    dockHint
                   >
                     {tab}
                   </PagePreview>
@@ -187,14 +186,15 @@ function PagePreview({
   preview: Preview,
   label,
   enabled,
-  hintSide,
+  dockHint = false,
   children,
 }: {
   page: RegisteredPage;
   preview: ComponentType<PagePreviewProps>;
   label: string;
   enabled: boolean;
-  hintSide?: "right" | "bottom";
+  /** Dock tabs show their label as an instant hint beside the dock. */
+  dockHint?: boolean;
   children: ReactElement<ComponentProps<"button">>;
 }) {
   const [open, setOpen] = useState(false);
@@ -221,7 +221,7 @@ function PagePreview({
       openOnHover={enabled ? "preview" : false}
       data-popup-preview={enabled ? "" : undefined}
       render={cloneElement(children, {
-        title: enabled || hintSide ? undefined : label,
+        title: enabled || dockHint ? undefined : label,
         "aria-haspopup": enabled ? "dialog" : undefined,
         "aria-expanded": enabled ? open : undefined,
       })}
@@ -239,11 +239,11 @@ function PagePreview({
       }}
     >
       {/* Marked transient, so a conversation's default focus is not held back. */}
-      {hintSide ? (
+      {dockHint ? (
         <Tooltip
           content={label}
           hint="instant"
-          side={hintSide}
+          side="right"
           {...(enabled ? { open: false } : {})}
         >
           {trigger}

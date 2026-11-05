@@ -287,14 +287,50 @@ it("selects the first typed result and keeps it as results change", async () => 
   expect(select).toHaveBeenCalledExactlyOnceWith("test/second");
 });
 
-it("labels Search without displaying a keyboard shortcut", async () => {
-  render(<PageSearch pages={[]} onSelect={vi.fn()} />);
-  const user = userEvent.setup();
-  await user.tab();
-  expect(screen.getByRole("button", { name: "Search Buzz" })).toHaveTextContent(
-    /^Search$/,
-  );
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Search Buzz$/);
+it("shows the live search shortcut in the trigger and its hint, following a rebind", async () => {
+  Object.defineProperty(navigator, "platform", {
+    configurable: true,
+    value: "MacIntel",
+  });
+  const root = new Context();
+  root.provide("pluginStatus", {
+    isActive: () => true,
+    subscribe: () => () => {},
+  });
+  const bindings = createShortcutBindings(window);
+  const shortcuts = new ShortcutsService(root, window, bindings);
+  try {
+    // Only the shortcut services are read while the dialog is closed.
+    render(
+      <PageSearch
+        pages={[]}
+        onSelect={vi.fn()}
+        services={
+          { shortcuts, shortcutBindings: bindings } as unknown as SearchServices
+        }
+      />,
+    );
+    // The title renders as a focus/hover tooltip rather than a native attribute.
+    const user = userEvent.setup();
+    await user.tab();
+    const trigger = screen.getByRole("button", { name: "Search Buzz" });
+    expect(trigger).toHaveFocus();
+    expect(within(trigger).getByText("⌘K")).toBeInTheDocument();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Search Buzz (⌘K)",
+    );
+    act(() =>
+      bindings.set("global-search", { key: "p", mod: true, shift: true }),
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Search Buzz (⇧⌘P)");
+    expect(within(trigger).getByText("⇧⌘P")).toBeInTheDocument();
+    act(() => bindings.reset());
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Search Buzz (⌘K)");
+  } finally {
+    Reflect.deleteProperty(navigator, "platform");
+    bindings.dispose();
+    await root.fiber.dispose();
+  }
 });
 
 it("opens conversation-scoped search with Command F and returns to overall search", async () => {

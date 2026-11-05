@@ -32,7 +32,6 @@ import {
 } from "./useChannelTabState";
 import { ChannelMembersDialog } from "./ChannelMembersDialog";
 import { ChannelHeaderIdentity } from "./ChannelHeaderIdentity";
-import { ChannelMemberAvatars } from "./ChannelMemberAvatars";
 import {
   soloDraft,
   soloDraftTarget,
@@ -1903,7 +1902,7 @@ function ChannelWorkspace({
   );
   // The conversation: full width for Solo, or the first main-pane tab.
   const body = (
-    <div className={styles.windowCenteredBody}>
+    <div className={styles.conversationBody}>
       <MessageManagementStatus />
       <section
         data-channel-history
@@ -2204,16 +2203,9 @@ function ChannelWorkspace({
                     identity={
                       current && (
                         <ChannelHeaderIdentity
+                          session={queries}
+                          channelId={current.id}
                           name={current.name}
-                          avatars={
-                            <ChannelMemberAvatars
-                              session={queries}
-                              channelId={current.id}
-                            />
-                          }
-                          aria-label={`Manage members of ${current.name}`}
-                          title="Manage members"
-                          aria-haspopup="dialog"
                           ref={membersHeaderTrigger}
                           aria-expanded={membersOpen}
                           onClick={(event) => openMembers(event.currentTarget)}

@@ -1207,7 +1207,7 @@ html[data-keyboard-navigation]
   }
 }
 
-.windowCenteredBody {
+.conversationBody {
   display: flex;
   flex: 1;
   flex-direction: column;

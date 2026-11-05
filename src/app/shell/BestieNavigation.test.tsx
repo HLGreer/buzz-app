@@ -153,8 +153,7 @@ it("uses the configured Bestie avatar in the dock and follows selection changes"
         pages={[page]}
         selected={page.key}
         onSelect={() => {}}
-        placement="topbar"
-        orientation="vertical"
+        placement="dock"
       />
     </BestieNavigationProvider>,
   );
@@ -410,8 +409,7 @@ it("honors the promoted DM's mute and unread state through reads and Bestie repl
         <PageNavigation
           pages={[page]}
           selected={page.key}
-          placement="topbar"
-          orientation="vertical"
+          placement="dock"
           onSelect={() => {}}
         />
       </PrimarySidebar>

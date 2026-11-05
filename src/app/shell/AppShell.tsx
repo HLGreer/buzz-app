@@ -117,13 +117,15 @@ function AppShellContent({
   children: ReactNode;
 }) {
   const header = useRef<HTMLElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = header.current;
-    if (!element) return;
-    const history = element.querySelector<HTMLElement>(".shell-history");
-    const actions = element.querySelector<HTMLElement>(".shell-actions");
-    const search = element.querySelector<HTMLElement>(".shell-menu-search");
-    if (!history || !actions || !search) return;
+    const history = historyRef.current;
+    const actions = actionsRef.current;
+    const search = searchRef.current;
+    if (!element || !history || !actions || !search) return;
     const measure = () => {
       // Equal wings keep Search centered even when the native controls or launchers differ.
       const wing = Math.max(history.offsetWidth, actions.offsetWidth);
@@ -248,9 +250,7 @@ function AppShellContent({
               previews
             />
           </nav>,
-          creationAction && creationInNavigation ? (
-            <div ref={setCreationContainer} />
-          ) : null,
+          creationInNavigation ? <div ref={setCreationContainer} /> : null,
         )
       : null;
     return selectedPageHasSidebar ? (
@@ -260,15 +260,7 @@ function AppShellContent({
     ) : (
       content
     );
-  }, [
-    pages,
-    selected,
-    sidebar,
-    sidebarScope,
-    onSelect,
-    creationAction,
-    creationInNavigation,
-  ]);
+  }, [pages, selected, sidebar, sidebarScope, onSelect, creationInNavigation]);
   const dockPages = orderPages(
     pages.filter((page) => page.primary && pagePlacement(page) !== "sidebar"),
     "dock",
@@ -302,6 +294,7 @@ function AppShellContent({
         className={`shell-header ${macDesktop ? "shell-header-mac" : ""}`}
       >
         <div
+          ref={historyRef}
           className="shell-history"
           data-buzz-window-drag={
             macDesktop || hasIntegratedWindowControls() || undefined
@@ -330,7 +323,7 @@ function AppShellContent({
           )}
           {navigationControls}
         </div>
-        <div className="shell-menu-search">
+        <div ref={searchRef} className="shell-menu-search">
           <PageSearch
             pages={pages}
             onSelect={onSelect}
@@ -338,6 +331,7 @@ function AppShellContent({
           />
         </div>
         <div
+          ref={actionsRef}
           className="shell-actions"
           data-tauri-drag-region={macDesktop ? undefined : true}
           {...titleBarDragProps}
@@ -350,15 +344,14 @@ function AppShellContent({
       </header>
 
       <div className="shell-workspace">
-        <nav key="dock" className="shell-side-dock" aria-label="Apps dock">
+        <nav className="shell-side-dock" aria-label="Apps dock">
           <div className="shell-dock-pages">
             <PageNavigation
               pages={dockPages}
               selected={selected}
               onSelect={onSelect}
-              placement="topbar"
+              placement="dock"
               previews
-              orientation="vertical"
             />
           </div>
           <div className="shell-community-switcher">
@@ -384,21 +377,16 @@ function AppShellContent({
           </div>
         </nav>
         <div
-          key="dialog-frame"
           ref={workspaceRef}
           className="shell-dialog-frame"
           data-shell-dialog-frame=""
         />
         <div
-          key="content"
           className={`shell-body ${selected === "settings" ? "shell-body-settings" : ""}`}
         >
           <div className="relative flex min-h-0 min-w-0 flex-1">
             <Panel as="div" joined>
-              <div
-                className="shell-content"
-                data-messages={channelsNavigation || undefined}
-              >
+              <div className="shell-content">
                 <div
                   id="shell-navigation"
                   hidden={!hasNavigation}
