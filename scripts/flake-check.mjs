@@ -598,7 +598,11 @@ function widths(next, popularity, seeds) {
 // Each test's most specific route to the change, for the tests that have one.
 // A route runs through the test's own imports, or through a fixture page it
 // opens and that page's script. Its spread counts the tests that reach the
-// most widely shared module between the test and the changed file. A helper
+// most widely shared module between the test and the changed file. If A
+// imports B, every test that reaches A also reaches B, so that module is
+// always the changed file's importer on the route (for a page's script, the
+// page): spread is 0 for a direct import and otherwise the popularity of the
+// least shared importer of the changed file that the test reaches. A helper
 // most journeys import (fixture.mjs) or a page many open says little about
 // any one test: specs that only reach src/features/relay/typing-protocol.ts
 // through fixture.mjs are 154 of 234. A feature's index module counts every
@@ -606,10 +610,11 @@ function widths(next, popularity, seeds) {
 // a wider route than a page that imports the module directly: emoji.html,
 // which 7 specs open, reaches src/bundled/emoji/CustomEmoji.tsx through
 // src/bundled/emoji/index.tsx, which 24 specs reach. Routes rank by spread,
-// then by how many tests reach the changed file, then by the files in the
-// route's graph (the change is a larger part of a smaller one). Every route
-// to one changed file shares its reach, so reach only orders tests that
-// reach different changed files.
+// then by how many tests reach the changed file (never fewer than the
+// spread), then by the files in the route's graph (the change is a larger
+// part of a smaller one), which is why each route keeps its own graph. Every
+// route to one changed file shares its reach, so reach only orders tests
+// that reach different changed files.
 export function routes({ edges, pages }, tests, changed) {
   const imports = (node) => edges.get(node) ?? [];
   const opens = (node) => (pages.has(node) ? [pages.get(node)] : imports(node));
@@ -694,18 +699,23 @@ export const namesake = (test, changed) => {
 };
 
 // Takes whole candidates, named after a changed module first, then by route
-// (a candidate without one last) and cheaper first among equal routes. Their
-// cost counts toward the cap, and the one crossing it still runs, so the cap
-// is never met by skipping a more specific candidate. Inside the cap, the
-// longest run of candidates in that order whose lane `lane` predicts inside
-// `budget` seconds runs; nothing ranked after a dropped candidate runs in its
-// place. Browser shards grow with the selection, so a longer run can predict
-// a shorter lane than a run it extends.
+// (a candidate without one last) and cheaper first among equal routes. The
+// cost of each candidate taken counts toward the cap, and the one crossing it
+// still runs. Picks must keep the lane `lane` predicts inside `budget`
+// seconds, and a candidate never loses its place to one ranked after it:
+// - A lane that only `grows` with each pick takes each candidate that fits
+//   beside the ones before it. One that does not fit never will, so skipping
+//   it displaces nothing ranked ahead, and it takes no cap slot.
+// - Browser shards grow with the selection, so a longer run can predict a
+//   shorter lane than a run it extends. There the longest run of candidates
+//   in rank order that fits runs, and nothing ranked after a dropped
+//   candidate runs in its place.
 export function takeRelated(
   candidates,
   cap,
   budget = Number.POSITIVE_INFINITY,
   lane = () => 0,
+  grows = false,
 ) {
   const named = ({ namesake }) => (namesake ? 0 : 1);
   const routed = (a, b) =>
@@ -717,6 +727,17 @@ export function takeRelated(
       a.cost - b.cost ||
       a.file.localeCompare(b.file),
   );
+  if (grows) {
+    const taken = [];
+    const overBudget = [];
+    let next = 0;
+    for (let used = 0; next < ranked.length && used < cap; next += 1)
+      if (lane([...taken, ranked[next]]) <= budget) {
+        taken.push(ranked[next]);
+        used += ranked[next].cost;
+      } else overBudget.push(ranked[next]);
+    return { taken, overBudget, overCap: ranked.slice(next) };
+  }
   let used = 0;
   let capped = 0;
   while (capped < ranked.length && used < cap) used += ranked[capped++].cost;
@@ -785,32 +806,21 @@ export function addRelated(selected, related, { specs, costs, budget }) {
         ]).values(),
       ]),
   };
-  const vitestCandidates = related.vitest
-    .filter(({ file }) => !selected.vitest.get(file)?.whole)
-    .map((candidate) => ({
-      ...candidate,
-      cost: 1,
-      seconds: costs.vitest(candidate.file),
-    }));
-  // The Vitest lane only grows with each pick, so a file that does not fit
-  // beside the edited tests alone can never run. It is dropped for time
-  // before ranking, so it neither ends the picks after it nor takes a cap
-  // slot.
-  const fits = (candidate) => lane.vitest([candidate]) <= budget;
-  const vitestTake = takeRelated(
-    vitestCandidates.filter(fits),
-    RELATED_VITEST_FILES,
-    budget,
-    lane.vitest,
-  );
   const take = {
-    vitest: {
-      ...vitestTake,
-      overBudget: [
-        ...vitestCandidates.filter((candidate) => !fits(candidate)),
-        ...vitestTake.overBudget,
-      ],
-    },
+    // Widening a line filter or adding a file only grows the Vitest lane.
+    vitest: takeRelated(
+      related.vitest
+        .filter(({ file }) => !selected.vitest.get(file)?.whole)
+        .map((candidate) => ({
+          ...candidate,
+          cost: 1,
+          seconds: costs.vitest(candidate.file),
+        })),
+      RELATED_VITEST_FILES,
+      budget,
+      lane.vitest,
+      true,
+    ),
     // The cap counts journeys tier 1 has not run; shards and the lane count
     // output entries, one per journey, which parameterized journeys sharing
     // a line repeat.
@@ -1007,11 +1017,28 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
     `${minutes(lanes[runner][0])} (edited tests alone ${minutes(lanes[runner][1])})`;
   const journeys = (candidates) =>
     candidates.reduce((sum, { cost }) => sum + cost, 0);
+  // A line-filtered edited file that tier 2 could not widen still runs its
+  // changed tests, so it is not dropped.
+  const unwidened = new Map(
+    [
+      ...take.vitest.overBudget.map(({ file }) => [file, "time"]),
+      ...take.vitest.overCap.map(({ file }) => [file, "the cap"]),
+    ].filter(([file]) => selected.vitest.has(file)),
+  );
+  const dropped = Object.fromEntries(
+    ["overBudget", "overCap"].map((key) => [
+      key,
+      take.vitest[key].filter(({ file }) => !unwidened.has(file)),
+    ]),
+  );
   const rows = ["vitest", "browser"].flatMap((runner) =>
-    [...merged[runner]].map(
-      ([file, { tier, note }]) =>
-        `| ${cell(file)} | ${runner} | ${tier} | ${cell(note)} |`,
-    ),
+    [...merged[runner]].map(([file, { tier, note }]) => {
+      const more =
+        runner === "vitest" && unwidened.has(file)
+          ? `; also related, not run whole for ${unwidened.get(file)}`
+          : "";
+      return `| ${cell(file)} | ${runner} | ${tier} | ${cell(note + more)} |`;
+    }),
   );
   const totals = [
     ...(rows.length
@@ -1024,8 +1051,18 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
       ? [
           `Related journeys: ${journeys(take.browser.taken)} selected in ${take.browser.taken.length} spec(s); dropped ${journeys(take.browser.overBudget)} in ${take.browser.overBudget.length} spec(s) for time and ${journeys(take.browser.overCap)} in ${take.browser.overCap.length} spec(s) for the cap of ${RELATED_JOURNEYS}.`,
           "",
-          `Related Vitest files: ${take.vitest.taken.length} selected; dropped ${take.vitest.overBudget.length} for time and ${take.vitest.overCap.length} for the cap of ${RELATED_VITEST_FILES}.`,
+          `Related Vitest files: ${take.vitest.taken.length} selected; dropped ${dropped.overBudget.length} for time and ${dropped.overCap.length} for the cap of ${RELATED_VITEST_FILES}.`,
           "",
+          ...(dropped.overBudget.length
+            ? [
+                `Related Vitest files dropped for time: ${dropped.overBudget
+                  .map(({ file, namesake }) =>
+                    namesake ? `${file} (named after ${namesake})` : file,
+                  )
+                  .join(", ")}.`,
+                "",
+              ]
+            : []),
         ]
       : []),
   ];
@@ -1035,7 +1072,7 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
       "",
       ...(rows.length
         ? [
-            "Tier 1 repeats the tests this pull request edited. Tier 2 adds test files its other changes reach, most specific first, while each lane stays inside the time budget and count cap. A route's spread counts the tests that reach its most widely shared module; a smaller spread is more specific.",
+            "Tier 1 repeats the tests this pull request edited. Tier 2 adds test files its other changes reach, most specific first, while each lane stays inside the time budget and count cap; a Vitest file that does not fit is skipped. A route's spread counts the tests that reach its most widely shared module; a smaller spread is more specific.",
             "",
             "| File | Runner | Tier | Selection |",
             "| --- | --- | --- | --- |",

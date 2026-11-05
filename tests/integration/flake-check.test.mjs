@@ -754,7 +754,7 @@ test("related files run whole, named after a changed module first, then by route
   assert.deepEqual(order(takeRelated(candidates, 0)), [[], [], ranked]);
 });
 
-test("related files run in rank order while their lane fits the budget; edited tests alone never trim", () => {
+test("related files run in rank order while their lane fits the budget, skipping a misfit only where the lane only grows; edited tests alone never trim", () => {
   const candidate = (file, size, seconds) => ({
     file,
     route: { files: ["x"], spread: 0, reach: 1, size },
@@ -801,6 +801,33 @@ test("related files run in rank order while their lane fits the budget; edited t
     ["first", "heavy", "light"],
     [],
     ["last"],
+  ]);
+  // A lane that only grows can never fit "heavy" after "first", so it is
+  // skipped: "light" displaces nothing ranked ahead of it, and only taken
+  // files count toward the cap.
+  const grows = (budget, edited, cap = 3) =>
+    order(takeRelated(candidates, cap, budget, lane(edited), true));
+  assert.deepEqual(grows(540, 400), [
+    ["first", "light", "last"],
+    ["heavy"],
+    [],
+  ]);
+  assert.deepEqual(grows(540, 400, 2), [
+    ["first", "light"],
+    ["heavy"],
+    ["last"],
+  ]);
+  assert.deepEqual(grows(550, 400, 2), [
+    ["first", "heavy"],
+    [],
+    ["light", "last"],
+  ]);
+  // Edited tests over the budget leave nothing to fit, so the cap never
+  // ends the walk.
+  assert.deepEqual(grows(540, 600), [
+    [],
+    ["first", "heavy", "light", "last"],
+    [],
   ]);
 });
 
@@ -1106,6 +1133,57 @@ test("a related file joins only while the edited tests' lane time plus its own f
   // C alone would fit; beside the edited B it does not.
   assert.equal(take(vitestLaneSeconds([8])).overBudget.length, 1);
   assert.equal(take(vitestLaneSeconds([20, 8])).taken.length, 1);
+});
+
+test("an edited file filtered by line that is too slow to run whole keeps its filter and does not stop the related files after it", () => {
+  const costs = costModel({
+    browser: {},
+    vitest: { "src/A.test.ts": 600, "src/C.test.ts": 8 },
+  });
+  // One of a hundred tests fits; the whole file cannot.
+  const filtered = {
+    tier: "1",
+    whole: false,
+    share: 0.01,
+    entries: ["src/A.test.ts:12"],
+    note: "1 changed test(s)",
+  };
+  const route = (spread) => ({
+    files: ["x"],
+    via: "x",
+    spread,
+    reach: 1,
+    size: 1,
+  });
+  const result = addRelated(
+    { vitest: new Map([["src/A.test.ts", filtered]]), browser: new Map() },
+    {
+      vitest: [
+        { file: "src/A.test.ts", route: route(0) },
+        { file: "src/C.test.ts", route: route(1) },
+      ],
+      browser: [],
+    },
+    { specs: new Map(), costs, budget: LANE_BUDGET_MINUTES * 60 },
+  );
+  const files = (candidates) => candidates.map(({ file }) => file);
+  assert.deepEqual(files(result.take.vitest.overBudget), ["src/A.test.ts"]);
+  assert.deepEqual(files(result.take.vitest.taken), ["src/C.test.ts"]);
+  assert.deepEqual(
+    [...result.selected.vitest].map(([file, { tier, entries }]) => [
+      file,
+      tier,
+      entries,
+    ]),
+    [
+      ["src/A.test.ts", "1", ["src/A.test.ts:12"]],
+      ["src/C.test.ts", "2", ["src/C.test.ts"]],
+    ],
+  );
+  assert.deepEqual(result.lanes.vitest, [
+    vitestLaneSeconds([6, 8]),
+    vitestLaneSeconds([6]),
+  ]);
 });
 
 test("a related Vitest file too slow to fit beside the edited tests alone neither ends the picks after it nor takes a cap slot", () => {
