@@ -329,25 +329,50 @@ export function createTabs({
   defaults: ClaudeDefaults;
   runtime: ClaudeRuntime;
 }>) {
-  function useSetupCatalog() {
+  function useRemote(agent: string) {
+    const [state, setState] = useState<{
+      agent: string;
+      remote?: boolean;
+      error?: string;
+    }>();
+    useEffect(() => {
+      let current = true;
+      void runtime.isRemote(agent).then(
+        (remote) => {
+          if (current) setState({ agent, remote });
+        },
+        (error) => {
+          if (current) setState({ agent, error: message(error) });
+        },
+      );
+      return () => {
+        current = false;
+      };
+    }, [agent]);
+    return state?.agent === agent ? state : undefined;
+  }
+  function useSetupCatalog(enabled = true) {
     const state = useSyncExternalStore(
       setup.subscribe,
       setup.snapshot,
       setup.snapshot,
     );
     useEffect(() => {
-      if (!state.status && !state.checking) void setup.check();
-    }, [state.status, state.checking]);
+      if (enabled && !state.status && !state.checking) void setup.check();
+    }, [enabled, state.status, state.checking]);
     // Once per change of readiness: a failed load waits for Try again.
     useEffect(() => {
       if (
+        enabled &&
         !state.checking &&
         state.status?.state === "ready" &&
         state.models.length === 0
       )
         void setup.loadModels();
-    }, [state.status, state.checking, state.models.length]);
-    return state;
+    }, [enabled, state.status, state.checking, state.models.length]);
+    return enabled
+      ? state
+      : { ...state, models: [], modelsChecking: false, modelsError: "" };
   }
 
   function CreateModel({
@@ -943,7 +968,9 @@ export function createTabs({
   }: AgentViewProps<Config>) {
     const form = useId();
     const saved = readConfig(agent.config);
-    const setupState = useSetupCatalog();
+    const execution = useRemote(agent.key);
+    const remote = execution?.remote === true;
+    const setupState = useSetupCatalog(execution?.remote === false);
     const providerDefaults = useSyncExternalStore(
       defaults.subscribe,
       defaults.snapshot,
@@ -973,7 +1000,7 @@ export function createTabs({
       }
     };
     const efforts = effortsFor(
-      draft.model || providerDefaults.model,
+      draft.model || (remote ? "" : providerDefaults.model),
       setupState.models,
     );
     const effortOptions = [
@@ -997,15 +1024,21 @@ export function createTabs({
           allowCustomModel
           models={modelChoices(setupState.models)}
           value={draft.model}
-          defaultModel={providerDefaultModel(
-            providerDefaults.model,
-            setupState.models,
-          )}
-          defaultLabel={providerDefaultLabel(
-            providerDefaults.model,
-            setupState.models,
-          )}
-          defaultDescription="Following the provider's model default"
+          defaultModel={
+            remote
+              ? undefined
+              : providerDefaultModel(providerDefaults.model, setupState.models)
+          }
+          defaultLabel={
+            remote
+              ? "Target default"
+              : providerDefaultLabel(providerDefaults.model, setupState.models)
+          }
+          defaultDescription={
+            remote
+              ? "Use the model configured on the target"
+              : "Following the provider's model default"
+          }
           loading={setupState.modelsChecking}
           onChange={(model) => {
             // An effort the new model does not list goes back to the default;
@@ -1045,6 +1078,11 @@ export function createTabs({
           void submit();
         }}
       >
+        {execution?.error && (
+          <p role="alert" className="buzz-field-error">
+            {execution.error}
+          </p>
+        )}
         {error && (
           <p
             ref={saveErrorRef}
@@ -1072,10 +1110,15 @@ export function createTabs({
           <>
             <Field
               label="Workspace"
-              description="The folder Claude works in. Use ~/ for your home folder."
+              description={
+                remote
+                  ? "The execution provider sets the remote workspace."
+                  : "The folder Claude works in. Use ~/ for your home folder."
+              }
             >
               <Input
                 value={draft.workspace}
+                disabled={execution?.remote !== false}
                 onValueChange={(workspace) => setDraft({ ...draft, workspace })}
               />
             </Field>
@@ -1093,7 +1136,11 @@ export function createTabs({
             />
           </>
         )}
-        <AgentSaveButton form={form} saving={saving} disabled={!changed} />
+        <AgentSaveButton
+          form={form}
+          saving={saving}
+          disabled={!changed || execution?.remote === undefined}
+        />
         {settingsSection !== "identity" && settingsContent}
       </form>
     );
