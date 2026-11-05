@@ -5,7 +5,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
-  bestRoute,
+  addRelated,
   browserLaneSeconds,
   browserShards,
   classify,
@@ -21,6 +21,7 @@ import {
   patchedPackage,
   reachesTests,
   repeatableLines,
+  routes,
   selectTests,
   takeRelated,
   testBodies,
@@ -456,7 +457,7 @@ test("browser repetitions get one shard per five journeys, at most sixteen", () 
   );
 });
 
-test("source, helper, fixture and patch changes can reach tests; root configuration and docs cannot", () => {
+test("source, helper, fixture and patch changes can reach tests; configuration and docs cannot", () => {
   for (const file of [
     "src/bundled/emoji/CustomEmoji.tsx",
     "src/features/messages/Messages.module.css",
@@ -469,6 +470,11 @@ test("source, helper, fixture and patch changes can reach tests; root configurat
   for (const file of [
     "package.json",
     "vite.config.ts",
+    // Vitest's default forceRerunTriggers would relate every Vitest file.
+    "src/bundled/pi/deps/package.json",
+    "tests/fixtures/conversation-consumer/package.json",
+    "tests/fixtures/app/vite.config.mjs",
+    "scripts/tool/vitest.config.ts",
     "docs/buzz-help.md",
     // Test files are selected by their own hunks.
     "src/App.test.tsx",
@@ -499,53 +505,153 @@ test("journeys reach product, stylesheet, package and helper changes through fix
     graph.pages.get("tests/fixtures/conversation.html"),
     "tests/fixtures/conversation.tsx",
   );
+  const route = (test, changed) =>
+    routes(graph, [reactions, overlays], changed).get(test);
   for (const changed of [
     "src/bundled/emoji/CustomEmoji.tsx",
     // emoji.tsx imports globals.css, which @imports the tokens.
     "src/shared/design-system/styles/tokens.css",
     "npm:@base-ui/react",
   ]) {
-    const route = bestRoute(graph, reactions, [changed]);
-    assert.equal(route?.via, "tests/fixtures/emoji.html", changed);
-    assert.deepEqual(route.files, [changed]);
+    assert.equal(
+      route(reactions, [changed])?.via,
+      "tests/fixtures/emoji.html",
+      changed,
+    );
+    assert.deepEqual(route(reactions, [changed]).files, [changed]);
   }
   // A helper reaches the specs importing it through their own graph.
-  assert.equal(
-    bestRoute(graph, overlays, ["tests/browser/timeline.mjs"])?.via,
-    overlays,
-  );
-  assert.equal(bestRoute(graph, reactions, ["docs/buzz-help.md"]), undefined);
+  assert.equal(route(overlays, ["tests/browser/timeline.mjs"])?.via, overlays);
+  assert.equal(route(reactions, ["docs/buzz-help.md"]), undefined);
 });
 
-test("the best route is the smallest graph holding a changed file", () => {
+test("a route is as specific as the most widely shared module on it, then the changed file's reach, then its graph's size", () => {
+  // hub.mjs stands in for fixture.mjs: three of four specs import it. a also
+  // reaches it through a helper of its own.
   const graph = {
     edges: new Map([
-      ["spec", new Set(["helper", "small.html", "large.html"])],
-      ["small", new Set(["a"])],
-      ["large", new Set(["a", "b", "c"])],
+      ["a", new Set(["own.mjs"])],
+      ["own.mjs", new Set(["hub.mjs"])],
+      ["b", new Set(["hub.mjs", "common"])],
+      ["c", new Set(["hub.mjs", "page.html"])],
+      ["d", new Set(["rare", "page.html", "common"])],
+      ["hub.mjs", new Set(["x"])],
+      ["page", new Set(["m1", "m2", "m3", "x"])],
+    ]),
+    pages: new Map([["page.html", "page"]]),
+  };
+  const tests = ["a", "b", "c", "d"];
+  const found = routes(graph, tests, ["x"]);
+  // A helper only a imports does not narrow a route that continues through
+  // hub.mjs.
+  assert.deepEqual(found.get("a"), {
+    files: ["x"],
+    via: "a",
+    spread: 3,
+    reach: 4,
+    size: 4,
+  });
+  assert.equal(found.get("b").spread, 3);
+  // Two specs open page.html, so its route is more specific than hub.mjs,
+  // though its graph is larger.
+  assert.deepEqual(found.get("c"), {
+    files: ["x"],
+    via: "page.html",
+    spread: 2,
+    reach: 4,
+    size: 6,
+  });
+  // A direct import passes through nothing.
+  assert.deepEqual(routes(graph, tests, ["x", "rare"]).get("d"), {
+    files: ["rare"],
+    via: "d",
+    spread: 0,
+    reach: 1,
+    size: 4,
+  });
+  // Among equal spreads, the changed file fewer tests reach wins.
+  assert.deepEqual(routes(graph, tests, ["common", "rare"]).get("d"), {
+    files: ["common", "rare"],
+    via: "d",
+    spread: 0,
+    reach: 1,
+    size: 4,
+  });
+  // With equal spread and reach, the smaller graph wins.
+  const sized = {
+    edges: new Map([
+      ["s", new Set(["small.html", "large.html"])],
+      ["small", new Set(["y"])],
+      ["large", new Set(["y", "z"])],
     ]),
     pages: new Map([
       ["small.html", "small"],
       ["large.html", "large"],
     ]),
   };
-  // The small page holds less of the change but is more specific to it.
-  assert.deepEqual(bestRoute(graph, "spec", ["a", "b"]), {
-    files: ["a"],
-    size: 3,
+  assert.deepEqual(routes(sized, ["s"], ["y"]).get("s"), {
+    files: ["y"],
     via: "small.html",
+    spread: 1,
+    reach: 1,
+    size: 3,
   });
-  assert.deepEqual(bestRoute(graph, "spec", ["b"]), {
-    files: ["b"],
-    size: 5,
-    via: "large.html",
-  });
-  assert.deepEqual(bestRoute(graph, "spec", ["helper"]), {
-    files: ["helper"],
-    size: 4,
-    via: "spec",
-  });
-  assert.equal(bestRoute(graph, "spec", ["d"]), undefined);
+  assert.equal(routes(graph, tests, ["nowhere"]).size, 0);
+});
+
+test("related journeys: a module most specs reach through fixture.mjs does not crowd out specific routes", async () => {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const specs = spawnSync("git", ["ls-files", "tests/browser"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+    .stdout.split("\n")
+    .filter((file) => classify(file) === "browser");
+  const graph = await moduleGraph(specs);
+  // Rank order alone, one cost unit per spec: what runs ahead of a spec
+  // decides whether the journey cap reaches it.
+  const rank = (changed) =>
+    takeRelated(
+      [...routes(graph, specs, changed)].map(([file, route]) => ({
+        file,
+        route,
+        namesake: namesake(file, changed),
+        cost: 1,
+      })),
+      Infinity,
+    ).taken;
+  const typing = "src/features/relay/typing-protocol.ts";
+  const emoji = "src/bundled/emoji/CustomEmoji.tsx";
+  const alone = rank([typing]);
+  // typing.spec.mjs is named after the module's leading word.
+  assert.equal(alone[0].file, "tests/browser/typing.spec.mjs");
+  // typing-dm.spec.mjs, like most specs, reaches the module only through
+  // fixture.mjs, so nothing in the graph sets it apart; every spec routed
+  // through a fixture page ranks ahead of it.
+  const dm = alone.find(
+    ({ file }) => file === "tests/browser/typing-dm.spec.mjs",
+  );
+  assert.equal(dm.route.via, dm.file);
+  assert.ok(dm.route.spread > specs.length / 2);
+  for (const { file, route } of alone)
+    if (route.via.startsWith("tests/fixtures/"))
+      assert.ok(alone.indexOf(dm) > alone.findIndex((c) => c.file === file));
+  // Added to a CustomEmoji.tsx change, the module puts only typing.spec.mjs
+  // ahead of the last spec routed through the emoji page, so the cap keeps
+  // the emoji-page specs it kept for CustomEmoji.tsx alone.
+  const throughEmojiPage = (ranked) => {
+    const last = ranked.findLastIndex(
+      ({ route }) => route.via === "tests/fixtures/emoji.html",
+    );
+    return ranked.slice(0, last + 1).map(({ file }) => file);
+  };
+  const before = throughEmojiPage(rank([emoji]));
+  assert.ok(before.includes("tests/browser/message-overlays.spec.mjs"));
+  assert.ok(before.includes("tests/browser/reactions-polish.spec.mjs"));
+  assert.deepEqual(
+    throughEmojiPage(rank([typing, emoji])).sort(),
+    [...before, "tests/browser/typing.spec.mjs"].sort(),
+  );
 });
 
 test("a test is named after a changed module by its whole name or leading words", () => {
@@ -593,53 +699,76 @@ test("a test is named after a changed module by its whole name or leading words"
     changed[0],
   );
   assert.equal(namesake("tests/browser/emoji.spec.mjs", changed), undefined);
+  // Either way round: a test named after the module's leading words.
+  const typing = "src/features/relay/typing-protocol.ts";
+  assert.equal(namesake("tests/browser/typing.spec.mjs", [typing]), typing);
+  assert.equal(
+    namesake("tests/browser/typing-dm.spec.mjs", [typing]),
+    undefined,
+  );
+  // A Vitest file sits beside the module it is named after; other features'
+  // files of the same name are not named after it.
+  const service = "src/features/identity/service.ts";
+  assert.equal(
+    namesake("src/features/identity/service.test.ts", [service]),
+    service,
+  );
+  assert.equal(
+    namesake("src/features/agents/service.test.ts", [service]),
+    undefined,
+  );
 });
 
-test("related files run whole, named after a changed module first, then smallest route, until the cap; the one crossing it still runs", () => {
-  const candidate = (file, size, cost) => ({
+test("related files run whole, named after a changed module first, then by route, until the cap; the one crossing it still runs", () => {
+  const candidate = (file, [spread, reach, size], cost) => ({
     file,
-    route: { files: ["x"], size },
+    route: { files: ["x"], spread, reach, size },
     cost,
   });
   const candidates = [
-    candidate("wide", 900, 1),
-    candidate("mid-cheap", 500, 3),
-    candidate("mid", 500, 10),
-    candidate("narrow", 100, 2),
+    // A route more tests share ranks after every narrower one, whatever
+    // its size.
+    candidate("wide", [5, 30, 100], 1),
+    // An equally narrow route to a changed file more tests reach.
+    candidate("broad-file", [2, 195, 100], 1),
+    candidate("mid-cheap", [2, 30, 500], 3),
+    candidate("mid", [2, 30, 500], 10),
+    candidate("narrow", [2, 30, 100], 2),
     // Vitest relates it, but the static graph found no route.
     { file: "unrouted", cost: 1 },
     // Named after a changed module: a naming heuristic ranks it ahead of
     // every route.
-    { ...candidate("named", 700, 2), namesake: "src/Named.tsx" },
+    { ...candidate("named", [9, 30, 700], 2), namesake: "src/Named.tsx" },
   ];
   const order = ({ taken, overBudget, overCap }) => [
     taken.map(({ file }) => file),
     overBudget.map(({ file }) => file),
     overCap.map(({ file }) => file),
   ];
-  assert.deepEqual(order(takeRelated(candidates, Infinity)), [
-    ["named", "narrow", "mid-cheap", "mid", "wide", "unrouted"],
-    [],
-    [],
-  ]);
+  const ranked = [
+    "named",
+    "narrow",
+    "mid-cheap",
+    "mid",
+    "broad-file",
+    "wide",
+    "unrouted",
+  ];
+  assert.deepEqual(order(takeRelated(candidates, Infinity)), [ranked, [], []]);
   // "mid-cheap" crosses the cap of 6 and runs; nothing after it does, even
   // when it would fit.
   assert.deepEqual(order(takeRelated(candidates, 6)), [
-    ["named", "narrow", "mid-cheap"],
+    ranked.slice(0, 3),
     [],
-    ["mid", "wide", "unrouted"],
+    ranked.slice(3),
   ]);
-  assert.deepEqual(order(takeRelated(candidates, 0)), [
-    [],
-    [],
-    ["named", "narrow", "mid-cheap", "mid", "wide", "unrouted"],
-  ]);
+  assert.deepEqual(order(takeRelated(candidates, 0)), [[], [], ranked]);
 });
 
 test("related files run in rank order while their lane fits the budget; edited tests alone never trim", () => {
   const candidate = (file, size, seconds) => ({
     file,
-    route: { files: ["x"], size },
+    route: { files: ["x"], spread: 0, reach: 1, size },
     cost: 1,
     seconds,
   });
@@ -817,9 +946,175 @@ test("predicted Vitest lane time follows the summed files on two workers or the 
   const close = (actual, expected) =>
     assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≠ ${expected}`);
   assert.equal(vitestLaneSeconds([]), 0);
-  close(vitestLaneSeconds([10, 10, 10, 10]), 26 + 5 * (5.7 + 0.72 * 20));
-  close(vitestLaneSeconds([143, 1]), 26 + 5 * (5.7 + 0.72 * 143));
+  // Every file pays 2.5 s of setup on top of its tests.
+  close(vitestLaneSeconds([10, 10, 10, 10]), 26 + 5 * (2.6 + 0.74 * 25));
+  close(vitestLaneSeconds(Array(20).fill(0)), 26 + 5 * (2.6 + 0.74 * 25));
+  close(vitestLaneSeconds([143, 1]), 26 + 5 * (2.6 + 0.74 * 145.5));
   // One 143 s file, as MessageComposer.test.tsx takes on CI, cannot join as a
   // related pick within the default budget.
   assert.ok(vitestLaneSeconds([143]) > LANE_BUDGET_MINUTES * 60);
+});
+
+// Tier 1 and tier 2 overlap in a file tier 1 filtered by line and that its
+// other changes also reach.
+test("related files merge into the edited selection: a line filter becomes the whole file, and journeys tier 1 ran cost the cap nothing", () => {
+  const spec = (name) => `tests/browser/${name}.spec.mjs`;
+  const journey = (line, title, tags = []) => ({ line, title, tags });
+  const specs = new Map([
+    [
+      spec("a"),
+      [
+        journey(10, "one"),
+        journey(20, "two"),
+        // Two parameterized journeys share line 30.
+        journey(30, "case 1"),
+        journey(30, "case 2"),
+        journey(40, "mac only", ["local-webkit"]),
+      ],
+    ],
+    [spec("b"), [journey(5, "b")]],
+    [spec("c"), [journey(1, "c")]],
+  ]);
+  const costs = costModel({
+    browser: {
+      [spec("a")]: {
+        one: [1, 2],
+        two: [3, 4],
+        "case 1": [5, 6],
+        "case 2": [7, 8],
+      },
+      [spec("b")]: { b: [10, 20] },
+      [spec("c")]: { c: [1, 1] },
+    },
+    vitest: { "src/A.test.ts": 100, "src/B.test.ts": 4, "src/C.test.ts": 8 },
+  });
+  const route = (spread) => ({
+    files: ["x"],
+    via: "x",
+    spread,
+    reach: 1,
+    size: 1,
+  });
+  const selected = {
+    vitest: new Map([
+      // One of a hundred tests is charged a hundredth of the file.
+      [
+        "src/A.test.ts",
+        { tier: "1", whole: false, share: 0.01, entries: ["src/A.test.ts:12"] },
+      ],
+      [
+        "src/B.test.ts",
+        { tier: "1", whole: true, share: 1, entries: ["src/B.test.ts"] },
+      ],
+    ]),
+    browser: new Map([
+      // Tier 1 runs both journeys on line 30.
+      [spec("a"), { tier: "1", lines: [30], entries: [`${spec("a")}:30`] }],
+      [spec("c"), { tier: "1", lines: [1], entries: [`${spec("c")}:1`] }],
+    ]),
+  };
+  const before = structuredClone(selected);
+  const related = {
+    vitest: ["src/A.test.ts", "src/B.test.ts", "src/C.test.ts"].map(
+      (file, i) => ({ file, route: route(i) }),
+    ),
+    browser: ["a", "b", "c"].map((name, i) => ({
+      file: spec(name),
+      route: route(i),
+    })),
+  };
+  const result = addRelated(selected, related, {
+    specs,
+    costs,
+    budget: Infinity,
+  });
+  assert.deepEqual(selected, before, "tier 1's selections are not mutated");
+  const files = (candidates) => candidates.map(({ file }) => file);
+  // B already runs whole; A's filter widens to the whole file.
+  assert.deepEqual(files(result.take.vitest.taken), [
+    "src/A.test.ts",
+    "src/C.test.ts",
+  ]);
+  const vitest = result.selected.vitest;
+  assert.deepEqual(
+    [...vitest].map(([file, { tier, whole, share, entries }]) => [
+      file,
+      tier,
+      whole,
+      share,
+      entries,
+    ]),
+    [
+      ["src/A.test.ts", "1, 2", true, 1, ["src/A.test.ts"]],
+      ["src/B.test.ts", "1", true, 1, ["src/B.test.ts"]],
+      ["src/C.test.ts", "2", true, 1, ["src/C.test.ts"]],
+    ],
+  );
+  // The widened file is charged whole, in place of its filter.
+  assert.deepEqual(result.lanes.vitest, [
+    vitestLaneSeconds([100, 4, 8]),
+    vitestLaneSeconds([1, 4]),
+  ]);
+  // Every journey of c already runs, so c is no candidate. a's cap cost is
+  // its two fresh journeys; its output gains three entries, since the
+  // filter on line 30 becomes one entry per journey there.
+  const [a, b] = result.take.browser.taken;
+  assert.deepEqual(files(result.take.browser.taken), [spec("a"), spec("b")]);
+  assert.deepEqual(
+    [a.cost, a.entries, a.seconds, b.cost, b.entries, b.seconds],
+    [2, 3, [4, 6], 1, 1, [10, 20]],
+  );
+  const browser = result.selected.browser;
+  assert.deepEqual(
+    [...browser].map(([file, { tier, entries }]) => [file, tier, entries]),
+    [
+      [
+        spec("a"),
+        "1, 2",
+        [10, 20, 30, 30].map((line) => `${spec("a")}:${line}`),
+      ],
+      [spec("c"), "1", [`${spec("c")}:1`]],
+      [spec("b"), "2", [`${spec("b")}:5`]],
+    ],
+  );
+  // The lane counts the output entries the shards split.
+  const entries = [...browser.values()].flatMap(({ entries }) => entries);
+  assert.deepEqual(result.lanes.browser, [
+    browserLaneSeconds(
+      [1 + 3 + 5 + 7 + 10 + 1, 2 + 4 + 6 + 8 + 20 + 1],
+      entries.length,
+    ),
+    browserLaneSeconds([5 + 7 + 1, 6 + 8 + 1], 2),
+  ]);
+});
+
+test("a related file joins only while the edited tests' lane time plus its own fits the budget", () => {
+  const costs = costModel({
+    browser: {},
+    vitest: { "src/B.test.ts": 20, "src/C.test.ts": 8 },
+  });
+  const selected = {
+    vitest: new Map([
+      [
+        "src/B.test.ts",
+        { tier: "1", whole: true, share: 1, entries: ["src/B.test.ts"] },
+      ],
+    ]),
+    browser: new Map(),
+  };
+  const related = {
+    vitest: [
+      {
+        file: "src/C.test.ts",
+        route: { files: ["x"], spread: 0, reach: 1, size: 1 },
+      },
+    ],
+    browser: [],
+  };
+  const take = (budget) =>
+    addRelated(selected, related, { specs: new Map(), costs, budget }).take
+      .vitest;
+  // C alone would fit; beside the edited B it does not.
+  assert.equal(take(vitestLaneSeconds([8])).overBudget.length, 1);
+  assert.equal(take(vitestLaneSeconds([20, 8])).taken.length, 1);
 });

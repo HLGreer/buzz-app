@@ -359,9 +359,9 @@ export function costModel(table) {
   };
 }
 
-// Predicted flake-lane wall time in seconds, fit to hosted pull-request runs
-// of Nov 4–5, 2026 (median predicted ÷ actual 0.95 for the slowest browser
-// shard, 1.02 for a Vitest batch). ci.yml repeats each journey ITERATIONS
+// Predicted browser-lane wall time in seconds, fit to hosted pull-request
+// runs of Nov 4–5, 2026 (median predicted ÷ actual 0.95 for the slowest
+// shard). ci.yml repeats each journey ITERATIONS
 // times per engine, over that engine's own shards; `seconds` holds one
 // repetition per engine, as [Chromium, WebKit]. A shard job spends 105 s outside its tests, and its
 // two workers take 1.11 × half its summed test time. Playwright splits
@@ -379,13 +379,18 @@ export function browserLaneSeconds(seconds, journeys) {
 }
 
 // Two Vitest batch jobs each run ITERATIONS / 2 iterations of the selection.
-// A job spends 26 s outside them, and each takes 5.7 s plus 0.72 × the larger
-// of half the summed file time (two workers) and the slowest file. A line
-// filter is charged its whole file.
+// A job spends 26 s outside them. `files` holds the seconds of each file's
+// selected tests, and every file also pays 2.5 s of import and environment
+// setup that the cost table's test spans leave out. An iteration takes
+// 2.6 s plus 0.74 × the larger of half the files' summed time (two workers)
+// and the slowest file. Fit to 163 hosted flake Vitest jobs of Nov 4–5, 2026
+// (median predicted ÷ actual 1.05; 1.03 for the 28 jobs of nine or more files,
+// which a fit without setup put at 0.86).
 export function vitestLaneSeconds(files) {
   if (files.length === 0) return 0;
-  const total = files.reduce((sum, seconds) => sum + seconds, 0);
-  return 26 + (ITERATIONS / 2) * (5.7 + 0.72 * Math.max(total / 2, ...files));
+  const charged = files.map((seconds) => seconds + 2.5);
+  const total = charged.reduce((sum, seconds) => sum + seconds, 0);
+  return 26 + (ITERATIONS / 2) * (2.6 + 0.74 * Math.max(total / 2, ...charged));
 }
 
 // Rewrites the cost table from green `main` CI runs, by default the latest
@@ -450,11 +455,15 @@ function writeCosts(runs) {
   );
 }
 
-// Changed files that can reach a test through imports. Root configuration
-// would relate every Vitest file and no fixture page loads it; the regular
-// lanes cover it.
+// Changed files that can reach a test through imports. Configuration would
+// relate every Vitest file and no fixture page loads it; the regular lanes
+// cover it. Vitest's default forceRerunTriggers (`**/package.json`,
+// `**/{vitest,vite}.config.*`) make `related` return every file, so nested
+// package manifests and configs count as configuration too.
 export const reachesTests = (file) =>
-  /^(?:src|browser-host|scripts|tests|patches)\//.test(file) && !classify(file);
+  /^(?:src|browser-host|scripts|tests|patches)\//.test(file) &&
+  !/\/(?:package\.json|vite(?:st)?\.config\.[^/]*)$/.test(file) &&
+  !classify(file);
 
 // The package a pnpm patch changes, from its `@scope__name@1.0.0.patch` name.
 export const patchedPackage = (file) =>
@@ -561,37 +570,95 @@ export async function moduleGraph(entries) {
   return { edges, pages };
 }
 
-// Nodes reachable from `start`. Fixture pages are leaves; their scripts start
-// routes of their own.
-function reach(edges, start) {
+// Nodes reachable from `start` through `next`.
+function reach(next, start) {
   const seen = new Set([start]);
-  for (const node of seen)
-    for (const next of edges.get(node) ?? []) seen.add(next);
+  for (const node of seen) for (const to of next(node)) seen.add(to);
   return seen;
 }
 
-// A test's most specific route to the change: the smallest graph holding a
-// changed node, either the test's own module graph or the graph of a fixture
-// page it opens. Fewer files on the route mean the change is a larger part of
-// what the test exercises.
-export function bestRoute(
-  { edges, pages },
-  test,
-  changed,
-  pageGraphs = new Map(),
-) {
-  const own = reach(edges, test);
-  let best;
-  for (const via of [test, ...[...own].filter((node) => pages.has(node))]) {
-    if (via !== test && !pageGraphs.has(via))
-      pageGraphs.set(via, reach(edges, pages.get(via)).add(via));
-    const nodes = via === test ? own : pageGraphs.get(via);
-    const files = changed.filter((node) => nodes.has(node));
-    if (files.length > 0 && (!best || nodes.size < best.size))
-      best = { files, size: nodes.size, via };
+// From each seed, the narrowest way to every node it reaches: the most
+// tests sharing any one module on the path, the seed included. A seed's
+// value is the narrowest way to it.
+function widths(next, popularity, seeds) {
+  const width = new Map(seeds);
+  const work = [...width.keys()];
+  while (work.length > 0) {
+    const node = work.pop();
+    const through = Math.max(width.get(node), popularity.get(node));
+    for (const to of next(node))
+      if (!(width.get(to) <= through)) {
+        width.set(to, through);
+        work.push(to);
+      }
   }
-  return best;
+  return width;
 }
+
+// Each test's most specific route to the change, for the tests that have one.
+// A route runs through the test's own imports, or through a fixture page it
+// opens and that page's script. Its spread counts the tests that reach the
+// most widely shared module between the test and the changed file. A helper
+// most journeys import (fixture.mjs) or a page many open says little about
+// any one test: specs that only reach src/features/relay/typing-protocol.ts
+// through fixture.mjs are 154 of 234. Routes rank by spread, then by how many
+// tests reach the changed file, then by the files in the route's graph (the
+// change is a larger part of a smaller one).
+export function routes({ edges, pages }, tests, changed) {
+  const imports = (node) => edges.get(node) ?? [];
+  const opens = (node) => (pages.has(node) ? [pages.get(node)] : imports(node));
+  const popularity = new Map();
+  for (const test of tests)
+    for (const node of reach(opens, test))
+      popularity.set(node, (popularity.get(node) ?? 0) + 1);
+  const pageWidths = new Map();
+  const found = new Map();
+  for (const test of tests) {
+    const own = widths(
+      imports,
+      popularity,
+      [...imports(test)].map((node) => [node, 0]),
+    );
+    const options = [{ via: test, width: own, before: 0 }];
+    for (const [page, before] of own)
+      if (pages.has(page)) {
+        if (!pageWidths.has(page))
+          pageWidths.set(
+            page,
+            widths(imports, popularity, [
+              [pages.get(page), popularity.get(page)],
+            ]),
+          );
+        options.push({ via: page, width: pageWidths.get(page), before });
+      }
+    let best;
+    for (const { via, width, before } of options) {
+      const files = changed.filter((node) => width.has(node));
+      if (files.length === 0) continue;
+      // The test itself, or the page, completes the graph.
+      const size = width.size + 1;
+      for (const file of files) {
+        const route = {
+          files,
+          via,
+          spread: Math.max(before, width.get(file)),
+          reach: popularity.get(file),
+          size,
+        };
+        if (
+          !best ||
+          (routeOrder(route, best) || route.via.localeCompare(best.via)) < 0
+        )
+          best = route;
+      }
+    }
+    if (best) found.set(test, best);
+  }
+  return found;
+}
+
+const routeOrder = (a, b) =>
+  a.spread - b.spread || a.reach - b.reach || a.size - b.size;
 
 // The name a test shares with the module it is named after: the basename
 // before its first dot, PascalCase split into kebab-case.
@@ -601,37 +668,46 @@ export const moduleName = (file) =>
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
     .toLowerCase();
 
-// The changed module a test is named after, by whole name or leading words
-// (`CustomEmoji` names `custom-emoji-authoring`). A naming convention, not
-// graph evidence: it only reorders tests the graph already reaches.
+// The changed module a test is named after: either name is the other or its
+// leading words (`CustomEmoji` names `custom-emoji-authoring`, and `typing`
+// names `typing-protocol`). Vitest files sit beside their subject, so a
+// Vitest file must also share its directory; journeys share one flat
+// directory. A naming convention, not graph evidence: it only reorders tests
+// the graph already reaches.
 export const namesake = (test, changed) => {
   const name = moduleName(test);
   return changed.find((file) => {
     const named = moduleName(file);
-    return name === named || name.startsWith(`${named}-`);
+    return (
+      (classify(test) !== "vitest" || dirname(test) === dirname(file)) &&
+      (name === named ||
+        name.startsWith(`${named}-`) ||
+        named.startsWith(`${name}-`))
+    );
   });
 };
 
-// Takes whole candidates, named after a changed module first, then smallest
-// route first (a candidate without one last) and cheaper first among equal
-// routes. Their cost counts toward the cap, and the one crossing it still
-// runs, so the cap is never met by skipping a more specific candidate. Inside
-// the cap, the longest run of candidates in that order whose lane `lane`
-// predicts inside `budget` seconds runs; nothing ranked after a dropped
-// candidate runs in its place. Browser shards grow with the selection, so a
-// longer run can predict a shorter lane than a run it extends.
+// Takes whole candidates, named after a changed module first, then by route
+// (a candidate without one last) and cheaper first among equal routes. Their
+// cost counts toward the cap, and the one crossing it still runs, so the cap
+// is never met by skipping a more specific candidate. Inside the cap, the
+// longest run of candidates in that order whose lane `lane` predicts inside
+// `budget` seconds runs; nothing ranked after a dropped candidate runs in its
+// place. Browser shards grow with the selection, so a longer run can predict
+// a shorter lane than a run it extends.
 export function takeRelated(
   candidates,
   cap,
   budget = Number.POSITIVE_INFINITY,
   lane = () => 0,
 ) {
-  const size = ({ route }) => route?.size ?? Number.POSITIVE_INFINITY;
   const named = ({ namesake }) => (namesake ? 0 : 1);
+  const routed = (a, b) =>
+    a.route && b.route ? routeOrder(a.route, b.route) : !a.route - !b.route;
   const ranked = [...candidates].sort(
     (a, b) =>
       named(a) - named(b) ||
-      size(a) - size(b) ||
+      routed(a, b) ||
       a.cost - b.cost ||
       a.file.localeCompare(b.file),
   );
@@ -645,6 +721,126 @@ export function takeRelated(
     taken: ranked.slice(0, end),
     overBudget: ranked.slice(end, capped),
     overCap: ranked.slice(capped),
+  };
+}
+
+// Why a related file runs, for the step summary.
+const reason = ({ file, route, namesake }) =>
+  (namesake
+    ? `named after ${namesake}, a naming heuristic rather than graph evidence; `
+    : "") +
+  (route
+    ? `${route.files.join(", ")} via ${route.via === file ? "imports" : route.via}, spread ${route.spread}, ${route.size} files`
+    : "Vitest module graph");
+
+// Tier 2: adds whole related files to tier 1's selections in takeRelated's
+// order while each lane's predicted wall time stays inside `budget` seconds.
+// `selected` holds tier 1's selections by runner and file: a Vitest file's
+// `share` of its listed tests and a spec's journey `lines`. `specs` lists
+// each spec's journeys; `costs` is a costModel. Returns the merged
+// selections, what each runner took and dropped, and each lane's predicted
+// seconds as [with tier 2, tier 1 alone].
+export function addRelated(selected, related, { specs, costs, budget }) {
+  const journeySeconds = (file, lines) =>
+    ENGINES.map((engine) =>
+      (specs.get(file) ?? [])
+        .filter(({ line }) => lines.includes(line))
+        .reduce(
+          (sum, { title }) => sum + costs.journey(engine, file, title),
+          0,
+        ),
+    );
+  const edited = {
+    browser: [...selected.browser].map(([file, { lines }]) => ({
+      seconds: journeySeconds(file, lines),
+      entries: lines.length,
+    })),
+    vitest: [...selected.vitest].map(([file, { share }]) => [
+      file,
+      share * costs.vitest(file),
+    ]),
+  };
+  const lane = {
+    browser: (taken) => {
+      const parts = [...edited.browser, ...taken];
+      return browserLaneSeconds(
+        ENGINES.map((_, i) =>
+          parts.reduce((sum, { seconds }) => sum + seconds[i], 0),
+        ),
+        parts.reduce((sum, { entries }) => sum + entries, 0),
+      );
+    },
+    // A related file tier 1 filtered by line replaces that filter.
+    vitest: (taken) =>
+      vitestLaneSeconds([
+        ...new Map([
+          ...edited.vitest,
+          ...taken.map(({ file, seconds }) => [file, seconds]),
+        ]).values(),
+      ]),
+  };
+  const take = {
+    vitest: takeRelated(
+      related.vitest
+        .filter(({ file }) => !selected.vitest.get(file)?.whole)
+        .map((candidate) => ({
+          ...candidate,
+          cost: 1,
+          seconds: costs.vitest(candidate.file),
+        })),
+      RELATED_VITEST_FILES,
+      budget,
+      lane.vitest,
+    ),
+    // The cap counts journeys tier 1 has not run; shards and the lane count
+    // output entries, one per journey, which parameterized journeys sharing
+    // a line repeat.
+    browser: takeRelated(
+      related.browser
+        .map((candidate) => {
+          const lines = repeatableLines(specs.get(candidate.file) ?? []);
+          const done = selected.browser.get(candidate.file)?.lines ?? [];
+          const fresh = lines.filter((line) => !done.includes(line));
+          return {
+            ...candidate,
+            lines,
+            cost: fresh.length,
+            entries: lines.length - done.length,
+            seconds: journeySeconds(candidate.file, fresh),
+          };
+        })
+        .filter(({ cost }) => cost > 0),
+      RELATED_JOURNEYS,
+      budget,
+      lane.browser,
+    ),
+  };
+  const merged = {
+    vitest: new Map(selected.vitest),
+    browser: new Map(selected.browser),
+  };
+  for (const candidate of take.vitest.taken)
+    merged.vitest.set(candidate.file, {
+      tier: selected.vitest.has(candidate.file) ? "1, 2" : "2",
+      whole: true,
+      share: 1,
+      entries: [candidate.file],
+      note: `whole file (${reason(candidate)})`,
+    });
+  for (const candidate of take.browser.taken)
+    merged.browser.set(candidate.file, {
+      tier: selected.browser.has(candidate.file) ? "1, 2" : "2",
+      lines: candidate.lines,
+      entries: candidate.lines.map((line) => `${candidate.file}:${line}`),
+      note: `whole file: ${candidate.lines.length} journey(s) (${reason(candidate)})`,
+    });
+  return {
+    selected: merged,
+    take,
+    lanes: {
+      browser: [lane.browser(take.browser.taken), lane.browser([])],
+      vitest: [lane.vitest(take.vitest.taken), lane.vitest([])],
+    },
   };
 }
 
@@ -703,20 +899,13 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
     const nodes = sources.map((file) =>
       patchedPackage(file) ? `npm:${patchedPackage(file)}` : file,
     );
-    const pageGraphs = new Map();
-    for (const file of specs) {
-      const route = bestRoute(graph, file, nodes, pageGraphs);
-      if (route)
-        related.browser.push({
-          file,
-          route,
-          namesake: namesake(file, modules),
-        });
-    }
+    for (const [file, route] of routes(graph, specs, nodes))
+      related.browser.push({ file, route, namesake: namesake(file, modules) });
+    const vitestRoutes = routes(graph, vitestFiles, nodes);
     for (const file of vitestFiles)
       related.vitest.push({
         file,
-        route: bestRoute(graph, file, nodes),
+        route: vitestRoutes.get(file),
         namesake: namesake(file, modules),
       });
   }
@@ -756,6 +945,11 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
         selected.vitest.set(file, {
           tier: "1",
           whole: selection.whole,
+          // A line filter is charged its tests' share of the file's time.
+          share: selection.whole
+            ? 1
+            : starts.filter((line) => selection.lines.includes(line)).length /
+              starts.length,
           entries: vitestFilters(file, selection),
           note: selection.whole
             ? `whole file (${selection.reason})`
@@ -780,109 +974,22 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
       }
     }
   }
-  const via = ({ file, route, namesake }) =>
-    (namesake
-      ? `named after ${namesake}, a naming heuristic rather than graph evidence; `
-      : "") +
-    (route
-      ? `${route.files.join(", ")} via ${route.via === file ? "imports" : route.via}, ${route.size} files`
-      : "Vitest module graph");
-  // Tier 2 adds related files to tier 1's edited tests while each lane's
-  // predicted wall time stays inside the budget.
-  const costs = costModel(JSON.parse(readFileSync(costsFile, "utf8")));
-  const journeySeconds = (file, lines) =>
-    ENGINES.map((engine) =>
-      (browserSpecs.get(file) ?? [])
-        .filter(({ line }) => lines.includes(line))
-        .reduce(
-          (sum, { title }) => sum + costs.journey(engine, file, title),
-          0,
-        ),
-    );
-  const edited = {
-    browser: [...selected.browser].map(([file, { lines }]) => ({
-      seconds: journeySeconds(file, lines),
-      entries: lines.length,
-    })),
-    vitest: [...selected.vitest.keys()].map((file) => [
-      file,
-      costs.vitest(file),
-    ]),
-  };
-  const lane = {
-    browser: (taken) => {
-      const parts = [...edited.browser, ...taken];
-      return browserLaneSeconds(
-        ENGINES.map((_, i) =>
-          parts.reduce((sum, { seconds }) => sum + seconds[i], 0),
-        ),
-        parts.reduce((sum, { entries }) => sum + entries, 0),
-      );
-    },
-    vitest: (taken) =>
-      vitestLaneSeconds([
-        ...new Map([
-          ...edited.vitest,
-          ...taken.map(({ file, seconds }) => [file, seconds]),
-        ]).values(),
-      ]),
-  };
-  const none = { taken: [], overBudget: [], overCap: [] };
-  const take = { vitest: none, browser: none };
-  if (sources.length) {
-    take.vitest = takeRelated(
-      related.vitest
-        .filter(({ file }) => !selected.vitest.get(file)?.whole)
-        .map((candidate) => ({
-          ...candidate,
-          cost: 1,
-          seconds: costs.vitest(candidate.file),
-        })),
-      RELATED_VITEST_FILES,
-      budget * 60,
-      lane.vitest,
-    );
-    for (const candidate of take.vitest.taken)
-      selected.vitest.set(candidate.file, {
-        tier: selected.vitest.has(candidate.file) ? "1, 2" : "2",
-        whole: true,
-        entries: [candidate.file],
-        note: `whole file (${via(candidate)})`,
-      });
-    take.browser = takeRelated(
-      related.browser
-        .map((candidate) => {
-          const lines = repeatableLines(browserSpecs.get(candidate.file) ?? []);
-          const done = selected.browser.get(candidate.file)?.lines ?? [];
-          const fresh = lines.filter((line) => !done.includes(line));
-          return {
-            ...candidate,
-            lines,
-            cost: fresh.length,
-            entries: lines.length - done.length,
-            seconds: journeySeconds(candidate.file, fresh),
-          };
-        })
-        .filter(({ cost }) => cost > 0),
-      RELATED_JOURNEYS,
-      budget * 60,
-      lane.browser,
-    );
-    for (const candidate of take.browser.taken)
-      selected.browser.set(candidate.file, {
-        tier: selected.browser.has(candidate.file) ? "1, 2" : "2",
-        lines: candidate.lines,
-        entries: candidate.lines.map((line) => `${candidate.file}:${line}`),
-        note: `whole file: ${candidate.lines.length} journey(s) (${via(candidate)})`,
-      });
-  }
+  const {
+    selected: merged,
+    take,
+    lanes,
+  } = addRelated(selected, related, {
+    specs: browserSpecs,
+    costs: costModel(JSON.parse(readFileSync(costsFile, "utf8"))),
+    budget: budget * 60,
+  });
   const minutes = (seconds) => `${(seconds / 60).toFixed(1)} min`;
   const predicted = (runner) =>
-    `${minutes(lane[runner](take[runner].taken))} (edited tests alone ${minutes(lane[runner]([]))})`;
+    `${minutes(lanes[runner][0])} (edited tests alone ${minutes(lanes[runner][1])})`;
   const journeys = (candidates) =>
     candidates.reduce((sum, { cost }) => sum + cost, 0);
   const rows = ["vitest", "browser"].flatMap((runner) =>
-    [...selected[runner]].map(
+    [...merged[runner]].map(
       ([file, { tier, note }]) =>
         `| ${cell(file)} | ${runner} | ${tier} | ${cell(note)} |`,
     ),
@@ -909,7 +1016,7 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
       "",
       ...(rows.length
         ? [
-            "Tier 1 repeats the tests this pull request edited. Tier 2 adds test files its other changes reach, most specific first, while each lane stays inside the time budget and count cap.",
+            "Tier 1 repeats the tests this pull request edited. Tier 2 adds test files its other changes reach, most specific first, while each lane stays inside the time budget and count cap. A route's spread counts the tests that reach its most widely shared module; a smaller spread is more specific.",
             "",
             "| File | Runner | Tier | Selection |",
             "| --- | --- | --- | --- |",
@@ -921,7 +1028,7 @@ async function select(budget, base = "HEAD^1", head = "HEAD") {
     ].join("\n"),
   );
   const outputs = Object.fromEntries(
-    Object.entries(selected).map(([runner, selections]) => [
+    Object.entries(merged).map(([runner, selections]) => [
       runner,
       [...selections.values()].flatMap(({ entries }) => entries),
     ]),
