@@ -602,6 +602,7 @@ it.each([
     subject: "user",
   };
   let instructionsSave: ReturnType<typeof deferred<HostResponse>> | undefined;
+  let catalogLoad: ReturnType<typeof deferred<void>> | undefined;
   let loginCallback: ReturnType<typeof deferred<OAuthCallback>> | undefined;
   const backupHandoff = deferred<void>();
   const hostRequests = () =>
@@ -662,6 +663,7 @@ it.each([
           : [],
       };
     } else if (url.endsWith("/get-model-catalog")) {
+      await catalogLoad?.promise;
       result = {
         models: [
           {
@@ -1055,18 +1057,28 @@ it.each([
           loginCallback = undefined;
         }
         await user.click(signIn());
-        expect(
-          await within(createDialog).findByRole("button", {
-            name: "Model: Choose a model",
-          }),
-        ).toBeEnabled();
+        await waitFor(() =>
+          expect(
+            within(createDialog).getByRole("button", {
+              name: "Model: Choose a model",
+            }),
+          ).toBeEnabled(),
+        );
         expect(name).toHaveValue("Browser");
         return;
       }
+      const catalogsBeforeLogin = requestsTo("get-model-catalog").length;
+      catalogLoad = deferred();
       await user.click(signIn());
+      await waitFor(() =>
+        expect(requestsTo("get-model-catalog").length).toBeGreaterThan(
+          catalogsBeforeLogin,
+        ),
+      );
       const model = await within(createDialog).findByRole("button", {
         name: "Model: Choose a model",
       });
+      expect(model).toBeDisabled();
       const createAgent = vi.spyOn(agents, "create");
       await user.click(create);
       expect(createAgent).not.toHaveBeenCalled();
@@ -1084,6 +1096,9 @@ it.each([
           name: "Instructions Optional",
         }),
       );
+      // Sign-in makes the control visible before its catalog is ready.
+      catalogLoad.resolve();
+      await waitFor(() => expect(model).toBeEnabled());
       await user.click(model);
       (await screen.findByRole("menuitem", { name: "Other" })).focus();
       await user.keyboard("{ArrowRight}");
@@ -1177,7 +1192,7 @@ it.each([
       );
       await waitFor(() =>
         expect(
-          screen.queryByRole("dialog", { name: "Create agent" }),
+          screen.queryByRole("dialog", { name: "Meet your remote agent" }),
         ).not.toBeInTheDocument(),
       );
       expect(agents.find(browserKey)?.unfinished).toBeUndefined();
@@ -1196,11 +1211,13 @@ it.each([
         reasoning_effort: "high",
       });
       expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
-      expect(screen.getByRole("tab", { name: "Identity" })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("tab", { name: "Identity" }),
+      ).toBeInTheDocument();
       return;
     }
     await user.click(await screen.findByRole("gridcell", { name: /^Browser/ }));
-    await user.click(screen.getByRole("tab", { name: "Identity" }));
+    await user.click(await screen.findByRole("tab", { name: "Identity" }));
     const instructions = await screen.findByRole("textbox", {
       name: "Instructions",
     });
@@ -1289,6 +1306,7 @@ it.each([
     await waitFor(() => expect(agents.find(browserKey)).toBeUndefined());
     expect(requestsTo("delete-agent")).toHaveLength(beforeDelete + 1);
   } finally {
+    catalogLoad?.resolve();
     backupHandoff.resolve();
     cleanup();
     await runtime.dispose();
