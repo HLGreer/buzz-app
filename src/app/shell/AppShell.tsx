@@ -344,27 +344,6 @@ function AppShellContent({
         >
           <div className="shell-actions-fixed">
             {launchers}
-            <div className="shell-community-switcher">
-              <CommunityPicker
-                communities={communities}
-                invite={invite}
-                onInviteClose={onInviteClose}
-                settingsCards={settingsCards}
-                federatedIdentity={federatedIdentity}
-                onSelect={onCommunitySelect}
-                onOpenTarget={onOpenTarget}
-              />
-              <ProfileButton
-                communities={communities}
-                accountActions={accountActions}
-                settingsSelected={selected === "settings"}
-                appearance={appearance}
-                pluginRecommendations={pluginRecommendations}
-                onSettings={(section) =>
-                  onSelect("settings", section ? { section } : undefined)
-                }
-              />
-            </div>
             <WindowControls />
           </div>
         </div>
@@ -372,14 +351,37 @@ function AppShellContent({
 
       <div className="shell-workspace">
         <nav key="dock" className="shell-side-dock" aria-label="Apps dock">
-          <PageNavigation
-            pages={dockPages}
-            selected={selected}
-            onSelect={onSelect}
-            placement="topbar"
-            previews
-            orientation="vertical"
-          />
+          <div className="shell-dock-pages">
+            <PageNavigation
+              pages={dockPages}
+              selected={selected}
+              onSelect={onSelect}
+              placement="topbar"
+              previews
+              orientation="vertical"
+            />
+          </div>
+          <div className="shell-community-switcher">
+            <CommunityPicker
+              communities={communities}
+              invite={invite}
+              onInviteClose={onInviteClose}
+              settingsCards={settingsCards}
+              federatedIdentity={federatedIdentity}
+              onSelect={onCommunitySelect}
+              onOpenTarget={onOpenTarget}
+            />
+            <ProfileButton
+              communities={communities}
+              accountActions={accountActions}
+              settingsSelected={selected === "settings"}
+              appearance={appearance}
+              pluginRecommendations={pluginRecommendations}
+              onSettings={(section) =>
+                onSelect("settings", section ? { section } : undefined)
+              }
+            />
+          </div>
         </nav>
         <div
           key="dialog-frame"

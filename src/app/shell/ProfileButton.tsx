@@ -295,6 +295,7 @@ export function ProfileButton({
         />
         <MenuPopup
           data-profile-menu=""
+          side="right"
           align="end"
           sideOffset={8}
           aria-labelledby={accountLabel}
