@@ -416,6 +416,12 @@ roster, applied through shared discovery. That makes the channel a sidebar
 member and enables the composer, which then receives focus. An accepted but
 unconfirmed join reports that it may have taken effect and stays retryable.
 
+Palette channel rows show member counts. Joined rows count the roster discovery
+already holds. The rest use the Channels tab's display-only
+`channels.readMemberCounts(ids)` once the row is on screen, so they share its
+cache, retry backoff and bounded `39002` reads. The rosters never reach
+discovery, so a counted roster grants no reading, membership or sidebar row.
+
 ### Finite read recovery
 
 A finite read that has no session recovery source retries transient failures
@@ -552,7 +558,10 @@ metadata/name read: a later name-fetch error does not discard membership evidenc
 Completeness cannot erase a newer signed roster received after that request began;
 metadata completion cannot replay the older membership snapshot.
 
-The session cancels all pending reads on revocation, because broad/ID/reference
+Own-author kind-30078 reads with only marker-topic or coordinate filters also finish
+across channel access changes: encrypted read state belongs to the viewer, not a
+channel. Cache clear, disconnect and session disposal still cancel those reads.
+The session cancels pending channel reads on revocation, because broad/ID/reference
 filters cannot establish event ownership before results arrive. Completion epochs
 also fence already-resolved requests. Directory browsing/searching retries one
 access-epoch invalidation through the same verified scheduler, without admitting
@@ -625,7 +634,8 @@ server-side. The opt-in dev broker accepts bounded Nostr kinds and event-ID read
 ## Current scope and validation
 
 Channels supports top-level text messages and direct thread replies, Enter to send ordinary prose,
-Shift+Enter for a newline. Inside a formatted list, Enter continues the list or exits an
+Shift+Enter for a newline (or, with **Send with ⌘ Enter** on, the reverse; see
+[the help guide](buzz-help.md)). Inside a formatted list, Enter continues the list or exits an
 empty item; the Send button sends while the caret is in the list. Channels also supports
 immediate rows and shared preview data (not currently rendered in the sidebar),
 delivery status, and retry. The dev broker

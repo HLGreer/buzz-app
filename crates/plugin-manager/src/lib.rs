@@ -58,6 +58,9 @@ pub struct HostGrants {
     /// Hook callbacks may observe and influence these agent types.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agent_hooks: Vec<String>,
+    /// Execution targets may run these native agent types.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agent_execution: Vec<String>,
     #[serde(default)]
     pub commands: Vec<HostCommand>,
     #[serde(default)]
@@ -144,9 +147,11 @@ fn valid_sha256(hash: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
+/// An artifact is absolute, or under the user's home written `~/…`, which the
+/// host expands when it starts the process.
 fn valid_artifact(artifact: &ProcessArtifact) -> bool {
     let path = Path::new(&artifact.path);
-    if !path.is_absolute()
+    if !(path.is_absolute() || artifact.path.starts_with("~/"))
         || artifact.path.len() > 4096
         || artifact.path.contains('\0')
         || !valid_sha256(&artifact.sha256)
@@ -222,6 +227,7 @@ impl Manifest {
         }
         if let Some(host) = &self.host {
             if host.agent_hooks.len() > 16
+                || host.agent_execution.len() > 16
                 || host.commands.len() > 16
                 || host.network_origins.len() > 16
                 || host.processes.len() > 16
@@ -235,6 +241,15 @@ impl Manifest {
                 valid_id(kind)?;
                 if !hook_types.insert(key) {
                     return Err("Duplicate agent hook type".into());
+                }
+            }
+            let mut execution_types = std::collections::HashSet::new();
+            for key in &host.agent_execution {
+                let (plugin, kind) = key.split_once('/').ok_or("Invalid agent execution type")?;
+                valid_id(plugin)?;
+                valid_id(kind)?;
+                if !execution_types.insert(key) {
+                    return Err("Duplicate agent execution type".into());
                 }
             }
             if let Some(grant) = &host.federated_identity {
@@ -486,6 +501,12 @@ pub fn bundled_manifests() -> Vec<Manifest> {
         .expect("relay notes manifest"),
         serde_json::from_str(include_str!("../../../src/bundled/typesafe/manifest.json"))
             .expect("typesafe manifest"),
+        serde_json::from_str(include_str!(
+            "../../../src/bundled/plugin-development/manifest.json"
+        ))
+        .expect("plugin development manifest"),
+        serde_json::from_str(include_str!("../../../src/bundled/focus/manifest.json"))
+            .expect("focus manifest"),
     ]
 }
 /// New bundles must opt in to the default-on policy.
@@ -516,12 +537,13 @@ fn enabled_by_default(id: &str) -> bool {
             | "buzz.moderation"
             | "buzz.relay-staff"
             | "buzz.typesafe"
+            | "buzz.plugin-development"
     )
 }
 /// Bundled ids that older profiles may still hold as installed plugins.
 const FORMERLY_INSTALLED: &[&str] = &["buzz.claude-code", "buzz.codex"];
 /// Host-owned features stay reserved even though they have no catalog entries.
-const BUILT_IN: &[&str] = &["buzz.emoji", "buzz.mentions"];
+const BUILT_IN: &[&str] = &["buzz.emoji", "buzz.mentions", "buzz.plugin-requests"];
 fn is_bundled(id: &str) -> bool {
     bundled_manifests().iter().any(|manifest| manifest.id == id)
 }
@@ -1694,17 +1716,27 @@ mod tests {
         let mut host_ids: Vec<_> = features
             .split("manifest: { ...")
             .skip(1)
-            .map(|entry| manifests[entry.split(',').next().unwrap()].as_str())
+            .map(|entry| manifests[entry.split(',').next().unwrap()].to_string())
             .collect();
+        // A feature whose manifest is written out names its id by a constant.
+        let constants = fs::read_to_string(format!("{root}/../plugins/review-access.ts")).unwrap();
+        host_ids.extend(features.lines().filter_map(|line| {
+            let constant = line.trim().strip_prefix("id: ")?.trim_end_matches(',');
+            let declaration = format!("export const {constant} = \"");
+            let value = constants
+                .lines()
+                .find_map(|line| line.strip_prefix(&declaration))?;
+            Some(value.trim_end_matches("\";").to_string())
+        }));
         host_ids.sort_unstable();
-        let mut reserved_ids = super::BUILT_IN.to_vec();
+        let mut reserved_ids: Vec<_> = super::BUILT_IN.iter().map(|id| id.to_string()).collect();
         reserved_ids.sort_unstable();
         assert_eq!(reserved_ids, host_ids);
     }
 
     #[test]
     fn prebuilt_artifacts_cannot_claim_built_in_conversation_ids() {
-        for id in ["buzz.emoji", "buzz.mentions"] {
+        for id in ["buzz.emoji", "buzz.mentions", "buzz.plugin-requests"] {
             let release = Release {
                 bytes: serde_json::to_vec(&serde_json::json!({
                     "manifest": { "id": id, "name": "Reserved feature", "apiVersion": 1 },
@@ -2156,8 +2188,12 @@ mod tests {
             "siblings": [{"name": "runtime.js", "sha256": "b".repeat(64)}]
         });
         assert!(artifact_from_text(&artifact.to_string(), "export const x = 1".into()).is_ok());
+        let mut home = artifact.clone();
+        home["host"]["processes"][0]["artifact"]["path"] = serde_json::json!("~/agent/cli");
+        assert!(artifact_from_text(&home.to_string(), "export const x = 1".into()).is_ok());
         for (field, value) in [
             ("path", serde_json::json!("relative/agent")),
+            ("path", serde_json::json!("~agent/cli")),
             ("sha256", serde_json::json!("A".repeat(64))),
             ("sha256", serde_json::json!("a".repeat(63))),
             (
@@ -2647,7 +2683,7 @@ mod tests {
         assert_eq!(plugin.previous, None);
     }
     #[test]
-    fn validates_agent_hook_grants() {
+    fn validates_agent_type_grants() {
         for (keys, valid) in [
             (vec!["buzz.pi/pi"], true),
             (vec!["buzz.pi/pi", "buzz.codex/codex"], true),
@@ -2655,12 +2691,14 @@ mod tests {
             (vec!["buzz.pi/pi", "buzz.pi/pi"], false),
             (vec!["buzz.pi/../pi"], false),
         ] {
-            let manifest: super::Manifest = serde_json::from_value(serde_json::json!({
-                "id": "policy", "name": "Policy", "apiVersion": 1,
-                "host": { "agentHooks": keys },
-            }))
-            .unwrap();
-            assert_eq!(manifest.validate().is_ok(), valid);
+            for field in ["agentHooks", "agentExecution"] {
+                let manifest: super::Manifest = serde_json::from_value(serde_json::json!({
+                    "id": "policy", "name": "Policy", "apiVersion": 1,
+                    "host": { field: keys },
+                }))
+                .unwrap();
+                assert_eq!(manifest.validate().is_ok(), valid);
+            }
         }
     }
 }
