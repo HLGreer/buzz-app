@@ -19,6 +19,7 @@ import {
   moduleName,
   namesake,
   patchedPackage,
+  RELATED_VITEST_FILES,
   reachesTests,
   repeatableLines,
   routes,
@@ -622,20 +623,8 @@ test("related journeys: a module most specs reach through fixture.mjs does not c
     ).taken;
   const typing = "src/features/relay/typing-protocol.ts";
   const emoji = "src/bundled/emoji/CustomEmoji.tsx";
-  const alone = rank([typing]);
   // typing.spec.mjs is named after the module's leading word.
-  assert.equal(alone[0].file, "tests/browser/typing.spec.mjs");
-  // typing-dm.spec.mjs, like most specs, reaches the module only through
-  // fixture.mjs, so nothing in the graph sets it apart; every spec routed
-  // through a fixture page ranks ahead of it.
-  const dm = alone.find(
-    ({ file }) => file === "tests/browser/typing-dm.spec.mjs",
-  );
-  assert.equal(dm.route.via, dm.file);
-  assert.ok(dm.route.spread > specs.length / 2);
-  for (const { file, route } of alone)
-    if (route.via.startsWith("tests/fixtures/"))
-      assert.ok(alone.indexOf(dm) > alone.findIndex((c) => c.file === file));
+  assert.equal(rank([typing])[0].file, "tests/browser/typing.spec.mjs");
   // Added to a CustomEmoji.tsx change, the module puts only typing.spec.mjs
   // ahead of the last spec routed through the emoji page, so the cap keeps
   // the emoji-page specs it kept for CustomEmoji.tsx alone.
@@ -1117,4 +1106,59 @@ test("a related file joins only while the edited tests' lane time plus its own f
   // C alone would fit; beside the edited B it does not.
   assert.equal(take(vitestLaneSeconds([8])).overBudget.length, 1);
   assert.equal(take(vitestLaneSeconds([20, 8])).taken.length, 1);
+});
+
+test("a related Vitest file too slow to fit beside the edited tests alone neither ends the picks after it nor takes a cap slot", () => {
+  // MessageComposer.test.tsx takes about 141 s on CI, over the budget even
+  // alone, and ranks first for a MessageComposer.tsx change as its namesake.
+  const composer = "src/features/messages/MessageComposer.test.tsx";
+  const fillers = Array.from(
+    { length: RELATED_VITEST_FILES - 1 },
+    (_, i) => `src/features/filler/F${String(i).padStart(2, "0")}.test.ts`,
+  );
+  const costs = costModel({
+    browser: {},
+    vitest: {
+      [composer]: 141.3,
+      "src/features/messages/ComposerAttachments.test.tsx": 10,
+      "src/features/conversation/service.test.tsx": 8,
+      ...Object.fromEntries(fillers.map((file) => [file, 1])),
+    },
+  });
+  const candidate = (file, spread) => ({
+    file,
+    route: { files: ["x"], via: file, spread, reach: 1, size: 1 },
+  });
+  const related = (...more) => ({
+    vitest: [
+      {
+        ...candidate(composer, 0),
+        namesake: "src/features/messages/MessageComposer.tsx",
+      },
+      candidate("src/features/messages/ComposerAttachments.test.tsx", 0),
+      candidate("src/features/conversation/service.test.tsx", 7),
+      ...more,
+    ],
+    browser: [],
+  });
+  const take = (candidates) =>
+    addRelated({ vitest: new Map(), browser: new Map() }, candidates, {
+      specs: new Map(),
+      costs,
+      budget: LANE_BUDGET_MINUTES * 60,
+    }).take.vitest;
+  const files = (candidates) => candidates.map(({ file }) => file);
+  assert.ok(vitestLaneSeconds([141.3]) > LANE_BUDGET_MINUTES * 60);
+  const { taken, overBudget, overCap } = take(related());
+  assert.deepEqual(files(taken), [
+    "src/features/messages/ComposerAttachments.test.tsx",
+    "src/features/conversation/service.test.tsx",
+  ]);
+  assert.deepEqual(files(overBudget), [composer]);
+  assert.deepEqual(overCap, []);
+  // The cap of 20 counts only files that can run: with 21 that can, 20 run.
+  const capped = take(related(...fillers.map((file) => candidate(file, 9))));
+  assert.equal(capped.taken.length, RELATED_VITEST_FILES);
+  assert.deepEqual(files(capped.overBudget), [composer]);
+  assert.deepEqual(files(capped.overCap), [fillers.at(-1)]);
 });

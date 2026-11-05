@@ -601,9 +601,15 @@ function widths(next, popularity, seeds) {
 // most widely shared module between the test and the changed file. A helper
 // most journeys import (fixture.mjs) or a page many open says little about
 // any one test: specs that only reach src/features/relay/typing-protocol.ts
-// through fixture.mjs are 154 of 234. Routes rank by spread, then by how many
-// tests reach the changed file, then by the files in the route's graph (the
-// change is a larger part of a smaller one).
+// through fixture.mjs are 154 of 234. A feature's index module counts every
+// test that uses the feature, so a page that imports a module through it has
+// a wider route than a page that imports the module directly: emoji.html,
+// which 7 specs open, reaches src/bundled/emoji/CustomEmoji.tsx through
+// src/bundled/emoji/index.tsx, which 24 specs reach. Routes rank by spread,
+// then by how many tests reach the changed file, then by the files in the
+// route's graph (the change is a larger part of a smaller one). Every route
+// to one changed file shares its reach, so reach only orders tests that
+// reach different changed files.
 export function routes({ edges, pages }, tests, changed) {
   const imports = (node) => edges.get(node) ?? [];
   const opens = (node) => (pages.has(node) ? [pages.get(node)] : imports(node));
@@ -779,19 +785,32 @@ export function addRelated(selected, related, { specs, costs, budget }) {
         ]).values(),
       ]),
   };
+  const vitestCandidates = related.vitest
+    .filter(({ file }) => !selected.vitest.get(file)?.whole)
+    .map((candidate) => ({
+      ...candidate,
+      cost: 1,
+      seconds: costs.vitest(candidate.file),
+    }));
+  // The Vitest lane only grows with each pick, so a file that does not fit
+  // beside the edited tests alone can never run. It is dropped for time
+  // before ranking, so it neither ends the picks after it nor takes a cap
+  // slot.
+  const fits = (candidate) => lane.vitest([candidate]) <= budget;
+  const vitestTake = takeRelated(
+    vitestCandidates.filter(fits),
+    RELATED_VITEST_FILES,
+    budget,
+    lane.vitest,
+  );
   const take = {
-    vitest: takeRelated(
-      related.vitest
-        .filter(({ file }) => !selected.vitest.get(file)?.whole)
-        .map((candidate) => ({
-          ...candidate,
-          cost: 1,
-          seconds: costs.vitest(candidate.file),
-        })),
-      RELATED_VITEST_FILES,
-      budget,
-      lane.vitest,
-    ),
+    vitest: {
+      ...vitestTake,
+      overBudget: [
+        ...vitestCandidates.filter((candidate) => !fits(candidate)),
+        ...vitestTake.overBudget,
+      ],
+    },
     // The cap counts journeys tier 1 has not run; shards and the lane count
     // output entries, one per journey, which parameterized journeys sharing
     // a line repeat.
