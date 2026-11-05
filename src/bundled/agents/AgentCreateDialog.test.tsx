@@ -674,6 +674,44 @@ it("shows registered logos in the harness value and choices with independent SVG
   expect(select.querySelector("mask")).toBeNull();
 });
 
+it("applies a suggested configuration without starting the draft", async () => {
+  const suggesting: RegisteredAgentType = {
+    ...notes,
+    key: "test/suggesting",
+    title: "Suggesting",
+    CreateConfiguration: function Suggest({
+      config,
+      onChange,
+      onReadyChange,
+      harnessControl,
+    }) {
+      // biome-ignore lint/correctness/useExhaustiveDependencies: suggests once on mount.
+      useEffect(() => {
+        onChange(
+          { ...(config as object), model: "suggested" },
+          { suggested: true },
+        );
+        onReadyChange?.(true);
+      }, []);
+      return <SettingsGroup>{harnessControl}</SettingsGroup>;
+    },
+  };
+  const first = setup([suggesting]);
+  await first.user.type(within(first.dialog).getByLabelText("Name"), "Nova");
+  await first.user.click(createButton());
+  await waitFor(() =>
+    expect(first.agents.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ model: "suggested" }),
+      }),
+    ),
+  );
+  cleanup();
+  const second = setup([suggesting]);
+  await second.user.click(document.body);
+  await waitFor(() => expect(second.onClose).toHaveBeenCalledOnce());
+});
+
 it("keeps keyboard focus on Harness when switching into and out of a configuration group", async () => {
   const grouped: RegisteredAgentType = {
     ...notes,
