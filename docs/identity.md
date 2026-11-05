@@ -1036,11 +1036,12 @@ When a community refuses a signed-in account (`authorization-denied` or
 the other joined communities that server covers, and offers **Switch account**:
 it signs out of that server only, signs in to it again, and retries. Other
 servers' sessions are not touched. While it runs the prompt says so, with
-**Cancel sign-in** during the browser step; a canceled, refused or failed step
-names the server and offers **Try again**, which repeats the step that
-failed: after a failed sign-out it signs out again before signing in, so it
-never renews the old account. **Not now** closes the prompt and
-changes nothing. Binding-mismatch recovery points to that
+**Cancel sign-in** during the browser step. A canceled sign-in leaves that
+server signed out: the prompt says the sign-in was canceled and offers
+**Sign in**. A refused or failed step names the server and offers **Try
+again**, which repeats the step that failed: after a failed sign-out it signs
+out again before signing in, so it never renews the old account. **Not now**
+closes the prompt and changes nothing. Binding-mismatch recovery points to that
 server's identity origin.
 
 ### Sign in at launch

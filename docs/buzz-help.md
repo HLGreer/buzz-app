@@ -85,8 +85,9 @@ the interface unless an available tool actually supports that action.
 - If a community doesn't accept the account you signed in with, its prompt
   names the server and offers **Switch account**: Buzz signs out of that server
   only and opens its sign-in again, so other servers stay signed in. It also
-  lists the other communities that use the same server. **Not now** closes the
-  prompt and changes nothing.
+  lists the other communities that use the same server. If you cancel the
+  sign-in during a switch, you stay signed out of that server and the prompt
+  offers **Sign in**. **Not now** closes the prompt and changes nothing.
 - A community invite or address connects someone to a community; creating an
   identity alone does not grant membership. The same identity can be used in
   more than one community.

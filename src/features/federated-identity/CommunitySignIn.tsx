@@ -242,8 +242,13 @@ function runSwitch(
     void identity
       .signIn()
       .then((next) => {
+        // Native ends a canceled sign-in signed out with no failure code.
         if (next.status !== "signed-in")
-          return fail("sign-in", next.failure ?? "");
+          return fail(
+            "sign-in",
+            next.failure ??
+              (next.status === "signed-out" ? "sign-in-canceled" : ""),
+          );
         report(null);
         retry();
       })
@@ -277,21 +282,30 @@ function SwitchProgress({
   retry: () => void;
 }) {
   const server = serverName(authority);
-  if (failed)
+  if (failed) {
+    // Canceling is not a failure: the account is signed out, so offer Sign in.
+    const canceled = failure === "sign-in-canceled";
     return (
       <>
-        <p role="alert" className="text-body-sm text-danger">
-          {`Couldn’t switch your ${server} account. ${recoveryMessage(failure)}`}
-        </p>
+        {canceled ? (
+          <p role="status" className="text-body-sm">
+            {recoveryMessage(failure)}
+          </p>
+        ) : (
+          <p role="alert" className="text-body-sm text-danger">
+            {`Couldn’t switch your ${server} account. ${recoveryMessage(failure)}`}
+          </p>
+        )}
         <Button
           onClick={() =>
             onChange(runSwitch(identity, authority, step, onChange, retry))
           }
         >
-          Try again
+          {canceled ? "Sign in" : "Try again"}
         </Button>
       </>
     );
+  }
   return (
     <>
       <p role="status" className="text-body-sm">

@@ -149,7 +149,7 @@ function gate<T>() {
   return { promise, resolve };
 }
 
-it("keeps the switch's controls through sign-out, a pending sign-in, Cancel and Try again", async () => {
+it("keeps the switch's controls through sign-out, a pending sign-in, Cancel and Sign in", async () => {
   const pub = publicServer();
   const signedOut = gate<void>();
   const signIns: ReturnType<typeof gate<SessionSnapshot>>[] = [];
@@ -188,12 +188,16 @@ it("keeps the switch's controls through sign-out, a pending sign-in, Cancel and 
     pub.publish({ status: "signed-out", failure: null });
     signIns[0]?.resolve(pub.service.snapshot());
   });
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    "Couldn’t switch your Builderlab account.",
+  // A cancel is not a failed switch: the account is signed out, so the
+  // prompt says so and offers Sign in.
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Sign-in was canceled. Sign in when you’re ready.",
   );
-  expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText(/Couldn’t switch/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   expect(retry).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Try again" }));
+  await user.click(screen.getByRole("button", { name: "Sign in" }));
   expect(pub.service.signOut).toHaveBeenCalledOnce();
   expect(pub.service.signIn).toHaveBeenCalledTimes(2);
   await act(async () => {
