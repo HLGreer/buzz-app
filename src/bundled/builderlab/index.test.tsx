@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -584,12 +585,18 @@ it("signs in through the native NIP-FI session in an FI build, with no OAuth or 
   }
 });
 
-it.each([
+it.for([
   "shared login and re-enable",
   "creation sign-in recovery",
   "creation setup recovery",
   "instructions and deletion",
-])("coordinates hosted agents: %s", async (flow) => {
+])("coordinates hosted agents: %s", async (flow, { signal }) => {
+  let phase = "initialize plugin";
+  const reportTimeout = () => {
+    console.error(`Hosted-agent journey aborted: ${flow}; phase: ${phase}`);
+    screen.debug(document.body, 20_000);
+  };
+  signal.addEventListener("abort", reportTimeout, { once: true });
   const user = userEvent.setup();
   const hostedKey = "de".repeat(32);
   const browserKey = "09".repeat(32);
@@ -969,6 +976,7 @@ it.each([
       flow === "creation sign-in recovery" ||
       flow === "creation setup recovery"
     ) {
+      phase = "open creation form";
       await user.click(
         screen.getByRole("button", { name: "Create your first agent" }),
       );
@@ -986,7 +994,9 @@ it.each([
         name: "Create agent",
       });
       expect(create).toBeDisabled();
-      await user.type(name, "Browser");
+      // Fixed setup values; this journey exercises provisioning and recovery,
+      // rather than the individual keystrokes already covered by the form.
+      fireEvent.change(name, { target: { value: "Browser" } });
       expect(create).toBeDisabled();
       expect(
         within(createDialog).getByRole("button", {
@@ -1069,12 +1079,14 @@ it.each([
       }
       const catalogsBeforeLogin = requestsTo("get-model-catalog").length;
       catalogLoad = deferred();
+      phase = "sign in for creation";
       await user.click(signIn());
       await waitFor(() =>
         expect(requestsTo("get-model-catalog").length).toBeGreaterThan(
           catalogsBeforeLogin,
         ),
       );
+      phase = "catalog requested";
       const model = await within(createDialog).findByRole("button", {
         name: "Model: Choose a model",
       });
@@ -1097,25 +1109,28 @@ it.each([
         }),
       );
       // Sign-in makes the control visible before its catalog is ready.
+      phase = "release catalog";
       catalogLoad.resolve();
       await waitFor(() => expect(model).toBeEnabled());
+      phase = "choose model";
       await user.click(model);
       (await screen.findByRole("menuitem", { name: "Other" })).focus();
       await user.keyboard("{ArrowRight}");
       await user.click(
         await screen.findByRole("menuitemradio", { name: "Model One" }),
       );
+      phase = "choose thinking";
       await user.click(
         within(createDialog).getByRole("combobox", {
           name: "Thinking",
         }),
       );
       await user.click(await screen.findByRole("option", { name: "High" }));
-      await user.type(
+      fireEvent.change(
         within(createDialog).getByRole("textbox", {
           name: "Instructions Optional",
         }),
-        "Be concise.",
+        { target: { value: "Be concise." } },
       );
       const beforeListing = community.events.filter(
         (event) => event.kind === 30177,
@@ -1131,11 +1146,13 @@ it.each([
       expect(create).toBeEnabled();
       instructionsSave = deferred();
       try {
+        phase = "open introduction";
         await user.click(create);
         const introduction = await screen.findByRole("dialog", {
           name: "Meet your remote agent",
         });
         expect(introduction).toHaveTextContent("Builderlab");
+        phase = "submit first attempt";
         await user.click(
           within(introduction).getByRole("button", { name: "Let’s go" }),
         );
@@ -1157,10 +1174,12 @@ it.each([
           within(introduction).getByRole("button", { name: "Back" }),
         ).toBeDisabled();
         for (const control of controls) expect(control).toBeDisabled();
+        phase = "reject first attempt";
         instructionsSave.reject(new Error("offline"));
         expect(
           await within(createDialog).findByRole("alert"),
         ).toHaveTextContent("Could not reach Builderlab");
+        phase = "return to retained draft";
         await user.click(
           within(introduction).getByRole("button", { name: "Back" }),
         );
@@ -1182,14 +1201,17 @@ it.each([
         instructionsSave.resolve({ status: 200, headers: {}, body: "{}" });
         instructionsSave = undefined;
       }
+      phase = "retry creation";
       await user.click(create);
       await user.click(await screen.findByRole("button", { name: "Let’s go" }));
+      phase = "await created agent";
       await waitFor(() =>
         expect(agents.find(browserKey)).toMatchObject({
           name: "Browser",
           place: "hosted",
         }),
       );
+      phase = "await introduction dismissal";
       await waitFor(() =>
         expect(
           screen.queryByRole("dialog", { name: "Meet your remote agent" }),
@@ -1211,12 +1233,15 @@ it.each([
         reasoning_effort: "high",
       });
       expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+      phase = "await created agent Identity";
       expect(
         await screen.findByRole("tab", { name: "Identity" }),
       ).toBeInTheDocument();
       return;
     }
+    phase = "open existing agent";
     await user.click(await screen.findByRole("gridcell", { name: /^Browser/ }));
+    phase = "await existing agent Identity";
     await user.click(await screen.findByRole("tab", { name: "Identity" }));
     const instructions = await screen.findByRole("textbox", {
       name: "Instructions",
@@ -1308,10 +1333,15 @@ it.each([
   } finally {
     catalogLoad?.resolve();
     backupHandoff.resolve();
+    phase = "unmount UI";
     cleanup();
+    phase = "dispose plugin runtime";
     await runtime.dispose();
+    phase = "dispose root context";
     await root.fiber.dispose();
+    phase = "dispose community";
     await community.dispose();
+    signal.removeEventListener("abort", reportTimeout);
   }
 });
 
