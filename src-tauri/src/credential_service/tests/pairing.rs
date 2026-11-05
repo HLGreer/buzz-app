@@ -115,7 +115,7 @@ async fn an_unanswered_pairing_needs_approval_and_closes_its_prompt() {
     assert!(fixture.keychain.value.lock().unwrap().is_none());
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn one_request_waits_at_a_time_and_three_per_window() {
     let fixture = fixture();
     let service = fixture.service.clone();
@@ -128,6 +128,9 @@ async fn one_request_waits_at_a_time_and_three_per_window() {
     );
     fixture.service.0.pairings.answer(&id, false);
     first.await.unwrap();
+    // Paused only now: the human's key is read off this runtime, and while a
+    // request waits that idle time would jump its clock past the approval.
+    tokio::time::pause();
     for _ in 0..2 {
         let reply = pair_request(&fixture.service, &[CLIENT, RELAY]).await;
         assert_eq!(error(&reply).1, "approval_required");

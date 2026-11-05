@@ -1263,7 +1263,8 @@ mod tests {
     fn every_registered_command_is_listed_and_allowed() {
         let lib = include_str!("lib.rs");
         let start = lib.find("generate_handler![").unwrap();
-        let handlers = &lib[start..][..lib[start..].find(']').unwrap()];
+        // The macro's own closing line; a `#[cfg(…)]` inside it has a `]` too.
+        let handlers = &lib[start..][..lib[start..].find("\n    ]").unwrap()];
         let manifest = include_str!("../build.rs");
         let capabilities = [
             include_str!("../capabilities/default.json"),
