@@ -381,9 +381,9 @@ function ReactionEmoji({
             data-reaction-url={reaction.emoji?.url}
             aria-label={`${reaction.content}: ${grouped ? `${authorIds.length} people` : user}`}
             aria-pressed={mine}
+            // Not disabled: hover, focus and Tab into the preview stay
+            // available, and keys reach ancestors. onClick rejects activation.
             aria-disabled={unavailable}
-            disabled={disabled}
-            focusableWhenDisabled
             onMouseEnter={(event) => {
               setPreviewDismissed(false);
               const tilt = `${Math.random() * 20 - 10}deg`;
