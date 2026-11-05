@@ -40,6 +40,8 @@ import {
 type Person = VerifiedPerson<
   ReturnType<typeof useMentionDirectory>["people"][number]
 >;
+/** The chooser shows at most this many member and agent rows. */
+export const MENTION_ROWS = 50;
 const activityFields = new Set(["preview", "lastActivityAt"]);
 /** Equal but for the preview and activity time a new message changes. */
 function sameMentionFields(a: ChannelSummary, b: ChannelSummary) {
@@ -425,16 +427,16 @@ export function useMentionChoices(
     [owners, profiles, session.viewer],
   );
   const matches = matchingMentions(candidates, query);
-  // At most 50 rows show, so ranking only ever needs the first 50.
+  // Ranking needs only the rows that can show.
   const rank = (choices: readonly MentionChoice[]) =>
     rankMentions(
       choices,
       query,
       mentionHistory(session, channelId),
       (key) => session.presence?.status(key) ?? "unknown",
-      50,
+      MENTION_ROWS,
     );
-  // Ranked only when read: 50 installed rows never need outside choices.
+  // Ranked only when read: a full set of installed rows never needs outside choices.
   let outsideRows: readonly MentionChoice[] | undefined;
   const outside = () =>
     (outsideRows ??= open
@@ -460,13 +462,13 @@ export function useMentionChoices(
       install({ session, key, rows, people: none });
     }
   }
-  if (rows && rows.length < 50) {
+  if (rows && rows.length < MENTION_ROWS) {
     // Append-only: late invited agents and directory pages never move shown rows.
     // Member-list changes keep their installed set until the query changes.
     const shown = new Set(rows.map((row) => row.recipient.pubkey));
     const added = (invite ? rank(matches.filter((c) => c.agent)) : outside())
       .filter((c) => !shown.has(c.recipient.pubkey))
-      .slice(0, 50 - rows.length);
+      .slice(0, MENTION_ROWS - rows.length);
     if (added.length) {
       const addedKeys = new Set(added.map((c) => c.recipient.pubkey));
       rows = [...rows, ...added];
