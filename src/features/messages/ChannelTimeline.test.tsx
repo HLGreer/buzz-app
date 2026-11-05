@@ -1,6 +1,6 @@
 import { Button } from "../../shared/design-system/ui/Button";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { Virtualizer } from "virtua";
 import { ChannelTimeline } from "./ChannelTimeline";
 import { JumpToLatestButton } from "./JumpToLatestButton";
@@ -137,6 +137,7 @@ function setup({
   initial = undefined as unknown,
   mounted = [] as { id: string; y: number }[],
   initialRows = undefined as ChannelMessage[] | undefined,
+  start = undefined as ReactNode,
 } = {}) {
   Object.assign(hooks, {
     refs: [],
@@ -214,6 +215,11 @@ function setup({
           { type: "attributes", attributeName: "style" } as MutationRecord,
         ]);
     }
+  };
+  // The measured edge above the rows: its height is Virtua's start margin.
+  let edgeHeight = 0;
+  const edgeElement = {
+    getBoundingClientRect: () => ({ height: edgeHeight }),
   };
   const element = {
     clientWidth: 1124,
@@ -316,6 +322,7 @@ function setup({
       },
       onOpenLink: () => false,
       revealMessageId,
+      start,
     });
     if (key !== null && key !== scoped.key) {
       for (const effect of hooks.effects) effect.cleanup?.();
@@ -332,6 +339,9 @@ function setup({
       scoped.props,
     );
     section.props.ref.current = element;
+    (
+      section.props.children[0] as ReactElement<{ ref: { current: unknown } }>
+    ).props.ref.current = edgeElement;
     const virtualizer = section.props.children.find(
       (child) =>
         !!child &&
@@ -416,6 +426,18 @@ function setup({
     resize(runFrames = true) {
       resized(element);
       render(runFrames);
+    },
+    /** The edge laid out at a new height, as start content enters or leaves. */
+    edge(height: number, runFrames = true) {
+      edgeHeight = height;
+      resized(edgeElement);
+      render(runFrames);
+    },
+    hasStart() {
+      const edge = section.props.children[0] as ReactElement<{
+        children: unknown[];
+      }>;
+      return edge.props.children.includes(start);
     },
     measureRows(runFrames = true) {
       list.style.height = `${Number.parseFloat(list.style.height) + 100}px`;
@@ -652,6 +674,39 @@ it.each([
   const h = setup(options);
   h.scroll();
   expect(h.loadOlder).not.toHaveBeenCalled();
+  h.unmount();
+});
+it("shows the start content only once the oldest history is loaded", () => {
+  const h = setup({ hasMore: true, start: "Welcome" });
+  expect(h.hasStart()).toBe(false);
+  h.update({ hasMore: false });
+  expect(h.hasStart()).toBe(true);
+  h.update({ hasMore: true, loadingOlder: false });
+  expect(h.hasStart()).toBe(false);
+  h.unmount();
+});
+it("keeps a settled reader's rows in place as start content enters and leaves the edge", () => {
+  const h = setup({ hasMore: true, start: "Welcome" });
+  h.element.scrollTop = 1200;
+  h.scroll();
+  h.gesture(true);
+  // The last older page lands and the welcome enters the edge above the rows.
+  h.update({ hasMore: false });
+  h.edge(140);
+  expect(h.element.scrollTop).toBe(1340);
+  // Trimming the oldest page reopens history and the welcome leaves again.
+  h.update({ hasMore: true });
+  h.edge(0);
+  expect(h.element.scrollTop).toBe(1200);
+  h.unmount();
+});
+it("leaves a following reader at the bottom when start content enters the edge", () => {
+  const h = setup({ hasMore: true, start: "Welcome" });
+  h.scroll(false);
+  const before = h.element.scrollTop;
+  h.update({ hasMore: false });
+  h.edge(140);
+  expect(h.element.scrollTop).toBe(before);
   h.unmount();
 });
 it("programmatic scroll does not page before a user gesture", () => {
