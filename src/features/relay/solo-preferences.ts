@@ -9,6 +9,7 @@ import {
   type LeadsRecord,
   type WorkspaceLead,
 } from "../channel-templates/model";
+import { isTransientFailure } from "./errors";
 import { createSidebarPreferencesStore } from "./sidebar-preferences-store";
 import type {
   SidebarAssignmentIntent,
@@ -66,6 +67,8 @@ export type LeadsSnapshot = Readonly<{
   /** Saved entries, orphans included; readers join them to workspaces. */
   leads: Readonly<Record<string, WorkspaceLead>>;
   error?: string;
+  /** Session recovery retries only failures a retry can fix. */
+  transient?: true;
 }>;
 type LeadsHead = {
   record: LeadsRecord | undefined;
@@ -92,6 +95,8 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
   // Leads are a separate record: a failed or malformed read never touches Groups.
   let leads: LeadsSnapshot = { status: "idle", leads: {} };
   let leadsRead: Promise<void> | undefined;
+  // Each shown head bumps this; a refresh begun before it is stale.
+  let leadsRevision = 0;
   const leadListeners = new Set<() => void>();
   const publishLeads = (next: LeadsSnapshot) => {
     leads = next;
@@ -99,7 +104,8 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
       listener();
     });
   };
-  const showLeads = (head: LeadsHead) =>
+  const showLeads = (head: LeadsHead) => {
+    leadsRevision++;
     publishLeads({
       status: "ready",
       leads: Object.fromEntries(
@@ -108,6 +114,7 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
         ).map(([id, { region, channelId }]) => [id, { region, channelId }]),
       ),
     });
+  };
   async function readLeads(active: AbortSignal): Promise<LeadsHead> {
     const found = await kit.readRecord(leadsCoordinate(kit.community), active);
     active.throwIfAborted();
@@ -119,19 +126,37 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
   function refreshLeads() {
     if (leadsRead) return leadsRead;
     const active = AbortSignal.any([lifetime, generation.signal]);
+    const revision = leadsRevision;
     if (leads.status !== "ready")
       publishLeads({ status: "loading", leads: leads.leads });
     const read: Promise<void> = readLeads(active)
-      .then(showLeads, (error: unknown) => {
-        if (!active.aborted)
-          publishLeads({ ...leads, status: "error", error: String(error) });
-      })
+      .then(
+        (head) => {
+          if (leadsRevision === revision) showLeads(head);
+        },
+        (error: unknown) => {
+          if (!active.aborted && leadsRevision === revision)
+            publishLeads({
+              status: "error",
+              leads: leads.leads,
+              error: String(error),
+              ...(isTransientFailure(error)
+                ? { transient: true as const }
+                : {}),
+            });
+        },
+      )
       .finally(() => {
         if (leadsRead === read) leadsRead = undefined;
       });
     leadsRead = read;
     return read;
   }
+  // Leads load beside Groups once the catalog is ready, and again after clear().
+  const stopLeads = kit.subscribe(() => {
+    if (leads.status === "idle" && kit.snapshot().status === "ready")
+      void refreshLeads();
+  });
   /** Write `changes` over the fresh head, pruning Leads of removed workspaces.
    * Unknown record and entry fields are kept. */
   async function writeLeads(
@@ -149,7 +174,8 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
       ),
     );
     for (const [id, lead] of Object.entries(changes))
-      if (lead && workspaces.has(id)) next[id] = lead;
+      if (lead && workspaces.has(id))
+        next[id] = { ...(Object.hasOwn(saved, id) ? saved[id] : {}), ...lead };
     const record = parseLeadsRecord(
       {
         version: 1,
@@ -259,12 +285,16 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
         };
         const saved = await save(groups, entry, active);
         // Best effort: a Lead left behind is hidden and pruned on the next write.
+        // Another writer may keep this orphan beside a newer workspace's Lead:
+        // prune against Groups read after the Leads, not the ones captured here.
         void serialize(async () => {
           const cleanup = AbortSignal.any([lifetime, generation.signal]);
           const head = await readLeads(cleanup);
           const leads = head.record?.deleted ? {} : head.record?.value.leads;
-          if (leads && Object.hasOwn(leads, id))
-            await writeLeads(head, groups, {}, cleanup);
+          if (!leads || !Object.hasOwn(leads, id)) return;
+          const { value } = await current(cleanup);
+          if (!value.groups.some((group) => group.id === id))
+            await writeLeads(head, value, {}, cleanup);
         }).catch((error: unknown) => {
           console.warn("The deleted workspace's Lead was kept", error);
         });
@@ -325,11 +355,15 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
             signal: AbortSignal,
           ) =>
             serialize(async () => {
+              // Leads first: a Lead is saved only after its workspace, so
+              // Groups read after it hold every workspace the Leads name.
+              const head = await readLeads(
+                AbortSignal.any([lifetime, generation.signal, signal]),
+              );
               const { value, active } = await current(signal);
+              showLeads(head);
               if (!value.groups.some(({ id }) => id === input.workspaceId))
                 return false;
-              const head = await readLeads(active);
-              showLeads(head);
               const saved =
                 head.record && !head.record.deleted
                   ? head.record.value.leads[input.workspaceId]
@@ -363,6 +397,7 @@ export function createSoloPreferences(kit: ChannelKit, lifetime: AbortSignal) {
     },
     dispose() {
       generation.abort();
+      stopLeads();
       store.dispose();
     },
   };

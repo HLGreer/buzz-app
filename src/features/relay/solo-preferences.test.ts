@@ -45,11 +45,11 @@ function fixture() {
     starred: [],
     muted: [],
   };
-  const installRecord = (record: PrivateRecord) =>
+  const installRecord = (record: PrivateRecord, createdAt = time++) =>
     events.push(
       signed(viewer, {
         kind: 30078,
-        created_at: time++,
+        created_at: createdAt,
         tags: [
           ["d", privateCoordinate(record)],
           ["t", privateTag(record)],
@@ -57,22 +57,36 @@ function fixture() {
         content: JSON.stringify(record),
       }),
     );
-  const install = (value: Groups, deleted = false) => {
+  const install = (value: Groups, deleted = false, createdAt?: number) => {
     const record: KitRecord = { version: 1, community, deleted, value };
-    installRecord(record);
+    installRecord(record, createdAt);
   };
-  const leadReads = { fail: false };
+  const leadReads: {
+    fail: false | Error;
+    /** Holds the next Leads read after it has selected its rows. */
+    hold?: Promise<void> | undefined;
+    /** Runs once as the next Leads read starts: another device's writes. */
+    before?: (() => void) | undefined;
+  } = { fail: false };
   const query = vi.fn(async (filters: readonly ReadFilter[]) => {
-    if (
-      leadReads.fail &&
-      filters.some((filter) =>
-        filter["#d"]?.includes(leadsCoordinate(community)),
-      )
-    )
-      throw new Error("Leads read failed");
-    return events.filter((event) =>
+    const leads = filters.some((filter) =>
+      filter["#d"]?.includes(leadsCoordinate(community)),
+    );
+    if (leads && leadReads.fail) throw leadReads.fail;
+    const before = leads ? leadReads.before : undefined;
+    if (before) {
+      leadReads.before = undefined;
+      before();
+    }
+    const rows = events.filter((event) =>
       filters.some((filter) => matchesEvent(event, filter)),
     );
+    const hold = leads ? leadReads.hold : undefined;
+    if (hold) {
+      leadReads.hold = undefined;
+      await hold;
+    }
+    return rows;
   });
   const assignment = vi.fn(async (intent) => {
     const assignments = { ...legacy.assignments };
@@ -548,6 +562,20 @@ it("keeps unknown Leads fields, hides and prunes orphans, and best-effort remove
         { future: { kept: true } },
       ),
     );
+    // A replacement keeps the fields of the entry it replaces.
+    await preferences.setWorkspaceLead(
+      {
+        workspaceId: "work",
+        lead: { ...lead, channelId: other },
+        expected: channel,
+      },
+      new AbortController().signal,
+    );
+    expect(written(f, LEADS_TAG).at(-1)?.value.leads.work).toEqual({
+      ...lead,
+      channelId: other,
+      pinnedAt: 1,
+    });
     await preferences.removeSection("work");
     await vi.waitFor(() =>
       expect(written(f, LEADS_TAG).at(-1)?.value.leads).toEqual({
@@ -558,7 +586,7 @@ it("keeps unknown Leads fields, hides and prunes orphans, and best-effort remove
     // A failed cleanup read keeps the Lead and never fails the deletion.
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const writes = f.publish.mock.calls.length;
-    f.leadReads.fail = true;
+    f.leadReads.fail = new Error("Leads read failed");
     await preferences.removeSection("next");
     expect(preferences.snapshot().data?.sections.map(({ id }) => id)).toEqual(
       [],
@@ -602,6 +630,135 @@ it("isolates an unreadable Leads record from workspaces and the catalog, and nev
     expect(preferences.leads.snapshot()).toEqual({
       status: "ready",
       leads: { next: lead },
+    });
+  } finally {
+    f.dispose();
+  }
+});
+
+it("loads Leads beside Groups, and session recovery retries a transient failure", async () => {
+  const f = fixture();
+  const preferences = f.session.soloPreferences;
+  try {
+    f.install(groups);
+    f.installRecord(leadsRecord({ work: lead }));
+    f.leadReads.fail = new TypeError("Failed to fetch");
+    // Nothing asks for Leads: the ready catalog starts their read.
+    await preferences.refresh();
+    await vi.waitFor(() =>
+      expect(preferences.leads.snapshot()).toMatchObject({
+        status: "error",
+        transient: true,
+      }),
+    );
+    expect(preferences.snapshot().status).toBe("ready");
+    expect(f.session.recovery?.snapshot().recovering).toBe(true);
+    f.leadReads.fail = false;
+    f.session.recovery?.retryNow();
+    await vi.waitFor(() =>
+      expect(preferences.leads.snapshot()).toEqual({
+        status: "ready",
+        leads: { work: lead },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(f.session.recovery?.snapshot().recovering).toBe(false),
+    );
+    // A cleared session reads them again with the next catalog.
+    await f.clearCache();
+    expect(preferences.leads.snapshot().status).not.toBe("ready");
+    await preferences.refresh();
+    await vi.waitFor(() =>
+      expect(preferences.leads.snapshot()).toEqual({
+        status: "ready",
+        leads: { work: lead },
+      }),
+    );
+  } finally {
+    f.dispose();
+  }
+});
+
+it("prunes Leads against Groups read after them, so another device's Lead survives", async () => {
+  const f = fixture();
+  const preferences = f.session.soloPreferences;
+  const next = { ...lead, channelId: other };
+  // Another device adds a workspace and saves its Lead; the record contract
+  // lets that writer keep orphans, here the Lead of the deleted workspace.
+  const theirs = (work: boolean) => () => {
+    // Newer than this device's own writes.
+    const at = Math.floor(Date.now() / 1000);
+    f.install(
+      {
+        type: "groups",
+        id: "me",
+        groups: [
+          ...(work ? groups.groups : []),
+          { id: "theirs", name: "Theirs", defaultTemplateId: "" },
+        ],
+        assignments: {},
+      },
+      false,
+      at,
+    );
+    f.installRecord(leadsRecord({ work: lead, theirs: lead }), at);
+  };
+  try {
+    f.install(groups);
+    f.installRecord(leadsRecord({ work: lead }));
+    await preferences.refresh();
+    await preferences.leads.refresh();
+    // Between the deletion's Groups save and its cleanup.
+    f.leadReads.before = theirs(false);
+    await preferences.removeSection("work");
+    await vi.waitFor(() => expect(written(f, LEADS_TAG)).toHaveLength(1));
+    expect(written(f, LEADS_TAG)[0]?.value.leads).toEqual({ theirs: lead });
+
+    // Between the setter's reads.
+    f.install(groups);
+    f.installRecord(leadsRecord({ work: lead }));
+    f.leadReads.before = theirs(true);
+    await preferences.setWorkspaceLead(
+      { workspaceId: "work", lead: next, expected: channel },
+      new AbortController().signal,
+    );
+    expect(written(f, LEADS_TAG).at(-1)?.value.leads).toEqual({
+      work: next,
+      theirs: lead,
+    });
+  } finally {
+    f.dispose();
+  }
+});
+
+it("never lets a refresh begun before a confirmed Lead write show the older Leads", async () => {
+  const f = fixture();
+  const preferences = f.session.soloPreferences;
+  try {
+    f.install(groups);
+    await preferences.refresh();
+    await vi.waitFor(() =>
+      expect(preferences.leads.snapshot().status).toBe("ready"),
+    );
+    let release = () => {};
+    f.leadReads.hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const stale = preferences.leads.refresh();
+    try {
+      await vi.waitFor(() => expect(f.leadReads.hold).toBeUndefined());
+      await preferences.setWorkspaceLead(
+        { workspaceId: "work", lead },
+        new AbortController().signal,
+      );
+      expect(preferences.leads.snapshot().leads).toEqual({ work: lead });
+    } finally {
+      release();
+    }
+    await stale;
+    expect(preferences.leads.snapshot()).toEqual({
+      status: "ready",
+      leads: { work: lead },
     });
   } finally {
     f.dispose();

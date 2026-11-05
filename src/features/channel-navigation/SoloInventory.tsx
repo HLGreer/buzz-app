@@ -297,7 +297,7 @@ export function SoloInventory({
               ...parts,
               ...(leadDraft ? { leadDraft } : {}),
               leads: {
-                ready: leads.status === "ready",
+                status: leads.status,
                 refresh: async () => {
                   await session.soloPreferences.leads.refresh();
                   return (

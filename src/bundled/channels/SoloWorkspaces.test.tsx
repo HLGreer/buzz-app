@@ -441,11 +441,10 @@ it("shares a workspace frame while keeping lead selection, disclosure and chat c
   }
 });
 
-it("selects a Lead workspace only after its separate Leads record is read, with Retry beside a failed read", async () => {
+it("selects a Lead workspace only once its separate Leads record is read, showing the owner's failure with Retry", async () => {
   const h = fixture();
   const store = h.store();
   const onSelect = vi.fn();
-  let ready = false;
   let release: ((ready: boolean) => void) | undefined;
   const refresh = vi.fn(
     () =>
@@ -453,23 +452,23 @@ it("selects a Lead workspace only after its separate Leads record is read, with 
         release = resolve;
       }),
   );
-  const leads = {
-    get ready() {
-      return ready;
-    },
-    refresh,
-  };
-  await store.queries.ensure();
-  render(
+  const view = (status: "loading" | "ready" | "error") =>
     h.view(store.queries, "workspace-leads", undefined, undefined, (parts) => (
-      <WorkspaceCompositionContext value={{ ...parts, leads }}>
+      <WorkspaceCompositionContext
+        value={{ ...parts, leads: { status, refresh } }}
+      >
         <RegionWorkspace id="work" leadTokenId="lead" onSelect={onSelect} />
       </WorkspaceCompositionContext>
-    )),
-  );
+    ));
+  await store.queries.ensure();
+  // The owner's failure shows before any click.
+  const { rerender, unmount } = render(view("error"));
   const user = userEvent.setup();
   try {
     const title = await screen.findByRole("button", { name: "Work" });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Lead unavailable.");
+    expect(title.closest("[data-navigation-card]")).toContainElement(alert);
     await user.click(title);
     try {
       expect(refresh).toHaveBeenCalledOnce();
@@ -480,20 +479,27 @@ it("selects a Lead workspace only after its separate Leads record is read, with 
     } finally {
       await act(async () => release?.(false));
     }
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Lead unavailable.");
     expect(onSelect).not.toHaveBeenCalled();
-    const card = title.closest("[data-navigation-card]");
-    expect(card).toContainElement(alert);
-    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    // Retry reads again but does not select.
+    await user.click(
+      within(screen.getByRole("alert")).getByRole("button", { name: "Retry" }),
+    );
     expect(refresh).toHaveBeenCalledTimes(2);
-    ready = true;
+    rerender(view("loading"));
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => release?.(true));
+    rerender(view("ready"));
+    expect(onSelect).not.toHaveBeenCalled();
+    await user.click(title);
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    // A read that settles after the card is gone selects nothing.
+    rerender(view("loading"));
+    await user.click(title);
+    expect(refresh).toHaveBeenCalledTimes(3);
+    unmount();
     await act(async () => release?.(true));
     expect(onSelect).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("alert")).toBeNull();
-    await user.click(title);
-    expect(onSelect).toHaveBeenCalledTimes(2);
-    expect(refresh).toHaveBeenCalledTimes(2);
   } finally {
     store.dispose();
   }

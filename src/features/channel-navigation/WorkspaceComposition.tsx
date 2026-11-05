@@ -5,7 +5,6 @@ import {
   useLayoutEffect,
   useEffectEvent,
   useRef,
-  useState,
   type ReactNode,
 } from "react";
 import {
@@ -15,6 +14,7 @@ import {
 import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { PencilSimpleIcon } from "../../shared/design-system/icons";
+import type { LeadsSnapshot } from "../relay/solo-preferences";
 import { SoloDisclosure } from "./SoloDisclosure";
 import type { SoloWorkspaceProps } from "./solo-navigation-contract";
 import styles from "./WorkspaceComposition.module.css";
@@ -23,7 +23,10 @@ import styles from "./WorkspaceComposition.module.css";
 export type WorkspaceComposition = Readonly<{
   leadDraft?: string;
   /** The separate Leads record. Until it is read, a Lead workspace is not selected. */
-  leads?: Readonly<{ ready: boolean; refresh(): Promise<boolean> }>;
+  leads?: Readonly<{
+    status: LeadsSnapshot["status"];
+    refresh(): Promise<boolean>;
+  }>;
   ordinary: ReactNode;
   chats: ReactNode;
   workspaces: readonly Readonly<{
@@ -61,7 +64,6 @@ export function RegionWorkspace(props: SoloWorkspaceProps) {
   useLayoutEffect(() => {
     if (props.reveal) reveal();
   }, [props.reveal]);
-  const [leadFailed, setLeadFailed] = useState(false);
   const reading = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -73,18 +75,14 @@ export function RegionWorkspace(props: SoloWorkspaceProps) {
   const leads = props.leadTokenId ? parts?.leads : undefined;
   // An unread Lead is not an absent one: its draft could duplicate the Lead.
   const select = async () => {
-    if (!leads || leads.ready) {
-      setLeadFailed(false);
+    if (!leads || leads.status === "ready") {
       props.onSelect?.();
       return;
     }
     if (reading.current) return;
     reading.current = true;
     try {
-      const ready = await leads.refresh();
-      if (!mounted.current) return;
-      setLeadFailed(!ready);
-      if (ready) props.onSelect?.();
+      if ((await leads.refresh()) && mounted.current) props.onSelect?.();
     } finally {
       reading.current = false;
     }
@@ -133,14 +131,13 @@ export function RegionWorkspace(props: SoloWorkspaceProps) {
         tone="tonal"
         data-drop-target={props.dropTarget || undefined}
         footer={
-          leadFailed &&
-          !leads?.ready && (
+          leads?.status === "error" && (
             <p role="alert" className="text-body-sm text-danger">
               Lead unavailable.{" "}
               <Button
                 variant="plain"
                 size="inline"
-                onClick={() => void select()}
+                onClick={() => void leads.refresh()}
               >
                 Retry
               </Button>
