@@ -364,6 +364,11 @@ available rather than silently discarding it.
   Remote Claude uses the Claude sign-in on the target. It keeps each saved
   conversation in that target's workspace. Stop ends its active turn.
   Remote Claude usage totals and transcripts are unavailable.
+- When creating a Builderlab agent, sign in, choose a model from its family menu,
+  then choose a supported **Thinking** level. Both choices are required; changing
+  the model clears the thinking choice. Instructions are optional. **Create agent**
+  stays disabled until its name and required choices are complete; Builderlab
+  also waits for sign-in and its model catalog.
 - An agent's name and picture identify it. Instructions shape its response
   style, tasks, initiative, and boundaries. They do not add tools, credentials,
   or permissions. Saving instructions affects future work, not past messages.
