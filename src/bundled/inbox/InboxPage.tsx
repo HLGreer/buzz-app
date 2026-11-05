@@ -1,6 +1,4 @@
 import type { ConversationHostServices } from "../../features/conversation/ConversationHost";
-import { workflowLabel } from "../../features/relay/workflow-attribution";
-import { LightningIcon } from "../../shared/design-system/icons";
 import {
   type ReactNode,
   useCallback,
@@ -27,16 +25,19 @@ import type { NavigationScope } from "../../features/navigation/targets";
 import type { PageNavigation } from "../../features/navigation/service";
 import { routeOf } from "./route";
 import {
+  hasUnread,
+  InboxRowButton,
+  rowIdentity,
+  rowProfileIds,
+} from "./InboxRow";
+import {
   useChannelList,
   useProfileGeneration,
   useRelayConnection,
 } from "../../features/relay/react";
 import { selectProfiles } from "../../features/relay/profile-selection";
 import { useIdentityNames } from "../../features/identity-names/react";
-import { messagePreview } from "../../features/notifications/content";
-import { formatPublicKey } from "../../shared/identity/public-key";
 import { relativeTimestamp } from "../../shared/relative-timestamp";
-import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { EmptyState } from "../../shared/design-system/ui/EmptyState";
 import { Button } from "../../shared/design-system/ui/Button";
 import {
@@ -47,7 +48,6 @@ import {
 } from "./InboxFilters";
 import { FullPageSurface } from "../../shared/design-system/ui/FullPageSurface";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import {
   PanelHeader,
   PanelHeaderLabel,
@@ -64,8 +64,6 @@ import {
   MenuPopup,
 } from "../../shared/design-system/ui/Menu";
 import styles from "./Inbox.module.css";
-import { dmLabel } from "./dm-label";
-import { channelText } from "../../features/channels/channel-icon";
 import {
   readView,
   subscribeView,
@@ -80,7 +78,6 @@ import {
   reopenArchives,
   updateArchive,
 } from "./archive";
-import { avatarMedia } from "../../shared/avatar-source";
 
 type AttentionFilter = "all" | "unread";
 const shows = [
@@ -161,7 +158,6 @@ const matchesActivity = (
       return item.thread;
   }
 };
-const hasUnread = (item: InboxItem) => item.unreadCount > 0 || item.manual;
 const targetOf = (item: InboxItem) => ({
   channelId: item.channelId,
   messageId: item.messageId,
@@ -183,12 +179,29 @@ const tabTarget = (
       };
 
 type Selection = { channelId: string; messageId: string; rootId?: string };
-// The row a tab opened, kept as long as the session's tabs so returning to
-// Inbox still archives and advances from the conversation it restores.
+// The row a tab opened and the list's offset, kept as long as the session's
+// tabs so returning to Inbox still archives and advances from the conversation
+// it restores, at the place it left. A relaunch starts at the top.
 const selections = new WeakMap<
   RelaySession,
-  { opened?: PageTabTarget | undefined; target?: Selection | undefined }
+  {
+    opened?: PageTabTarget | undefined;
+    target?: Selection | undefined;
+    scrollTop?: number | undefined;
+    /** Whether the selected row overlapped the list's visible box. */
+    selectedShown?: boolean | undefined;
+  }
 >();
+/** Whether the selected row overlaps the list's visible box, once rendered. */
+function selectedInView(list: HTMLElement) {
+  const row = list.querySelector("li[data-selected]");
+  if (!row) return undefined;
+  const bounds = list.getBoundingClientRect();
+  const rect = row.getBoundingClientRect();
+  return rect.bottom > bounds.top && rect.top < bounds.bottom;
+}
+/** Whether another tab covers the list, or it is hidden; neither is measured. */
+const covered = (list: HTMLElement) => !!list.closest("[hidden], [inert]");
 
 type InboxPageTabs = (props: PageTabsProps) => ReactNode;
 
@@ -351,10 +364,19 @@ function InboxList({
   const [filters, setFilters] = useState(() => readFilters(archiveScope));
   const { show, activity, sender: senderFilter } = filters;
   const unreadOnly = filters.attention === "unread";
+  // Each list returns to the session's last offset once its rows show,
+  // unless the user has already scrolled it. The offset they chose wins,
+  // unless the selected row they could see has since left the view.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const placed = useRef<HTMLDivElement | null>(null);
   function setFilter(patch: Partial<Filters>) {
     const next = { ...filters, ...patch };
     setFilters(next);
     writeView(archiveScope, filtersKey, next);
+    // A filter change keeps the list's current offset. A mounted list stays
+    // where it is, even empty at 0, rather than taking the saved offset when
+    // rows show. Drafts unmounts the list, so its offset is the saved one.
+    placed.current = scroller.current;
   }
   const [drafts, setDrafts] = useState(false);
   // A shortcut's open carries filters; a plain open carries none and changes nothing.
@@ -419,7 +441,11 @@ function InboxList({
     () => selections.get(session)?.target,
   );
   useEffect(() => {
-    selections.set(session, { opened, target: selectedTarget });
+    selections.set(session, {
+      ...selections.get(session),
+      opened,
+      target: selectedTarget,
+    });
   }, [session, opened, selectedTarget]);
   const fallbackRow = useRef<HTMLButtonElement | null>(null);
   const fallbackControl = useRef<HTMLButtonElement | null>(null);
@@ -628,22 +654,40 @@ function InboxList({
   useLayoutEffect(() => {
     archiveView.current = { show, visible, selected, opened };
   });
+  useLayoutEffect(() => {
+    const list = scroller.current;
+    // A covered list skips layout: measuring it forces that layout, and
+    // revealing a row in it scrolls nothing. It is placed on the commit that
+    // uncovers it; what showed before it was covered still holds.
+    if (!list || covered(list)) return;
+    // Compositor scrolling may update the position before its scroll event.
+    if (placed.current !== list && visible.length && list.scrollTop === 0) {
+      const saved = selections.get(session);
+      if (saved?.scrollTop) list.scrollTop = saved.scrollTop;
+      if (saved?.selectedShown && selectedInView(list) === false)
+        list
+          .querySelector("li[data-selected]")
+          ?.scrollIntoView({ block: "nearest" });
+    }
+    if (visible.length) placed.current = list;
+    // Selecting a row, or rows arriving above it, moves nothing the scroll
+    // handler sees, so record whether it shows after each commit too.
+    const shown = selectedInView(list);
+    if (typeof shown === "boolean")
+      selections.set(session, {
+        ...selections.get(session),
+        selectedShown: shown,
+      });
+  });
   const profileKey = [
     ...new Set([
       ...authorIds,
-      ...matching
-        .slice(0, 50)
-        .flatMap((item) =>
-          item.workflowOwnerId ? [item.workflowOwnerId] : [],
+      ...matching.slice(0, 50).flatMap((item) =>
+        rowProfileIds(
+          item,
+          list.channels.find((entry) => entry.id === item.channelId),
         ),
-      ...matching.slice(0, 50).flatMap((item) => {
-        const channel = list.channels.find(
-          (entry) => entry.id === item.channelId,
-        );
-        return channel?.channelType === "dm"
-          ? (channel.participants?.slice(0, 3) ?? [])
-          : [];
-      }),
+      ),
     ]),
   ]
     .sort()
@@ -870,7 +914,9 @@ function InboxList({
       else if (item.target.kind === "channel") {
         readChannel ??= session.unread.prepareChannelRead(item.channelId);
         await readChannel();
-      } else
+      } else if (item.timeline)
+        await session.unread.markTimelineRead(item.channelId, item.messageIds);
+      else
         while (remaining.length) {
           // Close/Escape retires undispatched steps, not the admitted save.
           // Its genuine storage/access rejection still propagates through run.
@@ -996,7 +1042,23 @@ function InboxList({
         <div ref={workspace} className={styles.workspace}>
           <div className={styles.listPane}>
             {toolbar}
-            <div className={styles.scroll}>
+            <div
+              ref={scroller}
+              className={styles.scroll}
+              onScroll={(event) => {
+                // Saved as it moves, so any teardown keeps the last offset.
+                // Rows arriving above a covered list can still anchor it,
+                // which saves only the offset.
+                const list = event.currentTarget;
+                selections.set(session, {
+                  ...selections.get(session),
+                  scrollTop: list.scrollTop,
+                  ...(!covered(list) && {
+                    selectedShown: selectedInView(list),
+                  }),
+                });
+              }}
+            >
               {inbox.freshness === "stale" && !failure && (
                 <div className={styles.notice} role="status">
                   <span className="text-body text-subtle">
@@ -1087,30 +1149,8 @@ function InboxList({
                   const channel = list.channels.find(
                     (candidate) => candidate.id === item.channelId,
                   );
-                  const displayId = item.workflowOwnerId ?? item.authorId;
-                  const profile = profiles.get(displayId);
-                  const resolved = name(
-                    displayId,
-                    profile?.name ??
-                      formatPublicKey(displayId) ??
-                      "Unknown sender",
-                    channel?.members,
-                  );
-                  const sender = item.workflowOwnerId
-                    ? workflowLabel(resolved)
-                    : resolved;
-                  const dmName = dmLabel(
-                    channel?.participants,
-                    profiles,
-                    name,
-                    channel?.name ?? "Direct message",
-                  );
-                  const context =
-                    channel?.channelType === "dm"
-                      ? `DM · ${dmName}`
-                      : channel
-                        ? channelText(channel)
-                        : "Conversation";
+                  const identity = rowIdentity(item, channel, profiles, name);
+                  const { sender, context } = identity;
                   const unread = hasUnread(item);
                   const rowArchived = archived(item);
                   return (
@@ -1142,100 +1182,19 @@ function InboxList({
                             }
                           }}
                         >
-                          <NavigationItem
-                            aria-label={`Open ${sender} in ${context}`}
-                            aria-describedby={`${previewId}-${item.id}`}
+                          <InboxRowButton
+                            item={item}
+                            identity={identity}
+                            media={session.media}
+                            feed={feed}
+                            time={relativeTimestamp(item.createdAt)}
+                            previewId={`${previewId}-${item.id}`}
                             disabled={pending}
                             selected={selectedId === item.id}
                             ref={
                               item.id === visible[0]?.id
                                 ? fallbackRow
                                 : undefined
-                            }
-                            icon={
-                              <Avatar
-                                size="default"
-                                alt=""
-                                fallback={sender}
-                                fallbackContent={
-                                  item.workflowOwnerId ? (
-                                    <LightningIcon size={20} />
-                                  ) : undefined
-                                }
-                                src={
-                                  item.workflowOwnerId
-                                    ? undefined
-                                    : avatarMedia(
-                                        profile?.picture,
-                                        session.media,
-                                      )
-                                }
-                                shape={
-                                  item.workflowOwnerId || profile?.isAgent
-                                    ? "squircle"
-                                    : "circle"
-                                }
-                              />
-                            }
-                            label={
-                              <span className={styles.content}>
-                                <span className={styles.heading}>
-                                  <span className={styles.identity}>
-                                    <strong
-                                      className={`text-label-sm text-standard ${styles.sender}`}
-                                    >
-                                      {sender}
-                                    </strong>
-                                    <span
-                                      className={`text-caption ${styles.source}`}
-                                      data-inbox-source=""
-                                    >
-                                      {context}
-                                    </span>
-                                  </span>
-                                  <time
-                                    className={`text-caption text-subtle ${styles.rowDate}`}
-                                    dateTime={new Date(
-                                      item.createdAt * 1000,
-                                    ).toISOString()}
-                                  >
-                                    {relativeTimestamp(item.createdAt)}
-                                  </time>
-                                </span>
-                                <span
-                                  id={`${previewId}-${item.id}`}
-                                  className={`text-body ${unread ? "text-standard" : "text-subtle"} ${styles.preview}`}
-                                >
-                                  {[
-                                    item.previewMessageId,
-                                    ...item.messageIds,
-                                  ].some(
-                                    (id) =>
-                                      id !== undefined &&
-                                      feed.incomplete.includes(id),
-                                  )
-                                    ? feed.status === "error"
-                                      ? "Preview unavailable. Retry inbox."
-                                      : "Preview updating…"
-                                    : messagePreview(item.preview)}
-                                </span>
-                              </span>
-                            }
-                            trailing={
-                              unread ? (
-                                <span
-                                  className={styles.unreadSlot}
-                                  role="img"
-                                  aria-label="Unread"
-                                >
-                                  <span className={styles.unreadDot} />
-                                </span>
-                              ) : (
-                                <span
-                                  className={styles.unreadSlot}
-                                  aria-hidden="true"
-                                />
-                              )
                             }
                             onClick={() => {
                               if (busy.current) return;
