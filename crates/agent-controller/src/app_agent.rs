@@ -31,7 +31,10 @@ pub const LIVE_CANVAS_BYTES: usize = 256 * 1024;
 /// the `["EVENT",…]` wrapper. Mirrors `CANVAS_MAX_EVENT_BYTES`.
 pub const CANVAS_MAX_EVENT_BYTES: usize = 512 * 1024 - 16;
 
-fn bounded(kind: u16, content: &str, tags: &[Vec<String>]) -> Result<()> {
+/// Whether an event of `kind` with `content` and `tags` is within the bounds
+/// an agent's or a paired tool's events are signed under: Canvas content up to [`LIVE_CANVAS_BYTES`], other
+/// content up to 64 KiB, and at most 256 tags of 4 KiB.
+pub fn bounded(kind: u16, content: &str, tags: &[Vec<String>]) -> Result<()> {
     let content_limit = if kind == 40100 {
         LIVE_CANVAS_BYTES
     } else {
@@ -43,21 +46,21 @@ fn bounded(kind: u16, content: &str, tags: &[Vec<String>]) -> Result<()> {
             .iter()
             .any(|tag| tag.is_empty() || tag.iter().map(String::len).sum::<usize>() > 4096)
     {
-        return Err("Agent event is too large".into());
+        return Err("Event is too large".into());
     }
     Ok(())
 }
 
 /// Escaping can carry Canvas content within its limit past the relay's
 /// frame, so check the complete event once every tag is present.
-fn framed(kind: u16, event: serde_json::Value) -> Result<serde_json::Value> {
+pub fn framed(kind: u16, event: serde_json::Value) -> Result<serde_json::Value> {
     if kind == 40100
         && serde_json::to_vec(&event)
             .map_err(|_| "Invalid agent event")?
             .len()
             > CANVAS_MAX_EVENT_BYTES
     {
-        return Err("Agent event is too large".into());
+        return Err("Event is too large".into());
     }
     Ok(event)
 }

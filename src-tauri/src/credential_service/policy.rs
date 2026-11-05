@@ -10,8 +10,6 @@ const PROOF_WINDOW: u64 = 60;
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Verdict {
     Sign,
-    /// A person must approve it first.
-    Approval,
     Deny(String),
 }
 
@@ -70,7 +68,9 @@ pub(super) fn classify(
     if ORDINARY.contains(&kind) {
         Verdict::Sign
     } else if SENSITIVE.contains(&kind) {
-        Verdict::Approval
+        Verdict::Deny(format!(
+            "Kind {kind} can't be signed by a local tool; use Buzz"
+        ))
     } else {
         Verdict::Deny(format!("Kind {kind} is not signed for local callers"))
     }

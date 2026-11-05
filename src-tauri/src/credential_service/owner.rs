@@ -1,9 +1,10 @@
 //! Paired tools: `pair`, and requests made with a paired token, which act as
 //! the human under the same operation policy as an agent's.
 use super::pairing::{Approver, Human, Record};
-use super::{digest, METHODS};
-use super::{full_budgets, policy, spend, unix_now, CredentialService, Failure, Unsigned};
+use super::{digest, on_relay, permitted, unsupported};
+use super::{full_budgets, spend, CredentialService, Failure, Unsigned};
 use crate::identity::EventTemplate;
+use buzz_agent_controller::{bounded, framed, CANVAS_MAX_EVENT_BYTES};
 use serde_json::json;
 
 impl CredentialService {
@@ -68,6 +69,8 @@ impl CredentialService {
             Human::Ready(approver) => approver.pubkey,
             _ => return Err(Failure::revoked()),
         };
+        #[cfg(test)]
+        drop(self.0.owner_call_gate.read().await);
         let result = self.owner_call(&record, &pubkey, method, params).await;
         // Revoked, or the human changed, while it ran: whatever it made stays here.
         let still = matches!(self.human().await, Human::Ready(now) if now == record.approved_by);
@@ -92,49 +95,39 @@ impl CredentialService {
         ) -> Result<T, Failure> {
             identity
                 .with_key(move |key, viewer| {
-                    let hex: zeroize::Zeroizing<String> =
-                        zeroize::Zeroizing::new(key.iter().map(|b| format!("{b:02x}")).collect());
-                    action(&buzz_agent_controller::Secret::parse(&hex, viewer)?)
+                    action(&buzz_agent_controller::Secret::from_bytes(key, viewer)?)
                 })
                 .await
                 .map_err(|error| Failure::new("invalid_request", &error))
         }
         match (method, params) {
-            ("describe", []) => Ok(json!({
-                "instance": self.0.instance,
-                "pubkey": pubkey,
-                "role": "owner",
-                "relays": [record.relay],
-                "methods": METHODS.iter().filter(|method| **method != "pair").collect::<Vec<_>>(),
-            })
-            .to_string()),
+            ("describe", []) => Ok(self.described(pubkey, None, &record.relay)),
             ("get_public_key", []) => Ok(pubkey.to_owned()),
             ("sign_event", [event]) => {
                 let event = Unsigned::parse(event, pubkey)?;
-                match policy::classify(
-                    event.kind,
-                    &event.tags,
-                    event.created_at,
-                    unix_now()?,
-                    &record.relay,
-                ) {
-                    policy::Verdict::Sign => {}
-                    policy::Verdict::Approval => {
-                        return Err(Failure::new(
-                            "approval_required",
-                            &format!("Kind {} needs your approval in Buzz", event.kind),
-                        ))
-                    }
-                    policy::Verdict::Deny(reason) => return Err(Failure::new("denied", &reason)),
-                }
+                permitted(&event, &record.relay)?;
+                bounded(event.kind, &event.content, &event.tags)
+                    .map_err(|error| Failure::new("invalid_request", &error))?;
+                // A Canvas is bounded by its content above and its complete
+                // event below, as an agent's is; every other kind by 64 KiB.
+                let limit = if event.kind == 40100 {
+                    CANVAS_MAX_EVENT_BYTES
+                } else {
+                    64 * 1024
+                };
+                let kind = event.kind;
                 identity
-                    .sign(EventTemplate {
-                        created_at: event.created_at,
-                        kind: event.kind,
-                        tags: event.tags,
-                        content: event.content,
-                    })
+                    .sign_bounded(
+                        EventTemplate {
+                            created_at: event.created_at,
+                            kind,
+                            tags: event.tags,
+                            content: event.content,
+                        },
+                        limit,
+                    )
                     .await
+                    .and_then(|signed| framed(kind, signed))
                     .map(|signed| signed.to_string())
                     .map_err(|error| Failure::new("invalid_request", &error))
             }
@@ -155,12 +148,7 @@ impl CredentialService {
                 with_secret(identity, move |key| key.memory_d_tag(&peer, &slug)).await
             }
             ("federated_identity", [relay]) => {
-                if !policy::same_relay(relay, &record.relay) {
-                    return Err(Failure::new(
-                        "denied",
-                        "This token does not act on that relay",
-                    ));
-                }
+                on_relay(relay, &record.relay)?;
                 let url = url::Url::parse(relay)
                     .map_err(|_| Failure::new("invalid_request", "Invalid relay URL"))?;
                 let authorization = self
@@ -178,14 +166,7 @@ impl CredentialService {
             }
             // An owner's events carry no NIP-OA tag.
             ("auth_tag", []) => Ok(String::new()),
-            (method, _) if METHODS.contains(&method) && method != "pair" => Err(Failure::new(
-                "invalid_request",
-                &format!("Wrong parameters for {method}"),
-            )),
-            (method, _) => Err(Failure::new(
-                "unknown_method",
-                &format!("{method} is not supported"),
-            )),
+            (method, _) => Err(unsupported(method)),
         }
     }
 }

@@ -402,12 +402,12 @@ export class ClaudeProcess {
     >,
   ) {
     if (launch.agent)
-      // Without it, `buzz` here falls through to its next credential.
-      await this.process
-        .actAs?.(launch.agent)
-        .catch((error: unknown) =>
-          console.warn("Claude's buzz CLI could not act as its agent", error),
-        );
+      // An inherited token that acts for nobody fails every `buzz` call, so a
+      // process that cannot act as its agent is stopped, as other harnesses do.
+      await this.process.actAs?.(launch.agent).catch((error: unknown) => {
+        void this.kill();
+        throw error;
+      });
     try {
       if (launch.tools) this.tools = launch.tools;
       this.hook = launch.protection ? undefined : launch.hook;

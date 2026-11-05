@@ -985,8 +985,8 @@ native code.
   signing. NIP-42, NIP-98 and Blossom proofs are signed only for the token's own
   community and only when created within a minute of now. Ordinary content kinds
   are signed as built. Profile, contacts, deletions, membership, moderation and
-  agent-management kinds answer `approval_required`: there is no approval prompt
-  yet, so they are not signed. Every other kind is denied.
+  agent-management kinds are refused with `denied`: a local tool can't sign
+  them, and there is no approval prompt. Every other kind is denied too.
 - **Evidence.** `federated_identity` goes through the same agent grant and
   assertion checks as the app's own requests and answers no header on relays
   without NIP-FI. `auth_tag` answers the agent's NIP-OA tag.

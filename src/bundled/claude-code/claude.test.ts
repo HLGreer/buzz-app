@@ -68,23 +68,21 @@ it("lets its Buzz credential act as its agent before it initializes", async () =
   });
 });
 
-it("initializes when its credential cannot act as its agent", async () => {
+it("fails to start, and stops, when its credential cannot act as its agent", async () => {
   const { spawn, processes } = fakeSpawn();
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-  await ClaudeProcess.start(
-    async (id, options) => ({
-      ...(await spawn(id, options)),
-      actAs: async () => {
-        throw new Error("revoked");
-      },
-    }),
-    { ...launch, agent: { pubkey: "ab".repeat(32), relay: "wss://r" } },
-  );
-  expect(processes[0]?.received[0]).toMatchObject({
-    request: { subtype: "initialize" },
-  });
-  expect(warn).toHaveBeenCalled();
-  warn.mockRestore();
+  await expect(
+    ClaudeProcess.start(
+      async (id, options) => ({
+        ...(await spawn(id, options)),
+        actAs: async () => {
+          throw new Error("revoked");
+        },
+      }),
+      { ...launch, agent: { pubkey: "ab".repeat(32), relay: "wss://r" } },
+    ),
+  ).rejects.toThrow("revoked");
+  expect(processes[0]?.killed).toBe(true);
+  expect(processes[0]?.received).toEqual([]);
 });
 
 it("asks no credential for a discovery probe", async () => {

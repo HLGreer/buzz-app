@@ -11,6 +11,31 @@ pub(crate) trait Keychain: Send + Sync {
     /// unset once they are, so a clear that fails is finished next launch.
     fn owed(&self) -> bool;
     fn set_owed(&self, owed: bool) -> Result<(), String>;
+    /// This app's sole use of the records, held until the lease is dropped.
+    /// Another running app over the same item is refused: it would admit and
+    /// rewrite records from a stale read, bringing back a revoked pairing.
+    fn lease(&self) -> Result<Lease, String>;
+}
+
+/// Held for as long as this app serves the records; see [`Keychain::lease`].
+pub(crate) type Lease = Box<dyn Send + Sync>;
+pub(crate) const LEASED: &str = "Another Buzz is serving paired tools; quit it, then retry";
+
+/// The lease on the records an owed-clear marker at `marker` belongs to: an
+/// exclusive lock on a file beside it, released when its process exits.
+#[cfg_attr(test, allow(dead_code))]
+fn lease_at(marker: &std::path::Path) -> Result<Lease, String> {
+    if let Some(dir) = marker.parent() {
+        std::fs::create_dir_all(dir).map_err(|_| LEASED.to_string())?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(marker.with_extension("lease"))
+        .map_err(|_| LEASED.to_string())?;
+    fs2::FileExt::try_lock_exclusive(&file).map_err(|_| LEASED.to_string())?;
+    Ok(Box::new(file))
 }
 
 /// The owed-clear marker, a file beside the app's data: kept apart from the
@@ -90,6 +115,9 @@ impl Keychain for Os {
     fn set_owed(&self, owed: bool) -> Result<(), String> {
         set_marker(&self.1, owed)
     }
+    fn lease(&self) -> Result<Lease, String> {
+        lease_at(&self.1)
+    }
 }
 
 #[cfg(all(
@@ -109,6 +137,9 @@ impl Keychain for Os {
     fn set_owed(&self, owed: bool) -> Result<(), String> {
         set_marker(&self.1, owed)
     }
+    fn lease(&self) -> Result<Lease, String> {
+        lease_at(&self.1)
+    }
 }
 
 /// An in-memory keychain whose reads and writes can be made to fail, and
@@ -121,6 +152,8 @@ pub(crate) struct Memory {
     pub(crate) fail_read: std::sync::atomic::AtomicBool,
     pub(crate) fail_write: std::sync::atomic::AtomicBool,
     pub(crate) fail_owed: std::sync::atomic::AtomicBool,
+    /// Whether a service holds its lease.
+    pub(crate) leased: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Taken by the next write: it reports entering, then waits for release.
     pub(crate) gate: std::sync::Mutex<Option<Gate>>,
 }
@@ -158,6 +191,19 @@ impl Keychain for std::sync::Arc<Memory> {
         }
         self.owed.store(owed, std::sync::atomic::Ordering::SeqCst);
         Ok(())
+    }
+    fn lease(&self) -> Result<Lease, String> {
+        use std::sync::atomic::Ordering::SeqCst;
+        struct Held(std::sync::Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for Held {
+            fn drop(&mut self) {
+                self.0.store(false, SeqCst);
+            }
+        }
+        self.leased
+            .compare_exchange(false, true, SeqCst, SeqCst)
+            .map_err(|_| LEASED.to_string())?;
+        Ok(Box::new(Held(self.leased.clone())))
     }
 }
 

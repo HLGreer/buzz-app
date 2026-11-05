@@ -243,6 +243,8 @@ async fn a_pairing_unused_past_its_disuse_period_is_revoked() {
         serde_json::from_slice(fixture.keychain.value.lock().unwrap().as_ref().unwrap()).unwrap();
     saved[0]["last_used"] = json!(now() - super::super::pairing::DISUSE - 1);
     *fixture.keychain.value.lock().unwrap() = Some(serde_json::to_vec(&saved).unwrap());
+    // The earlier run has exited.
+    drop(fixture.service);
     let restarted = Fixture {
         service: service_over(
             &fixture.host,
@@ -324,7 +326,127 @@ async fn a_paired_token_signs_only_what_the_policy_allows() {
     assert_eq!(signed["pubkey"], human_pubkey().await);
     let profile = unsigned(0, json!([]), now());
     let reply = ask(&fixture, &token, "sign_event", &[&profile]).await;
-    assert_eq!(error(&reply).1, "approval_required");
+    assert_eq!(error(&reply), (StatusCode::FORBIDDEN, "denied"));
+    let message = reply.1["message"].as_str().unwrap();
+    assert!(message.contains("can't be signed by a local tool"));
+}
+
+/// A paired tool's Canvas is bounded as an agent's is: by its content, then
+/// by its complete event, not by the 64 KiB other kinds are signed under.
+#[tokio::test]
+async fn a_paired_token_signs_a_canvas_within_the_canvas_bounds() {
+    use buzz_agent_controller::LIVE_CANVAS_BYTES;
+    let fixture = fixture();
+    let token = paired(&fixture).await;
+    let sign = |kind: u16, content: String| {
+        json!({ "kind": kind, "tags": [["h", "channel"]], "content": content, "created_at": now() })
+            .to_string()
+    };
+    for content in ["a".repeat(100 * 1024), "a".repeat(LIVE_CANVAS_BYTES)] {
+        let reply = ask(
+            &fixture,
+            &token,
+            "sign_event",
+            &[&sign(40100, content.clone())],
+        )
+        .await;
+        assert_eq!(reply.0, StatusCode::OK, "{}: {}", content.len(), reply.1);
+        let signed: nostr::event::Event =
+            serde_json::from_str(reply.1["result"].as_str().unwrap()).unwrap();
+        signed.verify().unwrap();
+        assert_eq!(signed.content.len(), content.len());
+    }
+    let over = sign(40100, "a".repeat(LIVE_CANVAS_BYTES + 1));
+    let reply = ask(&fixture, &token, "sign_event", &[&over]).await;
+    assert_eq!(error(&reply), (StatusCode::BAD_REQUEST, "invalid_request"));
+    // Within the content bound, but escaping carries the event past its frame:
+    // first its commitment, then only its id and signature.
+    let escaped = sign(40100, "\u{1}".repeat(LIVE_CANVAS_BYTES));
+    let reply = ask(&fixture, &token, "sign_event", &[&escaped]).await;
+    assert_eq!(error(&reply), (StatusCode::BAD_REQUEST, "invalid_request"));
+    let created_at = now();
+    let human = human_pubkey().await;
+    let commitment = |content: &str| {
+        serde_json::to_vec(&json!([
+            0,
+            human,
+            created_at,
+            40100,
+            [["h", "channel"]],
+            content
+        ]))
+        .unwrap()
+        .len()
+    };
+    let target = buzz_agent_controller::CANVAS_MAX_EVENT_BYTES - 100 - commitment("");
+    let content = "\u{1}".repeat(target / 6) + &"a".repeat(target % 6);
+    assert!(content.len() <= LIVE_CANVAS_BYTES);
+    assert!(commitment(&content) <= buzz_agent_controller::CANVAS_MAX_EVENT_BYTES);
+    let framed = json!({ "kind": 40100, "tags": [["h", "channel"]], "content": content, "created_at": created_at })
+        .to_string();
+    let reply = ask(&fixture, &token, "sign_event", &[&framed]).await;
+    assert_eq!(error(&reply), (StatusCode::BAD_REQUEST, "invalid_request"));
+    // Every other kind keeps the default bound.
+    let message = sign(9, "a".repeat(100 * 1024));
+    let reply = ask(&fixture, &token, "sign_event", &[&message]).await;
+    assert_eq!(error(&reply), (StatusCode::BAD_REQUEST, "invalid_request"));
+}
+
+/// A paired request admitted before its pairing is revoked, or every pairing
+/// is, returns no signature and no plaintext.
+#[tokio::test(flavor = "multi_thread")]
+async fn revocation_while_a_paired_request_runs_withholds_the_result() {
+    for clear_all in [false, true] {
+        for method in ["sign_event", "nip44_decrypt"] {
+            let fixture = fixture();
+            let token = paired(&fixture).await;
+            let peer = buzz_agent_controller::Secret::generate().unwrap();
+            let human = human_pubkey().await;
+            let params = match method {
+                "sign_event" => vec![unsigned(9, json!([]), now())],
+                _ => vec![
+                    peer.pubkey().to_owned(),
+                    peer.nip44_encrypt(&human, "secret").unwrap(),
+                ],
+            };
+            let gate = fixture.service.0.owner_call_gate.write().await;
+            let (service, waiting) = (fixture.service.clone(), token.clone());
+            let body = json!({ "id": "1", "method": method, "params": params }).to_string();
+            let request = tokio::spawn(async move {
+                respond(&service, Some(&waiting), Some(1), body.as_bytes()).await
+            });
+            // Admitted: it spent one request of its rate, and now waits at the call.
+            while !fixture
+                .service
+                .0
+                .owner_budgets
+                .lock()
+                .unwrap()
+                .contains_key(&digest(&token))
+            {
+                tokio::task::yield_now().await;
+            }
+            assert!(!request.is_finished());
+            if clear_all {
+                fixture.service.clear_pairings().await.unwrap();
+            } else {
+                let listed = fixture.service.0.pairings.list().await.unwrap();
+                let id = serde_json::to_value(&listed[0]).unwrap()["id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned();
+                fixture.service.0.pairings.revoke(&id).await.unwrap();
+            }
+            drop(gate);
+            let reply = request.await.unwrap();
+            assert_eq!(
+                error(&reply),
+                (StatusCode::UNAUTHORIZED, "revoked"),
+                "clear_all={clear_all} {method}"
+            );
+            assert_eq!(reply.1["result"], "", "clear_all={clear_all} {method}");
+        }
+    }
 }
 
 #[tokio::test]
@@ -623,4 +745,48 @@ async fn a_renewal_paused_before_it_installs_refuses_pairing_then_a_restart_revo
     let reply = ask(&fixture, &token, "get_public_key", &[]).await;
     assert_eq!(error(&reply).1, "revoked");
     assert!(fixture.keychain.value.lock().unwrap().is_none());
+}
+
+/// Two apps over one keychain item: only the first serves pairings, so the
+/// second neither admits one the first revoked nor writes it back, and after a
+/// restart it stays revoked.
+#[tokio::test]
+async fn a_second_app_over_the_same_pairings_serves_none_of_them() {
+    let mut fixture = fixture();
+    let token = paired(&fixture).await;
+    let second = service_over(
+        &fixture.host,
+        &fixture.identity,
+        &fixture.keychain,
+        &fixture.notices,
+        IdentityHost::fixture(),
+    );
+    let body = json!({ "id": "1", "method": "get_public_key", "params": [] }).to_string();
+    let reply = respond(&second, Some(&token), Some(1), body.as_bytes()).await;
+    assert_eq!(
+        error(&reply),
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+    );
+    assert!(second.start().await.is_err(), "not advertised for pairing");
+    let listed = fixture.service.0.pairings.list().await.unwrap();
+    let id = serde_json::to_value(&listed[0]).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fixture.service.0.pairings.revoke(&id).await.unwrap();
+    // A write from the second app would have saved its own read of the records.
+    let reply = pair_request(&second, &[CLIENT, RELAY]).await;
+    assert_eq!(error(&reply).1, "unavailable");
+    second.clear_pairings().await.unwrap();
+    assert!(fixture.keychain.value.lock().unwrap().is_none());
+    drop(second);
+    fixture.service = service_over(
+        &fixture.host,
+        &fixture.identity,
+        &fixture.keychain,
+        &fixture.notices,
+        IdentityHost::fixture(),
+    );
+    let reply = ask(&fixture, &token, "get_public_key", &[]).await;
+    assert_eq!(error(&reply), (StatusCode::UNAUTHORIZED, "revoked"));
 }

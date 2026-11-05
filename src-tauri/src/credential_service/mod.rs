@@ -10,7 +10,7 @@
 //!   the agent's incarnation from binding time and the owner's retirements from
 //!   issue time, on arrival and again before its result is returned.
 //! - Every signature passes the contract's operation policy ([`policy`]).
-//!   Sensitive kinds answer `approval_required` until an approval prompt exists.
+//!   Sensitive kinds are refused (`denied`): there is no approval prompt.
 //! - It binds only `127.0.0.1`. `Host` must name the bound address, a request
 //!   that sends `Origin` (a web page) is refused, and nothing is logged.
 //! - Windows has no transport in version 1, so no token is issued there.
@@ -94,6 +94,9 @@ struct Inner {
     pairings: Pairings,
     /// Each paired token's rate, by its digest; only for this run.
     owner_budgets: Mutex<HashMap<[u8; 32], [Budget; METHODS.len() + 1]>>,
+    /// Held by a test to pause paired requests once admitted, before their call.
+    #[cfg(test)]
+    owner_call_gate: tokio::sync::RwLock<()>,
 }
 struct Caller {
     agent: Option<Bound>,
@@ -200,6 +203,8 @@ impl CredentialService {
             session,
             pairings: Pairings::new(keychain, notify),
             owner_budgets: Mutex::default(),
+            #[cfg(test)]
+            owner_call_gate: tokio::sync::RwLock::default(),
         }));
         let weak = Arc::downgrade(&service.0);
         service.0.session.on_retire(Arc::new(move || {
@@ -415,6 +420,9 @@ impl CredentialService {
         if cfg!(windows) {
             return Ok(());
         }
+        // Only the app holding the pairings' lease is advertised for pairing;
+        // another one's agents still get their tokens.
+        self.0.pairings.lease()?;
         let url = self
             .0
             .endpoint
@@ -527,34 +535,13 @@ impl CredentialService {
         let agents = &self.0.agents;
         let key = || agents.caller_key(caller.pubkey.clone(), caller.relay.clone());
         match (method, params) {
-            ("describe", []) => Ok(json!({
-                "instance": self.0.instance,
-                "pubkey": caller.pubkey,
-                "role": "agent",
-                "owner_pubkey": caller.owner,
-                "relays": [caller.relay],
-                "methods": METHODS.iter().filter(|method| **method != "pair").collect::<Vec<_>>(),
-            })
-            .to_string()),
+            ("describe", []) => {
+                Ok(self.described(&caller.pubkey, Some(&caller.owner), &caller.relay))
+            }
             ("get_public_key", []) => Ok(caller.pubkey.clone()),
             ("sign_event", [event]) => {
                 let event = Unsigned::parse(event, &caller.pubkey)?;
-                match policy::classify(
-                    event.kind,
-                    &event.tags,
-                    event.created_at,
-                    unix_now()?,
-                    &caller.relay,
-                ) {
-                    policy::Verdict::Sign => {}
-                    policy::Verdict::Approval => {
-                        return Err(Failure::new(
-                            "approval_required",
-                            &format!("Kind {} needs your approval in Buzz", event.kind),
-                        ))
-                    }
-                    policy::Verdict::Deny(reason) => return Err(Failure::new("denied", &reason)),
-                }
+                permitted(&event, &caller.relay)?;
                 let (agent, key) = key().await.map_err(Failure::unavailable)?;
                 let signed = agent
                     .sign_built(
@@ -584,12 +571,7 @@ impl CredentialService {
                     .map_err(|error| Failure::new("invalid_request", &error))
             }
             ("federated_identity", [relay]) => {
-                if !policy::same_relay(relay, &caller.relay) {
-                    return Err(Failure::new(
-                        "denied",
-                        "This token does not act on that relay",
-                    ));
-                }
+                on_relay(relay, &caller.relay)?;
                 let (_, _, admission) = agents
                     .signer_at(
                         caller.pubkey.clone(),
@@ -607,15 +589,63 @@ impl CredentialService {
                 let (agent, _) = key().await.map_err(Failure::unavailable)?;
                 Ok(agent.auth)
             }
-            (method, _) if METHODS.contains(&method) && method != "pair" => Err(Failure::new(
-                "invalid_request",
-                &format!("Wrong parameters for {method}"),
-            )),
-            (method, _) => Err(Failure::new(
-                "unknown_method",
-                &format!("{method} is not supported"),
-            )),
+            (method, _) => Err(unsupported(method)),
         }
+    }
+}
+
+impl CredentialService {
+    /// `describe`'s result for a caller acting as `pubkey` on `relay`: an
+    /// agent names its `owner`, a paired tool acts as the owner itself.
+    fn described(&self, pubkey: &str, owner: Option<&str>, relay: &str) -> String {
+        let mut described = json!({
+            "instance": self.0.instance,
+            "pubkey": pubkey,
+            "role": if owner.is_some() { "agent" } else { "owner" },
+            "relays": [relay],
+            "methods": METHODS.iter().filter(|method| **method != "pair").collect::<Vec<_>>(),
+        });
+        if let Some(owner) = owner {
+            described["owner_pubkey"] = owner.into();
+        }
+        described.to_string()
+    }
+}
+
+/// Whether the operation policy lets a caller bound to `relay` have `event`
+/// signed. Sensitive kinds are refused outright: there is no approval prompt.
+fn permitted(event: &Unsigned, relay: &str) -> Result<(), Failure> {
+    match policy::classify(
+        event.kind,
+        &event.tags,
+        event.created_at,
+        unix_now()?,
+        relay,
+    ) {
+        policy::Verdict::Sign => Ok(()),
+        policy::Verdict::Deny(reason) => Err(Failure::new("denied", &reason)),
+    }
+}
+
+/// Evidence is handed out only for the relay the token acts on.
+fn on_relay(asked: &str, bound: &str) -> Result<(), Failure> {
+    if policy::same_relay(asked, bound) {
+        Ok(())
+    } else {
+        Err(Failure::new(
+            "denied",
+            "This token does not act on that relay",
+        ))
+    }
+}
+
+/// A method this caller cannot call as asked: known with the wrong
+/// parameters, or not known at all.
+fn unsupported(method: &str) -> Failure {
+    if METHODS.contains(&method) && method != "pair" {
+        Failure::new("invalid_request", &format!("Wrong parameters for {method}"))
+    } else {
+        Failure::new("unknown_method", &format!("{method} is not supported"))
     }
 }
 

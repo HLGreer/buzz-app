@@ -296,6 +296,13 @@ impl Secret {
                 return Err("Agent key is malformed".into());
             }
         }
+        Self::checked(bytes, expected)
+    }
+    /// The key `bytes` hold, which must be `expected`'s.
+    pub fn from_bytes(bytes: &[u8; 32], expected: &str) -> Result<Self> {
+        Self::checked(Zeroizing::new(*bytes), expected)
+    }
+    fn checked(bytes: Zeroizing<[u8; 32]>, expected: &str) -> Result<Self> {
         let mut key = SecretKey::from_byte_array(*bytes).map_err(|_| "Agent key is malformed")?;
         let pubkey = PublicKey::from_secret_key(&Secp256k1::signing_only(), &key)
             .x_only_public_key()

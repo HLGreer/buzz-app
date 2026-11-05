@@ -717,9 +717,10 @@ async fn sensitive_and_unknown_kinds_are_not_signed() {
             &[&unsigned(kind, json!([]), NOW)],
         )
         .await;
-        assert_eq!(
-            error(&reply),
-            (StatusCode::FORBIDDEN, "approval_required"),
+        assert_eq!(error(&reply), (StatusCode::FORBIDDEN, "denied"), "{kind}");
+        let message = reply.1["message"].as_str().unwrap();
+        assert!(
+            message.contains("can't be signed by a local tool"),
             "{kind}"
         );
     }
@@ -930,7 +931,10 @@ fn every_kind_has_one_class() {
     for kind in [
         0, 3, 5, 9005, 9044, 10002, 10100, 28936, 30621, 41011, 45011,
     ] {
-        assert_eq!(classes(kind), Verdict::Approval, "{kind}");
+        assert!(
+            matches!(classes(kind), Verdict::Deny(reason) if reason.contains("use Buzz")),
+            "{kind}"
+        );
     }
     for kind in [1, 4, 1059, 24243, 24245, 30350, 39000] {
         assert!(matches!(classes(kind), Verdict::Deny(_)), "{kind}");

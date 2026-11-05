@@ -1,7 +1,7 @@
 //! `pair`: a command-line tool asks to act as the human; the human approves
 //! it in Buzz. Only each token's SHA-256 is kept, in the OS keychain, bound
 //! to the human, store account and NIP-FI account that approved it.
-use super::keychain::Keychain;
+use super::keychain::{Keychain, Lease};
 use super::{digest, unix_now, Failure};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -89,6 +89,9 @@ pub(crate) struct Pairings {
     /// Serializes keychain writes; each writes the then-current records.
     write: tokio::sync::Mutex<()>,
     state: Mutex<State>,
+    /// This app's sole use of the keychain item, taken before the records are
+    /// first read and held for good; without it nothing is read or written.
+    lease: Mutex<Option<Lease>>,
 }
 #[derive(Default)]
 struct State {
@@ -121,13 +124,24 @@ impl Pairings {
             notify,
             write: tokio::sync::Mutex::new(()),
             state: Mutex::default(),
+            lease: Mutex::default(),
         }
     }
     fn state(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// The records, read once; a failed read is retried on the next call.
+    /// Takes the records' lease, unless this app already holds it.
+    pub(crate) fn lease(&self) -> Result<(), String> {
+        let mut lease = self.lease.lock().unwrap_or_else(PoisonError::into_inner);
+        if lease.is_none() {
+            *lease = Some(self.keychain.lease()?);
+        }
+        Ok(())
+    }
+
+    /// The records, read once under the lease; a failed read is retried on
+    /// the next call.
     async fn loaded(&self) -> Result<Vec<Record>, String> {
         let _write = self.write.lock().await;
         self.loaded_locked().await
@@ -136,6 +150,7 @@ impl Pairings {
         if let Some(Ok(records)) = &self.state().records {
             return Ok(records.clone());
         }
+        self.lease()?;
         let keychain = self.keychain.clone();
         let read = tokio::task::spawn_blocking(move || {
             // A revoke-all an earlier run could not save is still owed.
@@ -489,6 +504,11 @@ impl Pairings {
     /// Saves an owed revoke-all: the marker first, so a refused clear is
     /// still owed next launch, then the records, then the marker's removal.
     async fn clear_locked(&self) -> Result<(), Unrevoked> {
+        // Another app holds the records: this one never read or saved any, so
+        // none acts here, and it must not write over that app's.
+        if self.lease().is_err() {
+            return Ok(());
+        }
         let keychain = self.keychain.clone();
         tokio::task::spawn_blocking(move || {
             let recorded = keychain.set_owed(true).is_ok();
