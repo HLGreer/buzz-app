@@ -156,6 +156,9 @@ it("adds, edits, reorders, and removes shared links while preserving other Canva
     { label: "Reference", url: "https://example.com/ref" },
   ]);
   expect(f.head().content).toContain("# Notes\nKeep me.");
+  for (const call of f.canvas.save.mock.calls) {
+    expect(call[3]).toEqual({ preserveApproval: true });
+  }
 });
 it("preserves typed input on conflict and reloads the latest Canvas before resubmission", async () => {
   const f = fixture();

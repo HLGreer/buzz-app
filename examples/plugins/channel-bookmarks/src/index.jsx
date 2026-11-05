@@ -266,7 +266,9 @@ export function apply(ctx) {
       setError("");
       try {
         const content = writeBookmarks(saved.content, items);
-        const head = await session.canvas.save(channelId, content, saved.id);
+        const head = await session.canvas.save(channelId, content, saved.id, {
+          preserveApproval: true,
+        });
         if (!valid(generation)) return;
         origin.current = trigger;
         setSaved({

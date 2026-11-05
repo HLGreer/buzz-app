@@ -2772,7 +2772,7 @@ function pn(e) {
 			let i = document.activeElement, a = ++E.current;
 			D.current = !0, p(!0), h("");
 			try {
-				let o = dn(u.content, t), s = await e.canvas.save(n, o, u.id);
+				let o = dn(u.content, t), s = await e.canvas.save(n, o, u.id, { preserveApproval: !0 });
 				if (!j(a)) return;
 				A.current = i, d({
 					content: s.content,
