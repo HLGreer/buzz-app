@@ -1962,8 +1962,8 @@
     overflow-x: auto;
     overflow-y: hidden;
     gap: var(--space-1);
-    /* Split the header's 1px separator evenly between the visual insets.
-       The scrollbar uses the bottom inset without moving the tab row. */
+    /* Split the header’s separator evenly to keep controls centered.
+       The scrollbar track reserves that separator pixel in scrollbars.css. */
     padding-block: calc(var(--space-1) - 0.5px) 0;
   }
   .buzz-tabs[data-variant="navigation"] .buzz-tabs-item {

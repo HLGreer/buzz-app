@@ -43,6 +43,13 @@
   scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
+/* Narrow conversations keep the shared compact inset beside the app dock. */
+@container messages (max-width: 30rem) {
+  .feed {
+    padding-inline: var(--space-4);
+  }
+}
+
 .threadHistory::-webkit-scrollbar {
   width: 8px;
 }

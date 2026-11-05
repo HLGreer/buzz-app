@@ -35,7 +35,13 @@ test("channel members opens from the header, fits each viewport, and returns key
         document.documentElement.setAttribute("data-color-mode", value),
       mode,
     );
-    await trigger.click();
+    // The avatar’s leading edge must open members, clear of the resize strip.
+    const inset = await trigger.evaluate((node) =>
+      Number.parseFloat(getComputedStyle(node).paddingLeft),
+    );
+    await trigger.click({
+      position: { x: inset + 1, y: (await trigger.boundingBox()).height / 2 },
+    });
     const dialog = page.getByRole("dialog", {
       name: "Manage members",
       exact: true,

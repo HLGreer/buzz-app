@@ -244,8 +244,9 @@ test("joined sidebar and workspace surface, real link panel and compact communit
     name: "Resize sidebar",
   });
   const gripTarget = await box(sidebarHandle);
-  near(gripTarget.width, 16);
-  near(gripTarget.x + gripTarget.width / 2, sidebar.x + sidebar.width);
+  near(gripTarget.width, 8);
+  // The hit target starts at the seam so it cannot block sidebar controls.
+  near(gripTarget.x, sidebar.x + sidebar.width);
   await sidebarHandle.hover();
   await expect
     .poll(() =>
@@ -260,7 +261,7 @@ test("joined sidebar and workspace surface, real link panel and compact communit
         (element) => getComputedStyle(element, "::after").left,
       ),
     )
-    .toBe("8px");
+    .toBe("0px");
   await page.mouse.move(0, 0);
   await expect(conversation).toHaveCSS("border-radius", "0px");
   await expect(conversation).toHaveCSS("border-top-width", "0px");

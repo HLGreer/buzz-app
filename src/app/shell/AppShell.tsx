@@ -145,10 +145,22 @@ function AppShellContent({
         available < controls + parseFloat(searchStyle.minWidth),
       );
     };
-    const observer = new ResizeObserver(measure);
+    // Header wrapping resizes the workspace below it. Apply it outside resize
+    // delivery so timeline observers do not receive a second layout mid-cycle.
+    let frame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        measure();
+      });
+    });
     for (const target of [element, history, actions]) observer.observe(target);
     measure();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
   }, []);
   const fillsWorkspace = workspace || selected === "settings";
   const [creationContainer, setCreationContainer] =
