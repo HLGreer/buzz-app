@@ -1100,9 +1100,12 @@ export function Welcome({
         />
       ) : auth.error ? (
         <Failure
-          title="Couldn’t sign in"
+          title={auth.retrySignOut ? "Couldn’t sign out" : "Couldn’t sign in"}
           error={auth.error}
           onBack={backToLanding}
+          onRetry={
+            auth.retrySignOut ? () => void login.retrySignOut() : undefined
+          }
         />
       ) : finding ? (
         <FindCommunity

@@ -2231,7 +2231,7 @@ it("Use a different account on Get started with Buzz signs the session out, retu
   identity.dispose();
 });
 
-it("Use a different account leaves a newer session signed in, and says so when signing out fails", async () => {
+it("Use a different account leaves a newer session signed in, and reports and retries a failed sign-out", async () => {
   vi.mocked(invoke).mockImplementation((command) => {
     if (command === "nsec_backup_choice")
       return Promise.resolve({
@@ -2258,25 +2258,49 @@ it("Use a different account leaves a newer session signed in, and says so when s
       <p>Signed in</p>
     </Welcome>,
   );
-  // A newer sign-in (Settings, another copy) replaced first run's session.
+  const reject = async () => {
+    await user.click(await screen.findByRole("button", { name: SIGN_IN }));
+    await user.click(
+      await screen.findByRole("button", { name: "Use a different account" }),
+    );
+  };
+  // A newer sign-in (Settings, another copy) replaced first run's session:
+  // native is asked for first run's revision only, and leaves the newer one.
   fi.publish({ status: "signed-in", revision: "newer" });
-  await user.click(await screen.findByRole("button", { name: SIGN_IN }));
-  await user.click(
-    await screen.findByRole("button", { name: "Use a different account" }),
-  );
+  await reject();
   expect(welcomeHeading()).toBeVisible();
-  expect(fi.service.signOut).not.toHaveBeenCalled();
+  expect(fi.service.signOut).toHaveBeenLastCalledWith({
+    revision: credential.revision,
+  });
   expect(fi.service.snapshot().revision).toBe("newer");
-  // Now first run's own session, whose sign-out fails.
+  expect(screen.queryByRole("alert")).toBeNull();
+  // Native resolves a failed record removal as unavailable with cleanup.
   fi.publish({ status: "signed-in", revision: credential.revision });
-  vi.mocked(fi.service.signOut).mockRejectedValueOnce(new Error("offline"));
-  await user.click(connectButton());
-  await user.click(
-    await screen.findByRole("button", { name: "Use a different account" }),
+  vi.mocked(fi.service.signOut).mockImplementationOnce(async () =>
+    fi.publish({
+      status: "unavailable",
+      failure: "storage-denied",
+      cleanup: true,
+    }),
   );
+  await reject();
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Couldn't sign out of that account. Try again.",
   );
+  // A thrown failure is retryable the same way.
+  fi.publish({ status: "signed-in", cleanup: false });
+  vi.mocked(fi.service.signOut).mockRejectedValueOnce(new Error("offline"));
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(await screen.findByRole("alert")).toBeVisible();
+  // A replacement before the retry is left signed in, and the retry ends.
+  fi.publish({ status: "signed-in", revision: "replacement" });
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  await vi.waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  expect(fi.service.signOut).toHaveBeenLastCalledWith({
+    revision: credential.revision,
+  });
+  expect(fi.service.snapshot().revision).toBe("replacement");
+  expect(welcomeHeading()).toBeVisible();
   identity.dispose();
 });
 

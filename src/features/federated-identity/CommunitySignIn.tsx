@@ -258,8 +258,7 @@ function runSwitch(
   else
     void identity
       .signOut()
-      .then(() => {
-        const after = identity.snapshot();
+      .then((after) => {
         if (after.status === "unavailable" || after.status === "signed-in")
           return fail("sign-out", after.failure ?? "");
         signIn();

@@ -620,7 +620,7 @@ async fn sign_out_then_sign_in_before_the_watcher_runs_retires_cached_and_stored
         .is_some());
 
     // The watcher would only see `Refreshed`: the sign-out was overwritten.
-    f.tokens.0.identity.sign_out().await;
+    f.tokens.0.identity.sign_out(None).await;
     signed_in_again(&f, "a@example.com");
     assert_eq!(
         f.tokens.0.identity.account_changes().borrow().clone(),
@@ -729,7 +729,7 @@ async fn a_mint_in_flight_across_sign_out_is_neither_returned_nor_cached() {
         tokio::spawn(async move { f.tokens.evidence(&f.agent, &f.key, 0).await })
     };
     bounded(held).await.unwrap();
-    f.tokens.0.identity.sign_out().await;
+    f.tokens.0.identity.sign_out(None).await;
     release.send(()).unwrap();
     assert_eq!(call.await.unwrap().err().as_deref(), Some(CHANGED));
     assert!(f
@@ -753,7 +753,7 @@ async fn an_enrollment_committing_after_sign_out_stores_nothing() {
     let f = fixture("http://unused".into());
     listing(&f);
     let retirements = f.tokens.admit().await.unwrap();
-    f.tokens.0.identity.sign_out().await;
+    f.tokens.0.identity.sign_out(None).await;
     let grant = Grant::new(
         f.agent.owner.clone(),
         f.agent.pubkey.clone(),
@@ -983,7 +983,7 @@ async fn an_organization_sign_out_revokes_its_session_at_the_server() {
     ));
     let tokens = AgentTokens::with_store(identity.clone(), Arc::new(MemoryGrants::default()));
     let _ = tokens.0.agents.set(Arc::new(|| Ok(Vec::new())));
-    let snapshot = tokens.sign_out().await.unwrap();
+    let snapshot = tokens.sign_out(None).await.unwrap();
     assert!(snapshot.status == crate::federated_identity::Status::SignedOut);
     let (credential, _) = logout_request(&logout).await;
     assert_eq!(credential, "fixture-session-token");
@@ -997,7 +997,7 @@ async fn an_organization_sign_out_whose_grant_deletion_fails_resumes_it_after_re
     listing(&f);
     stored(&f, "a@example.com");
     f.grants.failing(true);
-    assert!(f.tokens.sign_out().await.is_err());
+    assert!(f.tokens.sign_out(None).await.is_err());
 
     // Restarted before the cleanup finished: the grant is neither used nor
     // restored while it cannot be deleted.
@@ -1056,7 +1056,7 @@ async fn a_grant_write_past_its_check_does_not_survive_a_concurrent_sign_out() {
     *f.tokens.0.contended.lock().unwrap() = Some(contended_tx);
     let sign_out = {
         let f = f.clone();
-        tokio::spawn(async move { f.tokens.sign_out().await })
+        tokio::spawn(async move { f.tokens.sign_out(None).await })
     };
     // Sign-out drops the sender unsignalled if it never waits.
     let waited = bounded(tokio::task::spawn_blocking(move || {
@@ -1444,7 +1444,7 @@ async fn sign_out_does_not_hold_the_wipe_lock_while_waiting_for_session_persiste
     let mut changes = identity.account_changes();
     let operation = identity.0.operation.lock().await;
     let tokens = f.tokens.clone();
-    let signing_out = tokio::spawn(async move { tokens.sign_out().await });
+    let signing_out = tokio::spawn(async move { tokens.sign_out(None).await });
     bounded(changes.changed()).await.unwrap();
     let wipe_available = f.tokens.0.wiping.try_lock().is_ok();
     drop(operation);
@@ -1721,7 +1721,7 @@ async fn response_admission_fences_explicit_retirement_but_not_elapsed_ttl_or_se
             reached.await.unwrap();
             match change {
                 "sign-out" => {
-                    f.tokens.sign_out().await.unwrap();
+                    f.tokens.sign_out(None).await.unwrap();
                 }
                 "account" => signed_in_again(&f, "b@example.com"),
                 "delete" => {
@@ -1780,7 +1780,7 @@ async fn a_transmitted_agent_write_is_uncertain_after_retirement_and_never_repla
     });
     let retire = async {
         reached.await.unwrap();
-        f.tokens.sign_out().await.unwrap();
+        f.tokens.sign_out(None).await.unwrap();
         release.send(()).unwrap();
     };
     let (result, ()) = tokio::join!(write, retire);
@@ -1812,7 +1812,7 @@ async fn local_commit_keeps_its_retirement_guard_until_the_write_finishes() {
         .await
         .unwrap();
     let tokens = f.tokens.clone();
-    let signing_out = tokio::spawn(async move { tokens.sign_out().await });
+    let signing_out = tokio::spawn(async move { tokens.sign_out(None).await });
     // This existing fixture signal proves sign-out reached the held lock;
     // it cannot record retirement in the middle of the local write.
     bounded(tokio::task::spawn_blocking(move || waiting.recv().unwrap()))
@@ -1986,7 +1986,12 @@ async fn each_agent_enrolls_with_the_server_its_community_routes_to() {
     assert!(stored(&peer.agent_grant_key(&home.owner, &home.pubkey)).is_none());
 
     // Signing out of the peer retires only its grant.
-    tokens.for_server(&peer).unwrap().sign_out().await.unwrap();
+    tokens
+        .for_server(&peer)
+        .unwrap()
+        .sign_out(None)
+        .await
+        .unwrap();
     assert!(stored(&peer_grant_key).is_none());
     assert!(stored(&first_key).is_some());
     // Deleting an agent removes its grant from every server.
@@ -1998,4 +2003,34 @@ async fn each_agent_enrolls_with_the_server_its_community_routes_to() {
     tokens.forget(&home.owner, &home.pubkey).await.unwrap();
     assert!(stored(&first_key).is_none());
     assert!(stored(&peer_home_key).is_none());
+}
+
+#[tokio::test]
+async fn a_revision_fenced_sign_out_leaves_a_newer_session_and_its_grants() {
+    let (base, _served) = issuer(vec![]).await;
+    let f = fixture(base);
+    listing(&f);
+    stored(&f, "b@example.com");
+    let rejected = f.tokens.0.identity.snapshot().revision;
+    // A renewal installs B before the fenced sign-out retires anything.
+    signed_in_again(&f, "b@example.com");
+    {
+        let mut state = f.tokens.0.identity.state();
+        state.snapshot.status = crate::federated_identity::Status::SignedIn;
+        state.snapshot.revision = uuid::Uuid::new_v4().to_string();
+    }
+    let newer = f.tokens.0.identity.snapshot();
+    assert_ne!(newer.revision, rejected);
+    let snapshot = f.tokens.sign_out(Some(&rejected)).await.unwrap();
+    assert!(snapshot.status == crate::federated_identity::Status::SignedIn);
+    assert_eq!(snapshot.revision, newer.revision);
+    assert!(!f.grants.pending(&f.tokens.retiring_key()).unwrap());
+    assert!(f
+        .grants
+        .read(&f.tokens.grant_key(&f.agent))
+        .unwrap()
+        .is_some());
+    // The matching revision still signs out.
+    let snapshot = f.tokens.sign_out(Some(&newer.revision)).await.unwrap();
+    assert!(snapshot.status == crate::federated_identity::Status::SignedOut);
 }

@@ -99,6 +99,46 @@ describe("the NIP-FI sign-in", () => {
     await root.fiber.dispose();
   });
 
+  it("reads the account as the session sign-in answered with, when its event arrives after the answer", async () => {
+    let emit!: (payload: unknown) => void;
+    vi.mocked(listen).mockImplementation(async (name, handler) => {
+      if (name === "federated-identity")
+        emit = (payload) => handler({ payload } as never);
+      return () => {};
+    });
+    const base = federatedFixture().service.snapshot();
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "plugin_catalog") return catalog(true);
+      if (command === "federated_identity_snapshot") return base;
+      if (command === "federated_identity_register") return undefined;
+      if (command === "federated_identity_sign_in") {
+        // The browser step's event, then native answers before its final event.
+        emit({ ...base, status: "signing-in", revision: "login" });
+        setTimeout(() =>
+          emit({ ...base, status: "signed-in", revision: "chosen" }),
+        );
+        return { ...base, status: "signed-in", revision: "chosen" };
+      }
+      if (command === "federated_identity_request") {
+        if ((args as { session: string }).session !== "chosen")
+          throw new Error("stale-session");
+        return { status: 200, headers: {}, body: JSON.stringify(me) };
+      }
+      throw new Error(`Unexpected ${command}`);
+    });
+    const root = new Context();
+    new FederatedIdentityService(root);
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("federated_identity_snapshot"),
+    );
+    const credential = await firstRunCredential(
+      new AbortController().signal,
+      bundledFederatedIdentity(root),
+    );
+    expect(credential.revision).toBe("chosen");
+    await root.fiber.dispose();
+  });
+
   it("signs in through the native session and reads its account", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(catalog(true));
     const fi = federatedFixture();

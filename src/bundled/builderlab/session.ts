@@ -20,6 +20,8 @@ export type LoginSnapshot = Readonly<{
   /** Pending with no browser step, such as restoring a saved sign-in or
    * reading its account; it cannot be cancelled. */
   checking?: boolean;
+  /** Signing out a rejected account failed; Try again retries it. */
+  retrySignOut?: boolean;
 }>;
 /** A call under the Builderlab API root; `path` starts with `/`. */
 export type BuilderlabRequest = Readonly<{

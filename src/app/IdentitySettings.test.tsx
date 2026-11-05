@@ -278,6 +278,7 @@ it("keeps a failed organization sign-out visible when storage refuses", async ()
   h.publish({ status: "signed-in", email: "a@example.com" });
   vi.mocked(h.service.signOut).mockImplementationOnce(async () => {
     h.publish({ status: "unavailable", failure: "storage-busy" });
+    return h.service.snapshot();
   });
   render(
     <IdentitySettings viewer={viewer} federatedIdentity={bound(h.service)} />,
@@ -620,6 +621,7 @@ it("keeps a per-server sign-out that native couldn't finish visible, named, with
       failure: "storage-denied",
       cleanup: true,
     });
+    return pub.service.snapshot();
   });
   render(
     <IdentitySettings
@@ -644,6 +646,7 @@ it("keeps a per-server sign-out that native couldn't finish visible, named, with
   expect(block.service.snapshot().status).toBe("signed-in");
   vi.mocked(pub.service.signOut).mockImplementation(async () => {
     pub.publish({ status: "signed-out", failure: null, cleanup: false });
+    return pub.service.snapshot();
   });
   await user.click(screen.getByRole("button", { name: "Try again" }));
   expect(pub.service.signOut).toHaveBeenCalledTimes(2);
@@ -661,6 +664,7 @@ it("restores an unfinished per-server sign-out's Try again when Settings opens a
       failure: "storage-denied",
       cleanup: true,
     });
+    return pub.service.snapshot();
   });
   const settings = () => (
     <IdentitySettings
@@ -687,6 +691,7 @@ it("restores an unfinished per-server sign-out's Try again when Settings opens a
   expect(screen.getByText("Block (block.builderlab.xyz)")).toBeVisible();
   vi.mocked(pub.service.signOut).mockImplementation(async () => {
     pub.publish({ status: "signed-out", failure: null, cleanup: false });
+    return pub.service.snapshot();
   });
   await user.click(screen.getByRole("button", { name: "Try again" }));
   expect(pub.service.signOut).toHaveBeenCalledTimes(2);

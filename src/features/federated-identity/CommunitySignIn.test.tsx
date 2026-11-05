@@ -151,7 +151,7 @@ function gate<T>() {
 
 it("keeps the switch's controls through sign-out, a pending sign-in, Cancel and Sign in", async () => {
   const pub = publicServer();
-  const signedOut = gate<void>();
+  const signedOut = gate<SessionSnapshot>();
   const signIns: ReturnType<typeof gate<SessionSnapshot>>[] = [];
   vi.mocked(pub.service.signOut).mockImplementation(() => signedOut.promise);
   vi.mocked(pub.service.signIn).mockImplementation(() => {
@@ -174,7 +174,7 @@ it("keeps the switch's controls through sign-out, a pending sign-in, Cancel and 
   // Sign-out ends the signed-in state that offered the switch.
   await act(async () => {
     pub.publish({ status: "signed-out", email: null });
-    signedOut.resolve();
+    signedOut.resolve(pub.service.snapshot());
   });
   expect(screen.getByRole("status")).toHaveTextContent(
     "Switching your Builderlab account",
@@ -271,7 +271,7 @@ it.each([
     expect(pub.service.signIn).not.toHaveBeenCalled();
     // The old account is still signed in: retrying must not renew it.
     act(() => pub.publish({ status: "signed-in", email: "will@example.com" }));
-    signOut.mockImplementationOnce(async () => {});
+    signOut.mockImplementationOnce(async () => pub.service.snapshot());
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(signOut).toHaveBeenCalledTimes(2);
     expect(pub.service.signIn).not.toHaveBeenCalled();

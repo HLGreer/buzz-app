@@ -29,16 +29,19 @@ export type FirstRunIdentity = Pick<
 
 /**
  * "Use a different account": signs the shared session out, but only while it
- * is still the one first run signed in as, so it never retires a newer
- * sign-in (from Settings or another copy) that has replaced it.
+ * is still the one first run signed in as. Native checks the revision as it
+ * retires, so a newer sign-in (from Settings or another copy) stays signed
+ * in. Rejects when the sign-out did not finish, including cleanup native
+ * reports as `unavailable`.
  */
 export async function releaseFirstRunSession(
-  identity: Pick<FederatedIdentity, "snapshot" | "signOut">,
+  identity: Pick<FederatedIdentity, "signOut">,
   revision: string,
 ) {
-  const now = identity.snapshot();
-  if (now.status !== "signed-in" || now.revision !== revision) return;
-  await identity.signOut();
+  const after = await identity.signOut({ revision });
+  if (after.status === "signed-in" && after.revision !== revision) return;
+  if (after.status !== "signed-out" || after.cleanup)
+    throw new Error(recoveryMessage(after.failure ?? ""));
 }
 
 /**
@@ -139,6 +142,17 @@ async function federatedCredential(
       throw new Error(recoveryMessage("sign-in-canceled"));
     if (session.status !== "signed-in")
       throw new Error(recoveryMessage(session.failure ?? ""));
+    // Requests are fenced to the pushed snapshot, which may still be the
+    // browser step's: wait for this session's own, unless something newer
+    // (a cancel, another sign-in) replaces it first.
+    while (identity.snapshot().status === "signing-in") {
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+      signal.throwIfAborted();
+    }
+    if (identity.snapshot().revision !== session.revision)
+      throw new Error(recoveryMessage("sign-in-canceled"));
     const account = await federatedAccount(identity).catch(() => undefined);
     signal.throwIfAborted();
     if (!account || identity.snapshot().revision !== session.revision)
@@ -165,6 +179,8 @@ export function createFirstRunLogin(
   release?: (credential: Credential) => Promise<void>,
 ) {
   let credential: Credential | undefined;
+  // A rejected account whose sign-out failed, kept for Try again.
+  let releasing: Credential | undefined;
   let attempt: AbortController | undefined;
   let state: LoginSnapshot = { status: "signed-out" };
   const listeners = new Set<() => void>();
@@ -176,6 +192,7 @@ export function createFirstRunLogin(
     attempt?.abort();
     attempt = undefined;
     credential = undefined;
+    releasing = undefined;
     if (announce) publish({ status: "signed-out" });
   };
   return {
@@ -215,20 +232,27 @@ export function createFirstRunLogin(
       }
     },
     cancel: () => reset(),
-    /** Rejects the account: ends the attempt and signs its session out. */
-    async signOut() {
-      const held = credential;
+    /** Rejects the account: ends the attempt and signs its session out. A
+     * failure stays retryable (`retrySignOut`) until another sign-in. */
+    async signOut(held = credential) {
       reset();
       if (!held || !release) return;
+      publish({ status: "pending", checking: true });
       try {
         await release(held);
+        if (!attempt && !credential) publish({ status: "signed-out" });
       } catch {
         if (attempt || credential) return;
+        releasing = held;
         publish({
           status: "signed-out",
           error: "Couldn't sign out of that account. Try again.",
+          retrySignOut: true,
         });
       }
+    },
+    retrySignOut() {
+      return this.signOut(releasing);
     },
   };
 }

@@ -61,7 +61,9 @@ export interface FederatedIdentity {
   subscribe(listener: () => void): () => void;
   signIn(): Promise<SessionSnapshot>;
   cancelSignIn(): Promise<void>;
-  signOut(): Promise<void>;
+  /** With `revision`, only while that session is current: native leaves a
+   * newer one signed in. Answers with native's own snapshot. */
+  signOut(options?: { revision?: string }): Promise<SessionSnapshot>;
   request(input: AuthenticatedRequest): Promise<HostResponse>;
   /** The session of the sign-in server for a community (`wss://` or
    * `https://` origin). Native chooses the server from the community's host,
@@ -165,12 +167,14 @@ export class FederatedIdentityService
       this.shared.listeners.delete(listener);
     };
   };
-  private async operation(command: string) {
+  private async operation(command: string, args?: { revision?: string }) {
     if (!nativeIdentityEnabled() || this.shared.closed)
       throw new Error("Federated identity requires Buzz desktop");
     const epoch = this.shared.epoch;
     try {
-      const snapshot = await invoke<SessionSnapshot>(command);
+      const snapshot = await (args
+        ? invoke<SessionSnapshot>(command, args)
+        : invoke<SessionSnapshot>(command));
       if (this.shared.epoch === epoch) this.accept(snapshot);
       // The call's own answer: a later event, such as `signing-in` arriving
       // first, must not stand in for it.
@@ -182,8 +186,8 @@ export class FederatedIdentityService
   signIn() {
     return this.operation("federated_identity_sign_in");
   }
-  async signOut() {
-    await this.operation("federated_identity_sign_out");
+  signOut(options?: { revision?: string }) {
+    return this.operation("federated_identity_sign_out", options);
   }
   async cancelSignIn() {
     if (!nativeIdentityEnabled() || this.shared.closed)
@@ -348,12 +352,15 @@ class CommunitySession implements FederatedIdentity {
       this.listeners.delete(listener);
     };
   };
-  private async operation(command: string) {
+  private async operation(command: string, args?: { revision?: string }) {
     if (!nativeIdentityEnabled())
       throw new Error("Federated identity requires Buzz desktop");
     const epoch = this.epoch;
     try {
-      const snapshot = await invoke<SessionSnapshot>(command, this.target);
+      const snapshot = await invoke<SessionSnapshot>(command, {
+        ...this.target,
+        ...args,
+      });
       if (this.epoch === epoch) this.accept(snapshot);
       return Object.freeze(snapshot);
     } catch (error) {
@@ -363,8 +370,8 @@ class CommunitySession implements FederatedIdentity {
   signIn() {
     return this.operation("federated_identity_sign_in");
   }
-  async signOut() {
-    await this.operation("federated_identity_sign_out");
+  signOut(options?: { revision?: string }) {
+    return this.operation("federated_identity_sign_out", options);
   }
   async cancelSignIn() {
     await invoke("federated_identity_cancel_sign_in", this.target);

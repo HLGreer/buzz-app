@@ -32,6 +32,7 @@ export function federatedFixture(
   const publish = (next: Partial<SessionSnapshot>) => {
     state = { ...state, ...next };
     for (const listener of listeners) listener();
+    return state;
   };
   let logins = 0;
   const service: FederatedIdentity = {
@@ -60,12 +61,14 @@ export function federatedFixture(
         email: null,
       });
     }),
-    signOut: vi.fn(async () => {
-      publish({
-        status: "signed-out",
-        revision: crypto.randomUUID(),
-        email: null,
-      });
+    signOut: vi.fn(async (options?: { revision?: string }) => {
+      if (!options?.revision || options.revision === state.revision)
+        publish({
+          status: "signed-out",
+          revision: crypto.randomUUID(),
+          email: null,
+        });
+      return state;
     }),
     request: vi.fn(
       async (_input: AuthenticatedRequest): Promise<HostResponse> => {

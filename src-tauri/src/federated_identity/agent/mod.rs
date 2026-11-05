@@ -714,27 +714,43 @@ impl AgentTokens {
     /// lock, so a write already past its check lands before it and is wiped,
     /// and a cleanup interrupted by failure or restart finishes before any
     /// grant is admitted again. Without that record nothing is signed out.
-    pub(crate) async fn sign_out(&self) -> Result<Snapshot, String> {
+    ///
+    /// With `expected`, only while that revision is current, checked in the
+    /// same lock that retires it: a session installed meanwhile stays signed
+    /// in, its grants untouched.
+    pub(crate) async fn sign_out(&self, expected: Option<&str>) -> Result<Snapshot, String> {
         let _wiping = self.0.wiping.lock().await;
         let (retired, at) = (self.0.retired.clone(), self.retiring_key());
         #[cfg(test)]
         let contended = lock(&self.0.contended).take();
-        self.storage(move |store| {
-            #[cfg(test)]
-            if let (Err(std::sync::TryLockError::WouldBlock), Some(contended)) =
-                (retired.try_lock().map(drop), contended)
-            {
-                let _ = contended.send(());
-            }
-            let mut retired = lock(&retired);
-            store.set_pending(&at, true)?;
-            retired.pending = Some(true);
-            Ok(())
-        })
-        .await?;
+        let before = self
+            .storage(move |store| {
+                #[cfg(test)]
+                if let (Err(std::sync::TryLockError::WouldBlock), Some(contended)) =
+                    (retired.try_lock().map(drop), contended)
+                {
+                    let _ = contended.send(());
+                }
+                let mut retired = lock(&retired);
+                let before = store.pending(&at)?;
+                store.set_pending(&at, true)?;
+                retired.pending = Some(true);
+                Ok(before)
+            })
+            .await?;
         // Publish retirement before releasing the wipe lock, then wait for
         // session persistence without holding it (restore takes operation first).
-        let retiring = self.0.identity.begin_sign_out();
+        let Some(retiring) = self.0.identity.begin_sign_out(expected) else {
+            // Superseded: undo the record, still under the wipe lock.
+            let (retired, at) = (self.0.retired.clone(), self.retiring_key());
+            self.storage(move |store| {
+                store.set_pending(&at, before)?;
+                lock(&retired).pending = Some(before);
+                Ok(())
+            })
+            .await?;
+            return Ok(self.0.identity.snapshot());
+        };
         drop(_wiping);
         let snapshot = self.0.identity.finish_sign_out(retiring).await;
         let _wiping = self.0.wiping.lock().await;

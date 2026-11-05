@@ -191,7 +191,7 @@ async fn signing_out_of_one_server_keeps_the_others_session() {
     let snapshot = first
         .server_for_command(None, Some("bb-public"))
         .unwrap()
-        .sign_out()
+        .sign_out(None)
         .await;
     assert!(snapshot.status == Status::SignedOut);
     assert!(public_store.raw.lock().unwrap().is_none());
@@ -296,7 +296,7 @@ async fn failed_sign_out_refuses_the_record_on_restart_until_deletion_succeeds()
     }
     let old_revision = host.snapshot().revision;
     store.denied.store(true, Ordering::SeqCst);
-    let signed_out = host.sign_out().await;
+    let signed_out = host.sign_out(None).await;
     assert!(signed_out.status == Status::Unavailable);
     assert_eq!(signed_out.failure, Some("storage-denied"));
     // Settings offers Sign out again for it.
@@ -429,7 +429,7 @@ async fn signing_out_revokes_the_session_at_the_server_once_without_waiting() {
             "a@example.com",
         );
         // Sign-out returns before the server answers its logout.
-        let snapshot = bounded(host.sign_out()).await;
+        let snapshot = bounded(host.sign_out(None)).await;
         assert!(snapshot.status == Status::SignedOut);
         assert_eq!(snapshot.failure, None);
         assert!(store.raw.lock().unwrap().is_none());
@@ -498,7 +498,7 @@ async fn account_changes_tell_expiry_and_refresh_from_sign_out_and_a_new_account
         sign_in("b@example.com"),
         Some(SessionChange::AccountChanged)
     );
-    host.sign_out().await;
+    host.sign_out(None).await;
     assert_eq!(*changes.borrow(), Some(SessionChange::SignedOut));
     assert_eq!(sign_in("b@example.com"), Some(SessionChange::Refreshed));
 
@@ -810,7 +810,7 @@ async fn retirement_during_verification_prevents_late_installation() {
             .await
     });
     observed.await.unwrap();
-    owner.sign_out().await;
+    owner.sign_out(None).await;
     let _ = release.send(());
     assert!(login.await.unwrap().is_err());
     assert!(owner.snapshot().status == Status::SignedOut);
@@ -889,7 +889,7 @@ async fn sign_out_during_shared_restore_prevents_late_installation() {
     let queued = owner.restore();
     tokio::pin!(queued);
     assert!(queued.as_mut().now_or_never().is_none());
-    let retiring = owner.begin_sign_out();
+    let retiring = owner.begin_sign_out(None).unwrap();
     release.send(()).unwrap();
     let (restored, queued, signed_out) =
         tokio::join!(restoring, queued, owner.finish_sign_out(retiring));
@@ -1014,7 +1014,7 @@ async fn a_sign_out_during_the_shared_item_read_ends_signed_out() {
     tokio::task::spawn_blocking(move || reading.recv().unwrap())
         .await
         .unwrap();
-    let signing_out = host.finish_sign_out(host.begin_sign_out());
+    let signing_out = host.finish_sign_out(host.begin_sign_out(None).unwrap());
     tokio::pin!(signing_out);
     // Sign-in holds the operation lock, so the sign-out's cleanup waits.
     assert!(signing_out.as_mut().now_or_never().is_none());
@@ -1045,7 +1045,7 @@ async fn a_sign_out_refuses_a_restore_begun_before_it() {
         state.restored = false;
         state.restore_attempt
     };
-    let (_, revision) = host.begin_sign_out();
+    let (_, revision) = host.begin_sign_out(None).unwrap();
     host.restore_locked(attempt).await;
     let snapshot = host.snapshot();
     assert!(snapshot.status == Status::SignedOut);
@@ -1071,7 +1071,7 @@ async fn signing_out_after_another_copy_ended_or_replaced_the_session_is_signed_
         );
         // Another Buzz copy sharing the item signed out, or in again.
         *store.raw.lock().unwrap() = newer.as_ref().map(|session| session.raw.clone());
-        let snapshot = host.sign_out().await;
+        let snapshot = host.sign_out(None).await;
         assert!(snapshot.status == Status::SignedOut);
         assert_eq!(snapshot.failure, None);
         assert_eq!(

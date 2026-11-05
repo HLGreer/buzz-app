@@ -1056,12 +1056,20 @@ impl FederatedIdentity {
         }
     }
     /// With agent grants, sign-out is `AgentTokens::sign_out`.
-    pub(crate) async fn sign_out(&self) -> Snapshot {
-        self.finish_sign_out(self.begin_sign_out()).await
+    /// With `expected`, only while that revision is current: a newer session
+    /// is left signed in, and its snapshot answers.
+    pub(crate) async fn sign_out(&self, expected: Option<&str>) -> Snapshot {
+        match self.begin_sign_out(expected) {
+            Some(retiring) => self.finish_sign_out(retiring).await,
+            None => self.snapshot(),
+        }
     }
-    fn begin_sign_out(&self) -> (Option<Arc<Session>>, String) {
+    fn begin_sign_out(&self, expected: Option<&str>) -> Option<(Option<Arc<Session>>, String)> {
         let (session, revision) = {
             let mut state = self.state();
+            if expected.is_some_and(|expected| state.snapshot.revision != expected) {
+                return None;
+            }
             let session = self.retire_state(&mut state, Status::SignedOut, None);
             // In the retirement's lock: no restore can take the new revision
             // and still be admitted on an older attempt.
@@ -1071,7 +1079,7 @@ impl FederatedIdentity {
             (session, state.snapshot.revision.clone())
         };
         self.signal(SessionChange::SignedOut);
-        (session, revision)
+        Some((session, revision))
     }
     async fn finish_sign_out(
         &self,
@@ -1214,11 +1222,12 @@ pub(crate) async fn federated_identity_sign_out(
     tokens: tauri::State<'_, agent::AgentTokens>,
     relay: Option<String>,
     server: Option<String>,
+    revision: Option<String>,
 ) -> Result<Snapshot, String> {
     let server = host.server_for_command(relay.as_deref(), server.as_deref())?;
     match tokens.for_server(&server) {
-        Some(tokens) => tokens.sign_out().await,
-        None => Ok(server.sign_out().await),
+        Some(tokens) => tokens.sign_out(revision.as_deref()).await,
+        None => Ok(server.sign_out(revision.as_deref()).await),
     }
 }
 
