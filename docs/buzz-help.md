@@ -83,7 +83,9 @@ the interface unless an available tool actually supports that action.
   When you search for people (search, @mentions and adding channel members), a
   verified person shows their verified name with the full name beside it.
   Search finds people by their profile names; once found, a verified full name
-  also matches as you refine.
+  also matches as you refine. Adding channel members also finds a verified
+  person by their verified name, or by their public key, even if they never set
+  up a profile.
 
 ## Connect an external app
 
