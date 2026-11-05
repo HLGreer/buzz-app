@@ -159,6 +159,7 @@ export function createReadState({
   let attemptedRevision = -1;
   let failedRevision: number | undefined;
   let work: Promise<unknown> = Promise.resolve();
+  const pendingAutomaticReads = new Map<string, number>();
   let epoch = 0;
   let requested = false;
   /** The completeness the last drop interrupted, while nothing since has
@@ -377,6 +378,7 @@ export function createReadState({
     events: readonly RelayEvent[],
     signal: AbortSignal,
     generation = epoch,
+    concurrentAutomaticReads: ReadonlySet<string> = new Set(),
   ) {
     const decoded = await decode(events, signal);
     if (closed || generation !== epoch)
@@ -400,11 +402,36 @@ export function createReadState({
           owned.includes(readCoordinate(event) ?? "")
         )
           own = advanceOwn(own, parsed.state.frontiers);
+      const currentFrontiers = localState(current).frontiers;
+      const incoming = decoded.map(({ parsed }) => {
+        if (parsed.clientId === current.clientId) return parsed.state;
+        const overrides = { ...parsed.state.overrides };
+        let changed = false;
+        // A peer override accepted after an automatic read started wins locally;
+        // keep the signed event itself unchanged.
+        for (const key of concurrentAutomaticReads) {
+          const override = overrides[key];
+          const existing = current.state.overrides[key];
+          if (
+            !override ||
+            override.set <=
+              Math.max(override.clear, existing?.set ?? 0, existing?.clear ?? 0)
+          )
+            continue;
+          const frontier = currentFrontiers[key];
+          if (frontier === undefined || frontier <= override.baseline) continue;
+          overrides[key] = { ...override, baseline: frontier };
+          changed = true;
+        }
+        return changed
+          ? { ...parsed.state, overrides: Object.freeze(overrides) }
+          : parsed.state;
+      });
       return {
         ...current,
         ...retainMarks(
           current,
-          [current.state, ...decoded.map(({ parsed }) => parsed.state)],
+          [current.state, ...incoming],
           current.recent ?? {},
         ),
         ...(own && { own }),
@@ -519,7 +546,10 @@ export function createReadState({
     valid: Validity,
     clearLocalKeys: readonly string[] = [key],
   ): Promise<ReadMutationResult> {
-    return queue(async () => {
+    const automatic = timestamp !== undefined && unread === undefined;
+    if (automatic)
+      pendingAutomaticReads.set(key, (pendingAutomaticReads.get(key) ?? 0) + 1);
+    const result = queue<ReadMutationResult>(async () => {
       await ready;
       if (!journal)
         throw new Error("Saved read state unavailable; retry storage first");
@@ -596,6 +626,12 @@ export function createReadState({
           health({ status: "error", error: errorText(error) });
         throw error;
       }
+    });
+    if (!automatic) return result;
+    return result.finally(() => {
+      const pending = (pendingAutomaticReads.get(key) ?? 1) - 1;
+      if (pending) pendingAutomaticReads.set(key, pending);
+      else pendingAutomaticReads.delete(key);
     });
   }
   async function flush() {
@@ -1032,9 +1068,10 @@ export function createReadState({
         lifetime.signal,
         AbortSignal.timeout(10000),
       ]);
+      const concurrentAutomaticReads = new Set(pendingAutomaticReads.keys());
       void queue(async () => {
         try {
-          await ingest(events, signal, generation);
+          await ingest(events, signal, generation, concurrentAutomaticReads);
         } catch (error) {
           if (!closed && generation === epoch) {
             observationOwed = true;

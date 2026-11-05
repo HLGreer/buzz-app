@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserReadPublisherLock, createReadState } from "./read-state";
+import { overrideActive } from "./read-state-model";
 import {
   newReadJournal,
   readJournal,
@@ -503,6 +504,90 @@ describe("durable read-state owner", () => {
     await Promise.all([a.ready, b.ready]);
     await Promise.all([a.read("a", 2, () => true), b.read("b", 3, () => true)]);
     expect(f.journal()?.state.frontiers).toEqual({ a: 2, b: 3 });
+  });
+  it("keeps a peer unread ordered after an in-flight automatic read across windows and restart", async () => {
+    const f = fixture();
+    const options = { broadcastName: `read-unread:${crypto.randomUUID()}` };
+    const a = f.make(options),
+      b = f.make(options);
+    await Promise.all([a.ready, b.ready]);
+    const id = "a".repeat(64);
+    const key = `msg:${id}`;
+    let release = () => {};
+    let started = () => {};
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const saving = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const update = vi.mocked(f.storage.update).getMockImplementation();
+    if (!update) throw new Error("Missing fixture storage");
+    vi.mocked(f.storage.update).mockImplementationOnce(async (change) => {
+      started();
+      await hold;
+      return update(change);
+    });
+    const marker = signReadState(
+      {
+        slot: "b".repeat(32),
+        createdAt: 100,
+        blob: {
+          v: 1,
+          client_id: "peer",
+          contexts: {
+            [`ov_s:${key}`]: 1,
+            [`ov_c:${key}`]: 0,
+            [`ov_b:${key}`]: 0,
+          },
+        },
+      },
+      f.key.secret,
+      100,
+    );
+    const automaticRead = a.read(key, 11, () => true);
+    try {
+      await saving;
+      a.accept([marker]);
+      release();
+      await automaticRead;
+    } finally {
+      release();
+    }
+    await expect
+      .poll(() =>
+        overrideActive(b.state().overrides[key], b.state().frontiers[key]),
+      )
+      .toBe(true);
+    expect(f.journal()?.state.overrides[key]).toEqual({
+      set: 1,
+      clear: 0,
+      baseline: 11,
+    });
+    expect(
+      decodeReadState([marker], f.key.secret)[0]?.blob.contexts[`ov_b:${key}`],
+    ).toBe(0);
+
+    const saved = f.journal();
+    if (!saved) throw new Error("Missing saved read state");
+    a.dispose();
+    b.dispose();
+    f.setJournal(readJournal(JSON.parse(JSON.stringify(saved)), f.key.pubkey));
+    const restarted = f.make();
+    await restarted.ready;
+    expect(
+      overrideActive(
+        restarted.state().overrides[key],
+        restarted.state().frontiers[key],
+      ),
+    ).toBe(true);
+    await restarted.read(key, 12, () => true, true);
+    expect(
+      overrideActive(
+        restarted.state().overrides[key],
+        restarted.state().frontiers[key],
+      ),
+    ).toBe(false);
   });
   it("a surviving window publishes broadcast intent and reports pending until readback", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
