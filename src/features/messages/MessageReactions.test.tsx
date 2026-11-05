@@ -471,6 +471,28 @@ it("prevents duplicate submissions and unavailable-message actions", async () =>
   });
 });
 
+it("shows who reacted to someone who cannot react, without letting them toggle", async () => {
+  const h = harness([react(other)]);
+  render(<h.Controls disabled />);
+  const pill = screen.getByRole("button", {
+    name: `👍: ${other.pubkey.slice(0, 10)}`,
+  });
+  // A native disabled button drops hover and focus, and the preview with them.
+  expect(pill.hasAttribute("disabled")).toBe(false);
+  expect(pill.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.mouseEnter(pill);
+  fireEvent.mouseMove(pill);
+  const preview = await screen.findByRole("tooltip", {}, { timeout: 2500 });
+  expect(preview.textContent).toContain(other.pubkey.slice(0, 10));
+  act(() => pill.focus());
+  expect(document.activeElement).toBe(pill);
+  fireEvent.keyDown(pill, { key: "Enter" });
+  fireEvent.click(pill);
+  expect(h.session.outbox?.snapshot()).toHaveLength(0);
+  expect(pill.getAttribute("aria-pressed")).toBe("false");
+  expect(screen.queryByTestId("inline-add-reaction")).toBeNull();
+});
+
 it("keeps emojis visually active but rejects another click while delivery is pending or failed", async () => {
   let release!: () => void;
   const publish = vi.fn(
