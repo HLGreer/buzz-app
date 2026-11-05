@@ -502,8 +502,8 @@ function useSessions(sessions: readonly FederatedIdentity[]) {
   return useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
 }
 
-/** One row per signed-in server, each signing out of that server only. With
- * none signed in, the build's Builderlab row, to sign in from. */
+/** One row per signed-in server, each signing out of that server only, and
+ * the build's Builderlab row to sign in from while it isn't signed in. */
 function OrganizationSignIns({
   identity,
   memberships,
@@ -583,8 +583,12 @@ function OrganizationSignIns({
     </div>
   ));
   // The first server's own row would repeat its failure without naming it.
+  const first = identity.snapshot().authority?.id;
   const firstFailed = [...unfinished.values()].some(
-    ({ authority }) => authority.id === identity.snapshot().authority?.id,
+    ({ authority }) => authority.id === first,
+  );
+  const firstSignedIn = states.some(
+    (state) => state.status === "signed-in" && state.authority?.id === first,
   );
   if (signedIn.length === 0)
     return (
@@ -600,6 +604,9 @@ function OrganizationSignIns({
         title="Organization sign-in"
       />
       <SettingsGroup>
+        {!firstSignedIn && !firstFailed && (
+          <OrganizationSignIn identity={identity} listed />
+        )}
         {signedIn.map((session) => (
           <ServerSession
             key={session.snapshot().authority?.id}
@@ -635,7 +642,6 @@ function ServerSession({
   );
   if (!state.authority) return null;
   const host = new URL(state.authority.identityOrigin).host;
-  const name = serverName(state.authority);
   const usedBy = coveredCommunities(
     state.authority.communityHosts,
     memberships,
@@ -648,7 +654,7 @@ function ServerSession({
     : "";
   return (
     <PreferenceRow
-      title={name === host ? host : `${name} (${host})`}
+      title={serverTitle(state.authority)}
       subtitle={
         <>
           {`Signed in as ${state.email ?? "your organization account"}`}
@@ -674,7 +680,22 @@ function ServerSession({
   );
 }
 
-function OrganizationSignIn({ identity }: { identity: FederatedIdentity }) {
+/** A server's row title: its name, and its host when that differs. */
+function serverTitle(authority: NonNullable<SessionSnapshot["authority"]>) {
+  const host = new URL(authority.identityOrigin).host;
+  const name = serverName(authority);
+  return name === host ? host : `${name} (${host})`;
+}
+
+/** The build's Builderlab sign-in, in a section of its own; `listed`, only
+ * its row, named by its server, among other servers' rows. */
+function OrganizationSignIn({
+  identity,
+  listed = false,
+}: {
+  identity: FederatedIdentity;
+  listed?: boolean;
+}) {
   const state = useSyncExternalStore(
     identity.subscribe,
     identity.snapshot,
@@ -683,8 +704,9 @@ function OrganizationSignIn({ identity }: { identity: FederatedIdentity }) {
   const [failure, setFailure] = useState("");
   const problem = failure || state.failure;
   if (!state.authority || state.status === "unconfigured") return null;
-  // Controls hide when unavailable, but a failed sign-out still explains itself.
-  if (state.status === "unavailable")
+  const unavailable = state.status === "unavailable";
+  // Controls hide when unavailable, but a failed restore still explains itself.
+  if (unavailable && !listed)
     return problem ? (
       <p role="alert" className="mt-6 text-body-sm text-danger">
         {recoveryMessage(problem)}
@@ -693,6 +715,9 @@ function OrganizationSignIn({ identity }: { identity: FederatedIdentity }) {
   const organization = new URL(state.authority.identityOrigin).host;
   const signedIn = state.status === "signed-in";
   const signingIn = state.status === "signing-in";
+  const status = signedIn
+    ? `Signed in as ${state.email ?? "your organization account"}`
+    : "Not signed in";
   const expires =
     signedIn && state.expiresAt
       ? new Date(state.expiresAt).toLocaleString(undefined, {
@@ -710,31 +735,29 @@ function OrganizationSignIn({ identity }: { identity: FederatedIdentity }) {
         ),
       );
   }
-  return (
-    <section className="mt-6" aria-labelledby="organization-sign-in-title">
-      <InlineHeader
-        id="organization-sign-in-title"
-        title="Organization sign-in"
-      />
-      <SettingsGroup>
-        <PreferenceRow
-          title={
-            signedIn
-              ? `Signed in as ${state.email ?? "your organization account"}`
-              : "Not signed in"
-          }
-          subtitle={
-            <>
-              {expires && (
-                <>
-                  Expires at {expires}
-                  <br />
-                </>
-              )}
-              {`Lets you and your agents into communities that require your ${organization} login. Signing out keeps your Buzz key on this device, but you and your agents can’t connect to those communities again until you sign back in.`}
-            </>
-          }
-          trailing={
+  const row = (
+    <>
+      <PreferenceRow
+        title={listed ? serverTitle(state.authority) : status}
+        subtitle={
+          <>
+            {listed && !unavailable && (
+              <>
+                {status}
+                <br />
+              </>
+            )}
+            {expires && (
+              <>
+                Expires at {expires}
+                <br />
+              </>
+            )}
+            {`Lets you and your agents into communities that require your ${organization} login. Signing out keeps your Buzz key on this device, but you and your agents can’t connect to those communities again until you sign back in.`}
+          </>
+        }
+        trailing={
+          unavailable ? undefined : (
             <Button
               type="button"
               disabled={state.status === "restoring"}
@@ -754,14 +777,24 @@ function OrganizationSignIn({ identity }: { identity: FederatedIdentity }) {
                   ? "Cancel sign-in"
                   : "Sign in"}
             </Button>
-          }
-        />
-        {problem && (
-          <p role="alert" className="text-body-sm text-danger">
-            {recoveryMessage(problem)}
-          </p>
-        )}
-      </SettingsGroup>
+          )
+        }
+      />
+      {problem && (
+        <p role="alert" className="text-body-sm text-danger">
+          {recoveryMessage(problem)}
+        </p>
+      )}
+    </>
+  );
+  if (listed) return row;
+  return (
+    <section className="mt-6" aria-labelledby="organization-sign-in-title">
+      <InlineHeader
+        id="organization-sign-in-title"
+        title="Organization sign-in"
+      />
+      <SettingsGroup>{row}</SettingsGroup>
     </section>
   );
 }

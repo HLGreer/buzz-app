@@ -74,8 +74,9 @@ the interface unless an available tool actually supports that action.
   **Settings → Buzz → Identity → Organization sign-in**.
 - Signed in to more than one organization server? **Organization sign-in**
   lists each one you're signed in to, with the communities it's used by, and
-  each **Sign out** ends only that server's sign-in. **Sign out of Buzz** still
-  ends them all.
+  each **Sign out** ends only that server's sign-in. Your organization's own
+  server stays listed with **Sign in** until you sign in to it. **Sign out of
+  Buzz** still ends them all.
 - Buzz apps on this computer that use the same organization server, such as
   Buzz and Buzz Staging, share its sign-in, like the private key. After you sign
   in in one, **Sign in** in the other finishes without the browser. Signing out

@@ -557,6 +557,58 @@ it("keeps the first server's sign-in row when no server is signed in", async () 
   expect(screen.getByRole("button", { name: "Sign in" })).toBeVisible();
 });
 
+it("keeps the first server's sign-in row, named, beside a signed-in server", async () => {
+  const { block, pub, root, servers } = twoServers();
+  block.publish({
+    status: "reauthentication-required",
+    failure: "reauthentication-required",
+  });
+  pub.publish({ status: "signed-in", email: "will@example.com" });
+  render(
+    <IdentitySettings
+      viewer={viewer}
+      federatedIdentity={root}
+      memberships={memberships}
+      servers={servers}
+    />,
+    { wrapper: ToastProvider },
+  );
+  expect(await screen.findByText("Block (block.builderlab.xyz)")).toBeVisible();
+  expect(screen.getByText(/^Not signed in/)).toBeVisible();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Your sign-in has expired. Sign in again to continue.",
+  );
+  expect(
+    screen.getByRole("button", { name: "Sign out of app.builderlab.xyz" }),
+  ).toBeVisible();
+  expect(screen.getAllByText("Organization sign-in")).toHaveLength(1);
+  await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  expect(block.service.signIn).toHaveBeenCalledOnce();
+  expect(pub.service.signIn).not.toHaveBeenCalled();
+  expect(pub.service.signOut).not.toHaveBeenCalled();
+});
+
+it("names the first server's failed restore beside a signed-in server, without controls", async () => {
+  const { block, pub, root, servers } = twoServers();
+  block.publish({ status: "unavailable", failure: "storage-denied" });
+  pub.publish({ status: "signed-in", email: "will@example.com" });
+  render(
+    <IdentitySettings
+      viewer={viewer}
+      federatedIdentity={root}
+      memberships={memberships}
+      servers={servers}
+    />,
+    { wrapper: ToastProvider },
+  );
+  expect(await screen.findByText("Block (block.builderlab.xyz)")).toBeVisible();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    /^Sign-in could not access secure storage\./,
+  );
+  expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+});
+
 it("keeps a per-server sign-out that native couldn't finish visible, named, with Try again", async () => {
   const { block, pub, root, servers } = twoServers();
   block.publish({ status: "signed-in", email: "will@block.xyz" });

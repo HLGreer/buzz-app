@@ -1026,8 +1026,9 @@ account and expiry, **Used by:** the joined communities its hosts cover, and a
 finish (for example, secure storage refused) stays below the list, naming the
 server, with **Try again**; so does an ended session whose saved record native
 could not remove. A saved session native could not check, for example offline,
-is kept and offers no **Try again**. Communities no server covers are not listed. With no server signed in, it shows the build's Builderlab row to
-sign in from, as before.
+is kept and offers no **Try again**. Communities no server covers are not listed. While the build's Builderlab isn't signed in, its row to sign in
+from comes first, named by its server beside other servers' rows, with its
+expiry or recovery message.
 
 When a community refuses a signed-in account (`authorization-denied` or
 `binding-mismatch`), its prompt names the community's server and account, and
