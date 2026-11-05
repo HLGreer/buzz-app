@@ -397,6 +397,8 @@ available rather than silently discarding it.
   Builderlab agents work from your phone even when your desktop is off, and
   cannot open files on your computer. Their Settings hint appears only while
   signed in, beside a cloud. Local agents have no execution hint.
+  Workspace in Settings also explains that the runtime is shared with your
+  other agents in the workspace by default.
   Cards and pane headings omit location captions. Both @ menus identify known
   remote agents with **Remote**, alongside membership details. Local rows have
   no location caption. The Harness menu keeps the Remote and Local group headings.

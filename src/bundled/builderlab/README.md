@@ -11,8 +11,9 @@ One Builderlab account for communities and agents that Builderlab hosts for you,
 5. Edit model settings and instructions later in **Identity**.
 
 While signed in, Identity shows a cloud beside “Remote agent”, with “Runs on a
-Builderlab machine” underneath. Workspace in Settings explains availability and
-file access. These hints stay hidden while signed out or signing in. The cloud
+Builderlab machine” underneath. Workspace in Settings explains that the remote
+runtime is shared with your other agents in the workspace by default, alongside
+availability and file access. These hints stay hidden while signed out or signing in. The cloud
 beside Send opens the same remote-work explanation. Current remote activity steps
 show a cloud that pulses while working and stays still with reduced motion.
 Cards and pane headings omit location captions. Both @ menus show

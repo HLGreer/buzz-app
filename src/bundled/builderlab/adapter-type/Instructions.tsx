@@ -138,7 +138,7 @@ export function createSettingsTab(
               {signedIn && (
                 <PreferenceRow
                   title="Workspace"
-                  subtitle={executionCopy.remote.description}
+                  subtitle={`Remote runtime shared with your other agents in this workspace by default. ${executionCopy.remote.description}`}
                 />
               )}
               <PreferenceRow

@@ -872,12 +872,22 @@ it("hides the runtime Workspace hint while signed out without loading settings",
     await h.session.signIn();
   });
   expect(screen.getByText("Workspace")).toBeVisible();
+  expect(
+    screen.getByText(
+      /shared with your other agents in this workspace by default/,
+    ),
+  ).toBeVisible();
   expect(screen.getByText(/you can chat from your phone/)).toBeVisible();
   act(() => h.session.signOut());
   expect(
     screen.queryByText(/you can chat from your phone/),
   ).not.toBeInTheDocument();
   expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      /shared with your other agents in this workspace by default/,
+    ),
+  ).not.toBeInTheDocument();
   expect(h.request).not.toHaveBeenCalled();
 });
 
