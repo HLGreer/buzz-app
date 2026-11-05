@@ -470,7 +470,7 @@ test("Share opens View only and posts a link without promoting or moving the Sol
   await page.setViewportSize({ width: 1280, height: 850 });
   await expect(row).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Alpha", exact: true }),
+    page.getByRole("button", { name: "Manage members of Alpha", exact: true }),
   ).toBeVisible();
   await expect(history).toBeVisible();
   expect(grants).toHaveLength(0);

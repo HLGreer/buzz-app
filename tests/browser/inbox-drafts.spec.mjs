@@ -49,7 +49,10 @@ test("Draft and conversation previews share their plain layout and show real sel
     { scope, root, canonicalPosition },
   );
   await open(page, app);
-  await page.getByRole("button", { name: "Inbox", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Apps dock", exact: true })
+    .getByRole("tab", { name: "Inbox", exact: true })
+    .click();
   const inbox = page.getByRole("region", { name: "Inbox", exact: true });
   await expect(inbox.getByText("Checking recent activity…")).toHaveCount(0);
   const chooseActivity = async (label) => {

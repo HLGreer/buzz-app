@@ -17,8 +17,10 @@ test("Inbox restores its conversation after visiting Messages and another page",
   app,
 }) => {
   await open(page, app);
-  const inboxButton = page.getByRole("button", { name: /^Inbox\b/ });
-  await inboxButton.click();
+  const inboxTab = page
+    .getByRole("navigation", { name: "Apps dock", exact: true })
+    .getByRole("tab", { name: "Inbox", exact: true });
+  await inboxTab.click();
   const inbox = page.getByRole("region", { name: "Inbox", exact: true });
   const row = inbox
     .getByRole("list", { name: "Inbox conversations" })
@@ -36,7 +38,7 @@ test("Inbox restores its conversation after visiting Messages and another page",
   for (const destination of ["Messages", "Reminders"]) {
     await page.getByRole("tab", { name: destination, exact: true }).click();
     await expect(inbox).toHaveCount(0);
-    await inboxButton.click();
+    await inboxTab.click();
     await expect(tab).toHaveAttribute("aria-selected", "true");
     await expect(reader).toBeVisible();
     await expect(row).toHaveAttribute("data-selected");
@@ -47,7 +49,7 @@ test("Inbox restores its conversation after visiting Messages and another page",
   await expect(tab).toHaveCount(0);
   await page.getByRole("tab", { name: "Reminders", exact: true }).click();
   await expect(inbox).toHaveCount(0);
-  await inboxButton.click();
+  await inboxTab.click();
   await expect(
     inbox.getByRole("list", { name: "Inbox conversations" }),
   ).toBeVisible();

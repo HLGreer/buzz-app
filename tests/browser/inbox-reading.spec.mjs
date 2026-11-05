@@ -30,7 +30,10 @@ test("Inbox DM composer focus reads a visible peer arrival after dwell without r
       }),
     )
     .toEqual({ status: "reconciled", completeness: "snapshot" });
-  await page.getByRole("button", { name: "Inbox", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Apps dock", exact: true })
+    .getByRole("tab", { name: "Inbox", exact: true })
+    .click();
   const inbox = page.getByRole("region", { name: "Inbox", exact: true });
   const dm = inbox
     .getByRole("list", { name: "Inbox conversations" })

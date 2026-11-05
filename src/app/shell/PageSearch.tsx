@@ -10,18 +10,12 @@ import {
 } from "react";
 import { MagnifyingGlassIcon } from "../../shared/design-system/icons/index";
 import { Dialog } from "../../shared/design-system/ui/Dialog";
-import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Button } from "../../shared/design-system/ui/Button";
 import type { RegisteredPage } from "../../features/pages/service";
 import { communityDestination } from "../../features/communities/destination";
 import { useChannelList, useRelayConnection } from "../../features/relay/react";
 import type { ChannelQueries } from "../../features/relay/contracts";
 import type { KeyBinding } from "../../features/shortcuts/bindings";
-import {
-  formatBinding,
-  isApplePlatform,
-} from "../../features/shortcuts/format";
-import type { ShortcutBindingsSnapshot } from "../../features/shortcuts/preferences";
 import type { AppServices } from "../services";
 import { HOST_SHORTCUT_ORDER } from "../shortcuts";
 import { conversationFocusTarget } from "../focus-navigation";
@@ -60,9 +54,7 @@ const SEARCH_BINDING: KeyBinding = { key: "k", mod: true };
 const SEARCH_BINDINGS = [SEARCH_BINDING, { key: "t", mod: true }];
 const CONVERSATION_SEARCH_ID = "conversation-search";
 const CONVERSATION_SEARCH_BINDING: KeyBinding = { key: "f", mod: true };
-const NO_OVERRIDES: ShortcutBindingsSnapshot = { overrides: {}, error: null };
 const noSubscribe = () => () => {};
-const noOverrides = () => NO_OVERRIDES;
 type SearchView = "all" | "channels";
 /** How long a closed search keeps its place for the next opening. */
 const SEARCH_MEMORY = 5 * 60_000;
@@ -200,11 +192,6 @@ export function PageSearch({
       }),
     [services, currentTarget, beginScoped],
   );
-  // The hint follows the person's rebind, derived from the same binding object.
-  const { overrides } = useSyncExternalStore(
-    services?.shortcutBindings.subscribe ?? noSubscribe,
-    services?.shortcutBindings.snapshot ?? noOverrides,
-  );
   // Every search surface reads pages from here, so rank and underline them
   // here too: the disconnected and personal-space views show this list as is.
   const needle = query.trim().toLowerCase();
@@ -246,26 +233,25 @@ export function PageSearch({
         setSearchOpen(false);
       },
     }));
-  const shortcut = formatBinding(
-    overrides[SEARCH_ID] ?? SEARCH_BINDING,
-    isApplePlatform(navigator.platform),
-  ).text;
   return (
     <>
-      <IconButton
-        hint="familiar"
+      <Button
         ref={trigger}
         variant="inverted"
-        size="md"
-        shape="round"
+        size="sm"
+        shape="capsule"
         aria-label="Search Buzz"
-        title={`Search Buzz (${shortcut})`}
+        title="Search Buzz"
         onClick={() => {
           trigger.current?.focus();
           begin();
         }}
-        icon={<MagnifyingGlassIcon size={16} aria-hidden="true" />}
-      />
+      >
+        <span className="shell-search-content">
+          <MagnifyingGlassIcon size={16} aria-hidden="true" />
+          <span className="shell-search-label">Search</span>
+        </span>
+      </Button>
       <Dialog
         open={open}
         onOpenChange={setSearchOpen}

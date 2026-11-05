@@ -356,8 +356,21 @@ that agent in Buzz; they do not notify the external app through this connection.
   and Linux) an HTTP(S) link in a message to open it in your default browser
   instead of a side panel. You can also right-click the link and choose
   **Open in browser**.
+- **Conversation members**: click the combined member avatars and conversation
+  name in the header to open membership management. Other header actions remain
+  on the right. Compact avatars sit before the name on the left; Solo chats show
+  the included agents.
+- **App navigation**: use the left dock to switch apps. Bestie is first, Inbox
+  second, followed by the other apps. Search stays wide in the top bar.
+  Messages has All / Solo / Team sidebar filters; other apps use their main
+  view unless they provide their own sidebar. The sidebar and message pane
+  share one surface with a persistent divider; panel headers also have bottom
+  hairlines. Dock icons stay still, highlight on hover, and show instant labels
+  to their right. Bestie uses your configured avatar.
+  The **+** opens New from the sidebar. **Cmd/Ctrl+N** opens that menu where
+  the current app has a creation sidebar.
 - **Inbox preview**: with a mouse or trackpad, rest the pointer on **Inbox** in
-  the sidebar to see recent mentions, DMs, and thread replies without opening
+  the app dock to see recent mentions, DMs, and thread replies without opening
   the Inbox page. Archived conversations are not shown. Clicking a conversation
   opens it directly; **Open Inbox** opens the page. The card's **Unread only**
   switch is separate from the Inbox page's filters. The preview is not shown on
@@ -422,8 +435,8 @@ available rather than silently discarding it.
   in new Solo chats for that community. It does not replace recipients in an
   existing chat or an edited draft. People can choose a different agent for a
   particular conversation. When the optional **Bestie** plugin is on, that saved
-  choice also opens the agent's DM from the left navigation; Messages omits the
-  duplicate row while it is pinned. A verified existing DM stays available if
+  choice also opens the agent's DM from the left Apps dock. The Messages
+  sidebar omits the duplicate Bestie row. A verified existing DM stays available if
   agent discovery fails. If a replacement save fails, the last confirmed Bestie
   remains selected and the confirmation offers another attempt. Being the bestie
   does not prove an agent is ready or running.

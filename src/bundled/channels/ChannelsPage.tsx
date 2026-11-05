@@ -31,6 +31,7 @@ import {
   useChannelTabState,
 } from "./useChannelTabState";
 import { ChannelMembersDialog } from "./ChannelMembersDialog";
+import { ChannelHeaderIdentity } from "./ChannelHeaderIdentity";
 import { ChannelMemberAvatars } from "./ChannelMemberAvatars";
 import {
   soloDraft,
@@ -228,7 +229,7 @@ export function ChannelsPage({
               </div>
               <h1>Your channels, one conversation.</h1>
               <p>
-                Use the community picker in the header to choose or add a
+                Use the community picker in the top bar to choose or add a
                 community. Your profile and settings work without a community.
               </p>
             </div>
@@ -1298,7 +1299,7 @@ function ChannelWorkspace({
           channelConversation.current
             ?.closest("[data-main-workspace]")
             ?.querySelector<HTMLElement>(
-              '[role="tab"][data-tab-value="conversation"]',
+              '[role="tab"][data-tab-value="conversation"], [data-workspace-identity] button',
             ) ?? (solo ? historyContainer.current : settingsTrigger.current);
         target?.focus({ preventScroll: true });
       }
@@ -1902,7 +1903,7 @@ function ChannelWorkspace({
   );
   // The conversation: full width for Solo, or the first main-pane tab.
   const body = (
-    <>
+    <div className={styles.windowCenteredBody}>
       <MessageManagementStatus />
       <section
         data-channel-history
@@ -2023,7 +2024,7 @@ function ChannelWorkspace({
             focusRequest={composerFocus}
           />
         )}
-    </>
+    </div>
   );
   const workspace = (
     <div
@@ -2200,6 +2201,25 @@ function ChannelWorkspace({
                     tabMenu={tabMenu}
                     drag={secondary.drag.main}
                     label="Channel tabs"
+                    identity={
+                      current && (
+                        <ChannelHeaderIdentity
+                          name={current.name}
+                          avatars={
+                            <ChannelMemberAvatars
+                              session={queries}
+                              channelId={current.id}
+                            />
+                          }
+                          aria-label={`Manage members of ${current.name}`}
+                          title="Manage members"
+                          aria-haspopup="dialog"
+                          ref={membersHeaderTrigger}
+                          aria-expanded={membersOpen}
+                          onClick={(event) => openMembers(event.currentTarget)}
+                        />
+                      )
+                    }
                     focusOnMount={false}
                     adoptSelection={preservedVisit}
                     value={secondary.selectedMain}
@@ -2210,31 +2230,6 @@ function ChannelWorkspace({
                     }
                     actions={
                       <>
-                        {current && (
-                          <IconButton
-                            size="sm"
-                            variant="avatar"
-                            style={{
-                              width: "auto",
-                              minWidth: "var(--size-control-sm)",
-                              paddingInline: "var(--space-1)",
-                            }}
-                            aria-label="Manage members"
-                            title="Manage members"
-                            aria-haspopup="dialog"
-                            ref={membersHeaderTrigger}
-                            aria-expanded={membersOpen}
-                            onClick={(event) =>
-                              openMembers(event.currentTarget)
-                            }
-                            icon={
-                              <ChannelMemberAvatars
-                                session={queries}
-                                channelId={current.id}
-                              />
-                            }
-                          />
-                        )}
                         {drawer.launchers}
                         <ChannelHeaderMenu
                           startChat={
