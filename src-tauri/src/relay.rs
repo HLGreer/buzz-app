@@ -1610,13 +1610,7 @@ pub(crate) fn media_protocol<R: tauri::Runtime>(
         .clone();
     tauri::async_runtime::spawn(async move {
         let response = match media_request(&request) {
-            Ok((url, range)) => {
-                let fallback = jpeg_thumb(&url);
-                match (serve_media(&host, &fi, url, range).await, fallback) {
-                    (Err(404), Some(url)) => serve_media(&host, &fi, url, range).await,
-                    (response, _) => response,
-                }
-            }
+            Ok((url, range)) => serve_media(&host, Some(&fi), url, range).await,
             Err(status) => Err(status),
         };
         let mut response = response.unwrap_or_else(|status| {
@@ -2100,15 +2094,28 @@ fn media_request(
 
 async fn serve_media(
     host: &IdentityHost,
-    fi: &FederatedIdentity,
+    fi: Option<&FederatedIdentity>,
+    url: Url,
+    range: Option<(u64, u64)>,
+) -> std::result::Result<tauri::http::Response<Vec<u8>>, u16> {
+    let fallback = jpeg_thumb(&url);
+    match (serve_blob(host, fi, url, range).await, fallback) {
+        (Err(404), Some(url)) => serve_blob(host, fi, url, range).await,
+        (response, _) => response,
+    }
+}
+
+async fn serve_blob(
+    host: &IdentityHost,
+    fi: Option<&FederatedIdentity>,
     url: Url,
     range: Option<(u64, u64)>,
 ) -> std::result::Result<tauri::http::Response<Vec<u8>>, u16> {
     match range {
         Some((start, end)) => {
-            media_blocks::read(host, Some(fi), &url, start, end, WHOLE_VIDEO_MAX).await
+            media_blocks::read(host, fi, &url, start, end, WHOLE_VIDEO_MAX).await
         }
-        None => fetch_media(host, Some(fi), url, None).await,
+        None => fetch_media(host, fi, url, None).await,
     }
 }
 
