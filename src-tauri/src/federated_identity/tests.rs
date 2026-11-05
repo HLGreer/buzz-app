@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 pub(super) struct Memory {
     pub(super) raw: Mutex<Option<Zeroizing<Vec<u8>>>>,
     pub(super) compare_gate: Mutex<Option<super::agent::grant::tests::Gate>>,
+    /// Holds the next read after it reads the item. `load` reads too.
+    read_gate: Mutex<Option<super::agent::grant::tests::Gate>>,
     refusal: Mutex<Option<String>>,
     pub(super) denied: AtomicBool,
     reads: AtomicUsize,
@@ -12,7 +14,12 @@ pub(super) struct Memory {
 impl Store for Memory {
     fn read(&self) -> Result<Option<Zeroizing<Vec<u8>>>, &'static str> {
         self.reads.fetch_add(1, Ordering::SeqCst);
-        Ok(self.raw.lock().unwrap().clone())
+        let raw = self.raw.lock().unwrap().clone();
+        if let Some((held, release)) = self.read_gate.lock().unwrap().take() {
+            held.send(()).unwrap();
+            release.recv().unwrap();
+        }
+        Ok(raw)
     }
     fn compare(
         &self,
@@ -869,6 +876,71 @@ async fn signing_in_adopts_a_session_another_copy_saved() {
     assert_eq!(snapshot.email.as_deref(), Some("a@example.com"));
     let seen = server.await.unwrap();
     assert_eq!(seen[0].target, "GET /mount/v1/session HTTP/1.1");
+}
+
+#[tokio::test]
+async fn a_sign_out_during_the_shared_item_read_ends_signed_out() {
+    use futures_util::FutureExt;
+    let (base, server) = adapter(vec![
+        serde_json::json!({"expires_at":"2099-01-01T00:00:00Z","email":"a@example.com"}),
+    ])
+    .await;
+    let store = Arc::new(Memory::default());
+    let host = at_adapter(store.clone(), base);
+    assert!(host.restore().await.status == Status::SignedOut);
+    // Another Buzz copy sharing the item signs in after this one restored.
+    *store.raw.lock().unwrap() = Some(record().raw.clone());
+    let (held, reading) = std::sync::mpsc::channel();
+    let (release, released) = std::sync::mpsc::channel();
+    *store.read_gate.lock().unwrap() = Some((held, released));
+    let app = tauri::test::mock_builder()
+        .manage(crate::oauth_callback::OAuthCallbackHost::default())
+        .build(crate::app_context())
+        .unwrap();
+    let (worker, handle) = (host.clone(), app.handle().clone());
+    let signing_in = tokio::spawn(async move { worker.sign_in(&handle).await });
+    tokio::task::spawn_blocking(move || reading.recv().unwrap())
+        .await
+        .unwrap();
+    let signing_out = host.finish_sign_out(host.begin_sign_out());
+    tokio::pin!(signing_out);
+    // Sign-in holds the operation lock, so the sign-out's cleanup waits.
+    assert!(signing_out.as_mut().now_or_never().is_none());
+    release.send(()).unwrap();
+    let (signed_in, signed_out) = tokio::join!(signing_in, signing_out);
+    let signed_in = signed_in.unwrap().unwrap();
+    assert!(signed_in.status == Status::SignedOut && signed_out.status == Status::SignedOut);
+    assert!(host.state().session.is_none());
+    assert!(store.raw.lock().unwrap().is_none());
+    // Both have returned, so a verification would have been answered by now.
+    assert!(!server.is_finished(), "the shared record was verified");
+    server.abort();
+}
+
+#[tokio::test]
+async fn a_sign_out_refuses_a_restore_begun_before_it() {
+    let (base, server) = adapter(vec![
+        serde_json::json!({"expires_at":"2099-01-01T00:00:00Z","email":"a@example.com"}),
+    ])
+    .await;
+    let store = Arc::new(Memory::default());
+    let host = at_adapter(store.clone(), base);
+    assert!(host.restore().await.status == Status::SignedOut);
+    *store.raw.lock().unwrap() = Some(record().raw.clone());
+    // As sign-in does once it finds another copy's session, before restoring.
+    let attempt = {
+        let mut state = host.state();
+        state.restored = false;
+        state.restore_attempt
+    };
+    let (_, revision) = host.begin_sign_out();
+    host.restore_locked(attempt).await;
+    let snapshot = host.snapshot();
+    assert!(snapshot.status == Status::SignedOut);
+    assert_eq!(snapshot.revision, revision);
+    assert!(host.state().session.is_none());
+    assert!(!server.is_finished(), "the shared record was verified");
+    server.abort();
 }
 
 #[tokio::test]

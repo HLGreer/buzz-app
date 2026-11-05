@@ -104,7 +104,8 @@ struct State {
     snapshot: Snapshot,
     session: Option<Arc<Session>>,
     restored: bool,
-    /// Completed restore attempts, shared by callers queued on operation.
+    /// Completed restore attempts, shared by callers queued on operation. A
+    /// sign-out ends every attempt begun before it.
     restore_attempt: u64,
     restore_retry_at: Option<tokio::time::Instant>,
     closed: bool,
@@ -428,6 +429,7 @@ impl FederatedIdentity {
         let state = self.state();
         !state.closed && state.snapshot.revision == revision
     }
+    #[cfg(test)]
     fn retire(
         &self,
         status: Status,
@@ -765,14 +767,20 @@ impl FederatedIdentity {
             let state = self.state();
             state.restored && state.session.is_none()
         };
-        let attempt =
-            if signed_out && matches!(self.storage(|store| store.read()).await, Ok(Some(_))) {
-                let mut state = self.state();
+        let attempt = if signed_out {
+            let shared = matches!(self.storage(|store| store.read()).await, Ok(Some(_)));
+            let mut state = self.state();
+            // A sign-out or close during the read ends this sign-in.
+            if state.closed || state.snapshot.revision != observed.revision {
+                return Ok(state.snapshot.clone());
+            }
+            if shared {
                 state.restored = false;
-                state.restore_attempt
-            } else {
-                attempt
-            };
+            }
+            state.restore_attempt
+        } else {
+            attempt
+        };
         let observed = self.restore_locked(attempt).await;
         let (revision, cancel, renewing) = {
             let mut state = self.state();
@@ -1047,12 +1055,16 @@ impl FederatedIdentity {
         self.finish_sign_out(self.begin_sign_out()).await
     }
     fn begin_sign_out(&self) -> (Option<Arc<Session>>, String) {
-        let (session, revision) = self.retire(Status::SignedOut, None);
-        {
+        let (session, revision) = {
             let mut state = self.state();
+            let session = self.retire_state(&mut state, Status::SignedOut, None);
+            // In the retirement's lock: no restore can take the new revision
+            // and still be admitted on an older attempt.
+            state.restore_attempt += 1;
             state.account = None;
             state.retirements += 1;
-        }
+            (session, state.snapshot.revision.clone())
+        };
         self.signal(SessionChange::SignedOut);
         (session, revision)
     }
