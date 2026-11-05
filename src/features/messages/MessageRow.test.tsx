@@ -2752,7 +2752,7 @@ it.each([undefined, "toolbar"] as const)(
       key: "test.plugin/remind",
       pluginId: "test.plugin",
       revision: "one",
-      placement,
+      ...(placement ? { placement } : {}),
       matches: () => true,
       component: () => <span>action dialog</span>,
     });
