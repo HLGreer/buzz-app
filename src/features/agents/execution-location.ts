@@ -47,7 +47,7 @@ export const executionCopy = {
   },
   local: {
     description:
-      "Runs on your desktop and can work with its files. Needs Buzz open and your desktop awake.",
+      "Runs on this computer and can work with its files. Needs Buzz open and this computer awake.",
   },
 } as const;
 

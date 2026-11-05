@@ -41,10 +41,10 @@ export function RemoteAgentIntroduction({
   const provider = builderlab ? "Builderlab" : "";
   const ready = builderlab ? ", I’m always ready for you." : ".";
   const online = builderlab
-    ? "You can chat with me from your phone, even when your desktop is off. "
+    ? "You can chat with me from your phone, even when this computer is off. "
     : "My availability and file access depend on that computer’s setup.";
   const files = builderlab
-    ? "I just won’t be able to open files on your computer."
+    ? "I just won’t be able to open files on this computer."
     : "";
   const openingStart = hello.length;
   const providerStart = openingStart + opening.length;

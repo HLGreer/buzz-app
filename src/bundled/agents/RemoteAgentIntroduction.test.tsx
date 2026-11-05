@@ -84,9 +84,9 @@ it("lays out the full disclosure from the start and staggers real Motion charact
   expect(fullText).toContain(
     "Since I’m a remote agent hosted by Builderlab, I’m always ready for you.",
   );
-  expect(fullText).toContain("from your phone, even when your desktop is off");
+  expect(fullText).toContain("from your phone, even when this computer is off");
   expect(fullText).toContain(
-    "I just won’t be able to open files on your computer.",
+    "I just won’t be able to open files on this computer.",
   );
   expect(fullText).toMatch(/So… what are we getting into\?$/);
   // Assistive technology gets all four paragraphs, with no duplicate stream.
@@ -96,7 +96,7 @@ it("lays out the full disclosure from the start and staggers real Motion charact
     /^Since I’m a remote agent hosted by Builderlab, I’m always ready for you\.$/,
   );
   expect(paragraphs[2]).toHaveTextContent(
-    /^You can chat with me from your phone, even when your desktop is off\. I just won’t be able to open files on your computer\.$/,
+    /^You can chat with me from your phone, even when this computer is off\. I just won’t be able to open files on this computer\.$/,
   );
   const characters = visual.querySelectorAll<HTMLSpanElement>(
     `.${styles.remoteSpeechCharacter}`,
@@ -168,7 +168,7 @@ it("shows plain full copy with reduced motion, including a preference change mid
     "Since I’m a remote agent hosted by Builderlab",
   );
   expect(speech).toHaveTextContent(
-    "I just won’t be able to open files on your computer.",
+    "I just won’t be able to open files on this computer.",
   );
   expect(speech).toHaveTextContent("So… what are we getting into?");
   expect(speech).not.toHaveTextContent("All right. What’s the plot?");

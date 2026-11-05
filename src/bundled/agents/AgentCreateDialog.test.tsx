@@ -898,7 +898,7 @@ it("introduces remote creation with the chosen avatar and preserves the draft on
     "My availability and file access depend on that computer’s setup.",
   );
   expect(intro).not.toHaveTextContent("always ready for you");
-  expect(intro).not.toHaveTextContent("even when your desktop is off");
+  expect(intro).not.toHaveTextContent("even when this computer is off");
   expect(intro).not.toHaveTextContent("won’t be able to open files");
   expect(
     within(intro)
