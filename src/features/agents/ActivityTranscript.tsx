@@ -41,6 +41,7 @@ import {
   WrenchIcon,
 } from "../../shared/design-system/icons/index";
 import { formatFullTimestamp, formatTime } from "../../shared/datetime";
+import { useClockFormat } from "../../shared/clock-preference";
 import styles from "./ActivityTranscript.module.css";
 import referenceStyles from "../../shared/InlineReference.module.css";
 import type { AgentViewProps } from "./service";
@@ -89,6 +90,7 @@ const time = (at: number) => formatTime(at / 1000);
 const known = (at: number) => !!at && !Number.isNaN(new Date(at).getTime());
 /** Quiet trailing metadata; the turn header already dates the prompt. */
 function Stamp({ item }: { item: TranscriptItem }) {
+  useClockFormat();
   const elapsed =
     item.type === "tool" && item.completedAt !== undefined
       ? item.completedAt - item.at
@@ -269,6 +271,7 @@ function Turn({
   agentName: string;
   openConversation?: AgentViewProps["openConversation"];
 }) {
+  useClockFormat();
   const { channelId, threadRootId } = turn;
   const openPlace =
     openConversation && channelId && threadRootId !== undefined

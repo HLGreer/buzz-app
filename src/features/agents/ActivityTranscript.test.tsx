@@ -16,6 +16,11 @@ import type { TranscriptTurn } from "./activity-transcript";
 import { withSessionPrompts } from "./session-prompts";
 import { codexTurns } from "../../bundled/codex/transcript";
 import { restoreRecordedTools } from "../../bundled/codex/recorded-tools";
+import {
+  clockPreference,
+  setClockPreference,
+} from "../../shared/clock-preference";
+import { formatTime } from "../../shared/datetime";
 
 afterEach(cleanup);
 
@@ -276,6 +281,59 @@ it("renders thought formatting and keeps entry times available, except the promp
         ?.querySelector("time")
         ?.getAttribute("title"),
     ).toContain("2026");
+  }
+});
+
+it("updates mounted transcript clocks while keeping elapsed time and navigation", () => {
+  const previous = { ...clockPreference() };
+  const at = new Date(2026, 9, 20, 14, 1, 28).getTime();
+  const openConversation = vi.fn();
+  setClockPreference({ hourCycle: "h12", seconds: false });
+  try {
+    const { container } = render(
+      <ActivityTranscript
+        transcript={{
+          turns: [
+            {
+              turnId: "clock",
+              triggeringEventIds: [],
+              newSession: false,
+              partial: false,
+              startedAt: at,
+              endedAt: at + 9000,
+              channelId: "channel",
+              threadRootId: null,
+              config: [],
+              items: [
+                {
+                  id: "thought",
+                  at: at + 3000,
+                  type: "thought",
+                  text: "Checking the clock",
+                },
+              ],
+            },
+          ],
+        }}
+        agentName="Sol"
+        state={() => "ended"}
+        openConversation={openConversation}
+      />,
+    );
+    const clocks = Array.from(container.querySelectorAll("time"));
+    expect(clocks).toHaveLength(2);
+    const before = clocks.map((clock) => clock.textContent);
+    act(() => setClockPreference({ hourCycle: "h23", seconds: true }));
+    expect(clocks.map((clock) => clock.textContent)).toEqual([
+      formatTime((at + 9000) / 1000),
+      formatTime((at + 3000) / 1000),
+    ]);
+    expect(clocks.map((clock) => clock.textContent)).not.toEqual(before);
+    expect(container.querySelector("header")).toHaveTextContent("9.0s");
+    fireEvent.click(screen.getByRole("button", { name: "Channel" }));
+    expect(openConversation).toHaveBeenCalledWith("channel", undefined);
+  } finally {
+    act(() => setClockPreference(previous));
   }
 });
 
