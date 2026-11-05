@@ -24,14 +24,6 @@ export function remoteWorkDetail(
     : "Running on a remote machine…";
 }
 
-/** A location note: where the agent runs, then what that means for you. */
-type ExecutionCopy = Readonly<{ description?: string }>;
-
-/** A plugin execution target does not establish Builderlab's availability or file boundary. */
-export function executionDetails(runtime?: string): ExecutionCopy {
-  return runtime === "block.builderlab/builderlab" ? executionCopy.remote : {};
-}
-
 /** Execution location is independent of presence, model and ownership. */
 export const executionCopy = {
   remote: {

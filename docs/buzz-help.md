@@ -408,11 +408,7 @@ available rather than silently discarding it.
   step and pulses while working, staying still with reduced motion.
   When a remote agent has no current step details, the activity popover shows
   where it runs; received tool details take precedence.
-  Addressing a known remote agent also shows a cloud beside Send. Open it for
-  where that agent runs and what that means for work and file access. Builderlab
-  agents work on another computer, keep working while this computer is off,
-  and cannot open files on this computer. Other remote runtimes show only their
-  confirmed location. Available model and session controls stay in that popover.
+  Available model, effort and session controls keep their gauge beside Send.
   Activity keeps its transcript and feed guidance without a separate workspace
   note.
 - An agent's name and picture identify it. Instructions shape its response

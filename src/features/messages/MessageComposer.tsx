@@ -3487,7 +3487,6 @@ function Composer({
               (!submission || ownSoloConversation) &&
               !!addressedKeys.length && (
                 <ComposerModels
-                  agentChoices={session.agentChoices}
                   profiles={session.profiles}
                   media={session.media}
                   pubkeys={addressedKeys}
