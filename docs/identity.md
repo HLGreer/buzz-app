@@ -22,8 +22,8 @@ Builderlab plugin has no network or file grant: its Builderlab calls go through
 the native FI session (#1461). **Sign in with Builderlab** is the native
 [organization sign-in](#native-federated-session-module), whose browser
 step, code exchange and token stay native. A session that already exists,
-including one saved by an earlier run, signs in again, so the browser can
-choose the account; if that sign-in is canceled, first run stops rather than
+including one saved by an earlier run or adopted from another Buzz copy's
+shared sign-in, signs in again, so the browser can choose the account; if that sign-in is canceled, first run stops rather than
 continuing as the old account, and one that times out fails as *Sign-in did
 not finish*. Setup's account calls then go through the native forwarder as the
 bundled plugin's installation, fenced to that session, and a backup hands the
@@ -112,7 +112,10 @@ automatic backup.
 **Not linked** pauses on **Get started with Buzz**, which says the account will
 manage the Buzz identity. **Set me up** creates and links a key; **Use an
 existing key** opens **Enter your private key**. **Use a different account**
-signs out the first-run session and returns to the welcome screen.
+signs out the shared native session first run signed in as, so the Builderlab
+plugin stops using it, and returns to the welcome screen. It leaves a newer
+session (from Settings or another copy) signed in, and a failed sign-out shows
+on the welcome screen. Cancel and Back do not sign out.
 The browser may retain its portal session. This choice page shows the signed-in
 email so the account can be checked before linking a key.
 

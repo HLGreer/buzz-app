@@ -427,3 +427,24 @@ it("releases each community session's native listeners when it is disposed", asy
   // The root's listener and both of the community's.
   await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(3));
 });
+
+it("answers sign-in with the call's own result when an event arrives before it", async () => {
+  vi.mocked(invoke).mockResolvedValue(signedOut);
+  const { service } = setup();
+  await vi.waitFor(() => expect(service.snapshot().status).toBe("signed-out"));
+  let finish!: (snapshot: SessionSnapshot) => void;
+  vi.mocked(invoke).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = service.signIn();
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  // The browser step's event lands before native answers the invoke.
+  publish({ payload: { ...signedOut, status: "signing-in" } });
+  finish(signedIn);
+  await expect(pending).resolves.toEqual(signedIn);
+  // The event moved the epoch on, so the answer is not adopted over it.
+  expect(service.snapshot().status).toBe("signing-in");
+});

@@ -20,11 +20,26 @@ export const bundledFederatedIdentity = (ctx: Context): FederatedIdentity =>
   ctx.extend({ pluginOwner: { id: manifest.id, revision: "bundled" } })
     .federatedIdentity;
 
-/** What first run uses of the NIP-FI session: it never signs out. */
+/** What first run uses of the NIP-FI session: it signs out only when the
+ * person rejects the account (`releaseFirstRunSession`). */
 export type FirstRunIdentity = Pick<
   FederatedIdentity,
-  "snapshot" | "subscribe" | "signIn" | "cancelSignIn" | "request"
+  "snapshot" | "subscribe" | "signIn" | "cancelSignIn" | "signOut" | "request"
 >;
+
+/**
+ * "Use a different account": signs the shared session out, but only while it
+ * is still the one first run signed in as, so it never retires a newer
+ * sign-in (from Settings or another copy) that has replaced it.
+ */
+export async function releaseFirstRunSession(
+  identity: Pick<FederatedIdentity, "snapshot" | "signOut">,
+  revision: string,
+) {
+  const now = identity.snapshot();
+  if (now.status !== "signed-in" || now.revision !== revision) return;
+  await identity.signOut();
+}
 
 /**
  * First run's Builderlab sign-in (`federatedCredential`). The bundled grant
@@ -105,9 +120,11 @@ async function federatedCredential(
     let session = await signIn(identity);
     signal.throwIfAborted();
     // After a failed restore, `signIn` restores again first and answers with
-    // the stored session it finds: renew that, so the browser chooses.
+    // the stored session it finds; from signed out, it adopts a session
+    // another copy saved. Either way no browser opened: renew that, so the
+    // browser chooses.
     if (
-      before.status === "unavailable" &&
+      (before.status === "unavailable" || before.status === "signed-out") &&
       session.status === "signed-in" &&
       !browsed
     ) {
@@ -145,6 +162,7 @@ async function federatedCredential(
  */
 export function createFirstRunLogin(
   acquire: (signal: AbortSignal) => Promise<Credential>,
+  release?: (credential: Credential) => Promise<void>,
 ) {
   let credential: Credential | undefined;
   let attempt: AbortController | undefined;
@@ -197,5 +215,20 @@ export function createFirstRunLogin(
       }
     },
     cancel: () => reset(),
+    /** Rejects the account: ends the attempt and signs its session out. */
+    async signOut() {
+      const held = credential;
+      reset();
+      if (!held || !release) return;
+      try {
+        await release(held);
+      } catch {
+        if (attempt || credential) return;
+        publish({
+          status: "signed-out",
+          error: "Couldn't sign out of that account. Try again.",
+        });
+      }
+    },
   };
 }

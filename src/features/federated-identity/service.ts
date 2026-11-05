@@ -172,7 +172,9 @@ export class FederatedIdentityService
     try {
       const snapshot = await invoke<SessionSnapshot>(command);
       if (this.shared.epoch === epoch) this.accept(snapshot);
-      return this.shared.snapshot;
+      // The call's own answer: a later event, such as `signing-in` arriving
+      // first, must not stand in for it.
+      return Object.freeze(snapshot);
     } catch (error) {
       throw typeof error === "string" ? new Error(error) : error;
     }
@@ -353,7 +355,7 @@ class CommunitySession implements FederatedIdentity {
     try {
       const snapshot = await invoke<SessionSnapshot>(command, this.target);
       if (this.epoch === epoch) this.accept(snapshot);
-      return this.state;
+      return Object.freeze(snapshot);
     } catch (error) {
       throw typeof error === "string" ? new Error(error) : error;
     }

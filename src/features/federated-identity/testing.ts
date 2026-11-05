@@ -44,6 +44,8 @@ export function federatedFixture(
       };
     },
     signIn: vi.fn(async () => {
+      // Like native, a login without a session browses as `signing-in`.
+      if (state.status !== "signed-in") publish({ status: "signing-in" });
       publish({
         status: "signed-in",
         revision: `${revision}:${++logins}`,

@@ -253,6 +253,47 @@ describe("the NIP-FI sign-in", () => {
     expect(fi.service.signIn).not.toHaveBeenCalled();
   });
 
+  describe("from signed out, when another copy saved a session", () => {
+    const adopt = (fi: ReturnType<typeof federatedFixture>) =>
+      vi.mocked(fi.service.signIn).mockImplementationOnce(async () => {
+        // Native adopts the shared session: no browser step.
+        fi.publish({ status: "signed-in", revision: "other-copy" });
+        return fi.service.snapshot();
+      });
+
+    it("renews the adopted session so the browser chooses the account", async () => {
+      vi.mocked(invoke).mockResolvedValueOnce(catalog(true));
+      const fi = federatedFixture();
+      adopt(fi);
+      fi.request.mockResolvedValueOnce({
+        status: 200,
+        headers: {},
+        body: JSON.stringify(me),
+      });
+      const credential = await firstRunCredential(
+        new AbortController().signal,
+        fi.service,
+      );
+      expect(credential.revision).toBe("user:1");
+      expect(fi.service.signIn).toHaveBeenCalledTimes(2);
+    });
+
+    it("never continues as the adopted account when its renewal is canceled", async () => {
+      vi.mocked(invoke).mockResolvedValueOnce(catalog(true));
+      const fi = federatedFixture();
+      adopt(fi);
+      // A canceled renewal answers with the session it would have replaced.
+      vi.mocked(fi.service.signIn).mockImplementationOnce(async () =>
+        fi.service.snapshot(),
+      );
+      await expect(
+        firstRunCredential(new AbortController().signal, fi.service),
+      ).rejects.toThrow();
+      expect(fi.service.signIn).toHaveBeenCalledTimes(2);
+      expect(fi.request).not.toHaveBeenCalled();
+    });
+  });
+
   describe("after a failed restore", () => {
     const account = (fi: ReturnType<typeof federatedFixture>) =>
       fi.request.mockResolvedValueOnce({

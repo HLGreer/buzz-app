@@ -2171,6 +2171,8 @@ it("Use a different account on Get started with Buzz signs the session out, retu
       ...noCreation,
     };
   });
+  // The shared native session first run signed in as.
+  const fi = federatedFixture();
   const identity = createIdentity();
   const user = userEvent.setup();
   render(
@@ -2180,11 +2182,13 @@ it("Use a different account on Get started with Buzz signs the session out, retu
       invites={invites}
       account={account}
       connect={connect}
+      federatedIdentity={fi.service}
     >
       <p>Signed in</p>
     </Welcome>,
   );
   await user.click(await screen.findByRole("button", { name: SIGN_IN }));
+  fi.publish({ status: "signed-in", revision: credential.revision });
   await act(async () => first.resolve(credential));
   expect(
     await screen.findByRole("heading", { name: "Get started with Buzz" }),
@@ -2203,6 +2207,9 @@ it("Use a different account on Get started with Buzz signs the session out, retu
   ).toBeNull();
   expect(screen.queryByText("Signed in")).toBeNull();
   expect(identity.snapshot().status).toBe("missing");
+  // The rejected account is signed out natively, not just forgotten here.
+  await vi.waitFor(() => expect(fi.service.signOut).toHaveBeenCalledOnce());
+  expect(fi.service.snapshot().status).toBe("signed-out");
   expect(connect).toHaveBeenCalledTimes(1);
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
     "identity_restore",
@@ -2221,6 +2228,55 @@ it("Use a different account on Get started with Buzz signs the session out, retu
   expect(linkedKeys[1]).toHaveBeenCalledTimes(1);
   expect(screen.queryByText("Signed in as b@example.com.")).toBeNull();
   expect(screen.queryByText("Signed in as a@example.com.")).toBeNull();
+  identity.dispose();
+});
+
+it("Use a different account leaves a newer session signed in, and says so when signing out fails", async () => {
+  vi.mocked(invoke).mockImplementation((command) => {
+    if (command === "nsec_backup_choice")
+      return Promise.resolve({
+        available: false,
+        pubkey: viewer,
+        automatic: null,
+      });
+    if (command === "identity_restore") return Promise.resolve(null);
+    if (command === "identity_legacy_available") return Promise.resolve(false);
+    throw new Error(`Unexpected command ${command}`);
+  });
+  const fi = federatedFixture();
+  const identity = createIdentity();
+  const user = userEvent.setup();
+  render(
+    <Welcome
+      identity={identity}
+      communities={noJoin}
+      invites={invites}
+      account={unlinkedWith(() => Promise.resolve())}
+      connect={async () => credential}
+      federatedIdentity={fi.service}
+    >
+      <p>Signed in</p>
+    </Welcome>,
+  );
+  // A newer sign-in (Settings, another copy) replaced first run's session.
+  fi.publish({ status: "signed-in", revision: "newer" });
+  await user.click(await screen.findByRole("button", { name: SIGN_IN }));
+  await user.click(
+    await screen.findByRole("button", { name: "Use a different account" }),
+  );
+  expect(welcomeHeading()).toBeVisible();
+  expect(fi.service.signOut).not.toHaveBeenCalled();
+  expect(fi.service.snapshot().revision).toBe("newer");
+  // Now first run's own session, whose sign-out fails.
+  fi.publish({ status: "signed-in", revision: credential.revision });
+  vi.mocked(fi.service.signOut).mockRejectedValueOnce(new Error("offline"));
+  await user.click(connectButton());
+  await user.click(
+    await screen.findByRole("button", { name: "Use a different account" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Couldn't sign out of that account. Try again.",
+  );
   identity.dispose();
 });
 

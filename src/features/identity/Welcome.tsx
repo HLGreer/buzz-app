@@ -13,6 +13,7 @@ import { npubEncode } from "nostr-tools/nip19";
 import {
   createFirstRunLogin,
   firstRunCredential,
+  releaseFirstRunSession,
   type FirstRunIdentity,
 } from "../../bundled/builderlab/oauth/first-run";
 import type { Credential } from "../../bundled/builderlab/session";
@@ -166,6 +167,8 @@ export function Welcome({
           Promise.reject(
             new Error("This Buzz build has no Builderlab sign-in."),
           )),
+      federatedIdentity &&
+        ((held) => releaseFirstRunSession(federatedIdentity, held.revision)),
     ),
   );
   // Counts canceled sign-ins: a sign-in continues only if none was canceled
@@ -532,6 +535,11 @@ export function Welcome({
     cancels.current++;
     login.cancel();
   };
+  /** "Use a different account": the landing, signed out of the rejected one. */
+  const switchAccount = () => {
+    void login.signOut();
+    backToLanding();
+  };
   /**
    * The Add-a-community dialog's completion for the community the step
    * holds (`src/features/communities/join.ts`): with `publish`, the draft is
@@ -761,7 +769,7 @@ export function Welcome({
               ]);
             }}
             onImport={() => pause("key-import")}
-            onSwitchAccount={backToLanding}
+            onSwitchAccount={switchAccount}
           />
         );
       case "welcome-back":
@@ -782,7 +790,7 @@ export function Welcome({
               }
               onImport={() => pause("key-import")}
               onSwitchAccount={() => {
-                if (viewer !== linked) return backToLanding();
+                if (viewer !== linked) return switchAccount();
                 void identity
                   .signOut({ wipe: false, removeAgents: false })
                   .catch(() =>
