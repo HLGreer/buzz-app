@@ -8,7 +8,8 @@ import {
   settleShellToggle,
 } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
-import { open, anchor, expectAnchor } from "./timeline.mjs";
+import { stopRoutes } from "./playwright-test.mjs";
+import { open, anchor, expectAnchor, upper, settle } from "./timeline.mjs";
 import { wcagRatio } from "../../scripts/design-system/apca.mjs";
 
 test.use({ historyCounts: { alpha: 20, beta: 1 }, launchAnimation: true });
@@ -650,4 +651,66 @@ test("Message width defaults to Narrow, widens the conversation by 50%, and rest
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBeLessThanOrEqual(480);
+});
+
+test.describe("message width reading position", () => {
+  test.use({
+    historyCounts: { alpha: 60, beta: 1 },
+    markdownMessages: true,
+    productionBroker: true,
+  });
+
+  test("preserves wrapped history through Settings and another window", async ({
+    page,
+    context,
+    app,
+  }) => {
+    await page.setViewportSize({ width: 2200, height: 1000 });
+    await open(page, app);
+    const saved = await upper(page);
+    const history = page.getByRole("region", {
+      name: "Channel message history",
+    });
+    const viewportWidth = await history.evaluate(
+      (element) => element.clientWidth,
+    );
+    const chooseWidth = async (target, width) => {
+      await target
+        .getByRole("combobox", { name: "Message width", exact: true })
+        .click();
+      await target.getByRole("option", { name: width, exact: true }).click();
+    };
+
+    await settings(page);
+    await chooseWidth(page, "Wide");
+    await closeSettings(page);
+    await settle(page);
+    expect(await history.evaluate((element) => element.clientWidth)).toBe(
+      viewportWidth,
+    );
+    await expectAnchor(page, saved);
+
+    const other = await context.newPage();
+    try {
+      await other.goto(app.origin);
+      await settings(other);
+      await chooseWidth(other, "Narrow");
+      await expect(page.locator("html")).toHaveCSS(
+        "--buzz-message-width",
+        "52rem",
+      );
+      await settle(page);
+      await expectAnchor(page, saved);
+      await chooseWidth(other, "Wide");
+      await expect(page.locator("html")).toHaveCSS(
+        "--buzz-message-width",
+        "78rem",
+      );
+      await settle(page);
+      await expectAnchor(page, saved);
+    } finally {
+      await stopRoutes(context);
+      await other.close();
+    }
+  });
 });
