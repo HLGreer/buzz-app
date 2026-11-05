@@ -10,6 +10,15 @@ export function apply(ctx: Context) {
   const h = React.createElement;
   const ui = ctx.conversation;
   const relay = ctx.relay;
+  ui.registerMessageAction({
+    id: "inspect",
+    title: "Inspect message",
+    placement: "toolbar",
+    matches: () => true,
+    component: function Inspect({ message, close }) {
+      return h("button", { onClick: close }, `Inspect ${message.id}`);
+    },
+  });
   function Connected({ connection }: { connection: RelaySnapshot }) {
     const session = connection.session;
     const list = React.useSyncExternalStore(

@@ -23,7 +23,8 @@ import type {
 import type { Contribution } from "../../plugins/contributions";
 import { CustomEmoji } from "../../bundled/emoji/CustomEmoji";
 import { emojiMatches } from "../relay/emoji";
-import { profileTarget } from "../profiles/target";
+import { profileKey, profileTarget } from "../profiles/target";
+import { parseBuzzLink } from "../navigation/buzz-links";
 import styles from "./Messages.module.css";
 import { LinkLabel } from "../../bundled/links/InlineLink";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -86,7 +87,7 @@ function props(
     },
     media: () => undefined,
     onOpenLink: () => false,
-    canOpenLink: () => true,
+    canOpenLink: (target) => !!profileKey(target) || !!parseBuzzLink(target),
     participantProfiles: profiles,
     ...options,
   };
@@ -97,6 +98,38 @@ function render(content: string, options: RenderOptions = {}) {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+it("admits registered panel links from cached Markdown and rechecks activation", () => {
+  const target = "example-plugin://task/123";
+  let installed = false;
+  const onOpenLink = vi.fn(() => true);
+  const canOpenLink = (value: string) => installed && value === target;
+  const content = `[Task](${target}) [Unsafe](https://user:secret@example.test)`;
+  const draw = () => (
+    <MessageMarkdown {...props(content, { canOpenLink, onOpenLink })} />
+  );
+  const view = renderDom(draw());
+  expect(screen.queryByRole("link")).toBeNull();
+  installed = true;
+  view.rerender(draw());
+  const link = screen.getByRole("link", { name: "Task" });
+  expect(link).toHaveAttribute("href", target);
+  fireEvent.click(link, { ctrlKey: true });
+  expect(onOpenLink).toHaveBeenCalledWith(target);
+  expect(link).toHaveFocus();
+  onOpenLink.mockClear();
+  installed = false;
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+  link.dispatchEvent(click);
+  expect(click.defaultPrevented).toBe(true);
+  expect(onOpenLink).not.toHaveBeenCalled();
+  view.rerender(draw());
+  expect(screen.queryByRole("link")).toBeNull();
+  installed = true;
+  view.rerender(draw());
+  fireEvent.click(screen.getByRole("link", { name: "Task" }));
+  expect(onOpenLink).toHaveBeenCalledOnce();
 });
 
 const party = {

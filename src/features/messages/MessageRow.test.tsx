@@ -2742,79 +2742,91 @@ it("contains a throwing plugin action icon and opened component", async () => {
   }
 });
 
-it("keeps a plugin action dialog closed when its plugin is reinstalled with the same key", async () => {
-  const listeners = new Set<() => void>();
-  const entry = () => ({
-    id: "remind",
-    title: "Remind",
-    key: "test.plugin/remind",
-    pluginId: "test.plugin",
-    revision: "one",
-    matches: () => true,
-    component: () => <span>action dialog</span>,
-  });
-  let actions = [entry()];
-  const swap = (next: typeof actions) => {
-    actions = next;
-    act(() => {
-      for (const listener of listeners) listener();
+it.each([undefined, "toolbar"] as const)(
+  "keeps a %s action closed when its plugin is reinstalled with the same key",
+  async (placement) => {
+    const listeners = new Set<() => void>();
+    const entry = () => ({
+      id: "remind",
+      title: "Remind",
+      key: "test.plugin/remind",
+      pluginId: "test.plugin",
+      revision: "one",
+      placement,
+      matches: () => true,
+      component: () => <span>action dialog</span>,
     });
-  };
-  const none: never[] = [];
-  const empty = { snapshot: () => none, subscribe: () => () => {} };
-  const channelList = { channels: [], status: "ready" };
-  const session = {
-    viewer: "viewer",
-    presence: {
-      subscribe: () => () => {},
-      status: () => "unknown",
-      limited: () => false,
-    },
-    unread: {
-      subscribe: () => () => {},
-      subscribeSync: () => () => {},
-      snapshot: () => undefined,
-      following: () => false,
-    },
-    messages: { report: undefined },
-    channels: { subscribeList: () => () => {}, list: () => channelList },
-  } as unknown as RelaySession;
-  try {
-    renderDom(
-      <MessageRow
-        row={{ ...row, replyCount: 0 }}
-        session={session}
-        profile={undefined}
-        media={() => undefined}
-        onOpenLink={() => false}
-        day={false}
-        retry={undefined}
-        extensions={{
-          tools: empty,
-          inline: empty,
-          actions: {
-            snapshot: () => actions,
-            subscribe(listener: () => void) {
-              listeners.add(listener);
-              return () => void listeners.delete(listener);
+    let actions = [entry()];
+    const swap = (next: typeof actions) => {
+      actions = next;
+      act(() => {
+        for (const listener of listeners) listener();
+      });
+    };
+    const none: never[] = [];
+    const empty = { snapshot: () => none, subscribe: () => () => {} };
+    const channelList = { channels: [], status: "ready" };
+    const session = {
+      viewer: "viewer",
+      presence: {
+        subscribe: () => () => {},
+        status: () => "unknown",
+        limited: () => false,
+      },
+      unread: {
+        subscribe: () => () => {},
+        subscribeSync: () => () => {},
+        snapshot: () => undefined,
+        following: () => false,
+      },
+      messages: { report: undefined },
+      channels: { subscribeList: () => () => {}, list: () => channelList },
+    } as unknown as RelaySession;
+    try {
+      renderDom(
+        <MessageRow
+          row={{ ...row, replyCount: 0 }}
+          session={session}
+          profile={undefined}
+          media={() => undefined}
+          onOpenLink={() => false}
+          day={false}
+          retry={undefined}
+          extensions={{
+            tools: empty,
+            inline: empty,
+            actions: {
+              snapshot: () => actions,
+              subscribe(listener: () => void) {
+                listeners.add(listener);
+                return () => void listeners.delete(listener);
+              },
             },
-          },
-        }}
-      />,
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "More message actions" }),
-    );
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Remind" }));
-    expect(await screen.findByText("action dialog")).toBeInTheDocument();
-    swap([]);
-    expect(screen.queryByText("action dialog")).toBeNull();
-    swap([entry()]);
-    expect(screen.queryByText("action dialog")).toBeNull();
-  } finally {
-    cleanup();
-  }
-});
+          }}
+        />,
+      );
+      if (placement === "toolbar") {
+        const button = screen.getByRole("button", { name: "Remind" });
+        button.focus();
+        await userEvent.setup().keyboard("{Enter}");
+      } else {
+        fireEvent.click(
+          screen.getByRole("button", { name: "More message actions" }),
+        );
+        fireEvent.click(
+          await screen.findByRole("menuitem", { name: "Remind" }),
+        );
+      }
+      expect(await screen.findByText("action dialog")).toBeInTheDocument();
+      swap([]);
+      expect(screen.queryByText("action dialog")).toBeNull();
+      swap([entry()]);
+      expect(screen.queryByText("action dialog")).toBeNull();
+    } finally {
+      cleanup();
+    }
+  },
+);
 
 it.each(["timeline", "thread", "continuation"] as const)(
   "right-aligns own %s rows and keeps only the last grouped avatar",
