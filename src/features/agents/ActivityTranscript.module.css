@@ -141,7 +141,7 @@
   color: var(--text-danger);
 }
 .summary {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: min(10rem, calc(100% - var(--space-8) - var(--space-4)));
   overflow: hidden;
   text-overflow: ellipsis;

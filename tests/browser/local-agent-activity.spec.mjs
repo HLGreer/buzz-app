@@ -779,22 +779,24 @@ test("the published-activity tab shows turns its agent published", async ({
   );
   const toolSummary = page.locator("summary").filter({ hasText: path });
   await toolSummary.click();
-  await page.setViewportSize({ width: 390, height: 950 });
-  for (const size of ["150%", "200%"]) {
-    await page.evaluate((value) => {
-      document.documentElement.style.fontSize = value;
-    }, size);
-    await expect
-      .poll(async () => {
-        const label = await toolSummary
-          .getByText(path, { exact: true })
-          .boundingBox();
-        return label?.width ?? 0;
-      })
-      .toBeGreaterThan(100);
-    await expect
-      .poll(async () => (await toolSummary.boundingBox())?.height ?? Infinity)
-      .toBeLessThan(300);
+  for (const width of [390, 360]) {
+    await page.setViewportSize({ width, height: 950 });
+    for (const size of ["150%", "200%"]) {
+      await page.evaluate((value) => {
+        document.documentElement.style.fontSize = value;
+      }, size);
+      await expect
+        .poll(async () => {
+          const label = await toolSummary
+            .getByText(path, { exact: true })
+            .boundingBox();
+          return label?.width ?? 0;
+        })
+        .toBeGreaterThan(100);
+      await expect
+        .poll(async () => (await toolSummary.boundingBox())?.height ?? Infinity)
+        .toBeLessThan(300);
+    }
   }
   await page.evaluate(() => {
     document.documentElement.style.removeProperty("font-size");
