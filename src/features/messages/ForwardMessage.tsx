@@ -443,6 +443,7 @@ function ForwardMessageDialog({
             session={session}
             scope={scope}
             selected={people}
+            labels={people}
             disabled={locked}
             maxRecipients={1}
             appearance="field"
