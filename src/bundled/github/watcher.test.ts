@@ -993,6 +993,7 @@ describe("github_watch_pr", () => {
   it("tells a running watch what rules saved in Settings allow", async () => {
     const app = setup();
     await app.call({ url });
+    savePolicy("", "deny");
     render(createElement(AuthorSettings, { active: () => true }));
     const save = (rules: string) => {
       fireEvent.change(screen.getByRole("textbox", { name: /Rules/ }), {
@@ -1000,7 +1001,6 @@ describe("github_watch_pr", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
     };
-    fireEvent.click(screen.getByRole("radio", { name: "Don’t wake it" }));
     save("allow author:wen");
     const wen = { id: "I1", login: "wen", body: "body-wen" };
     const stranger = { id: "I2", login: "stranger", body: "body-stranger" };
