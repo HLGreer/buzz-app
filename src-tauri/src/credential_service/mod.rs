@@ -94,6 +94,8 @@ struct Inner {
     pairings: Pairings,
     /// Each paired token's rate, by its digest; only for this run.
     owner_budgets: Mutex<HashMap<[u8; 32], [Budget; METHODS.len() + 1]>>,
+    /// The home this service advertised in, so it removes only its own.
+    advertised: Mutex<Option<std::path::PathBuf>>,
     /// Held by a test to pause paired requests once admitted, before their call.
     #[cfg(test)]
     owner_call_gate: tokio::sync::RwLock<()>,
@@ -203,6 +205,7 @@ impl CredentialService {
             session,
             pairings: Pairings::new(keychain, notify),
             owner_budgets: Mutex::default(),
+            advertised: Mutex::default(),
             #[cfg(test)]
             owner_call_gate: tokio::sync::RwLock::default(),
         }));
@@ -417,6 +420,9 @@ impl CredentialService {
     /// Starts the listener now, not at the first agent spawn, and advertises
     /// it, so a command-line tool can pair with no agent running.
     pub(crate) async fn start(&self) -> Result<(), String> {
+        self.start_in(dirs::home_dir()).await
+    }
+    async fn start_in(&self, home: Option<std::path::PathBuf>) -> Result<(), String> {
         if cfg!(windows) {
             return Ok(());
         }
@@ -430,15 +436,27 @@ impl CredentialService {
             .await?
             .clone();
         #[cfg(unix)]
-        if let Some(home) = dirs::home_dir() {
+        if let Some(home) = home {
             advertise::write(&home, &self.0.instance, &url)
                 .map_err(|_| "Could not advertise the Buzz credential service")?;
+            *self
+                .0
+                .advertised
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) = Some(home);
         }
         Ok(())
     }
-    /// Removes the advertisement, on quit.
+    /// Removes the advertisement, on quit, if this service wrote it: one
+    /// refused the lease must not remove the one its instance is serving.
     pub(crate) fn stop(&self) {
-        if let Some(home) = dirs::home_dir() {
+        let advertised = self
+            .0
+            .advertised
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(home) = advertised {
             advertise::remove(&home, &self.0.instance);
         }
     }

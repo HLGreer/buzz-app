@@ -863,7 +863,10 @@ pub(crate) fn sign_out_wipe_refusal() -> Option<&'static str> {
 /// Paired tools act as this human, whose key a plain sign-out keeps, so it
 /// needs their revoke-all at least owed: once the marker is saved, the next
 /// launch finishes it. Sign out and erase needs it done.
-fn pairings_allow(cleared: &Result<(), crate::credential_service::Unrevoked>, wipe: bool) -> bool {
+pub(crate) fn pairings_allow(
+    cleared: &Result<(), crate::credential_service::Unrevoked>,
+    wipe: bool,
+) -> bool {
     match cleared {
         Ok(()) => true,
         Err(unrevoked) => !wipe && unrevoked.recorded,

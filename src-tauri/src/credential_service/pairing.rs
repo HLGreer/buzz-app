@@ -1,7 +1,7 @@
 //! `pair`: a command-line tool asks to act as the human; the human approves
 //! it in Buzz. Only each token's SHA-256 is kept, in the OS keychain, bound
 //! to the human, store account and NIP-FI account that approved it.
-use super::keychain::{Keychain, Lease};
+use super::keychain::{Keychain, Lease, LEASED};
 use super::{digest, unix_now, Failure};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -504,10 +504,19 @@ impl Pairings {
     /// Saves an owed revoke-all: the marker first, so a refused clear is
     /// still owed next launch, then the records, then the marker's removal.
     async fn clear_locked(&self) -> Result<(), Unrevoked> {
-        // Another app holds the records: this one never read or saved any, so
-        // none acts here, and it must not write over that app's.
-        if self.lease().is_err() {
-            return Ok(());
+        match self.lease() {
+            Ok(()) => {}
+            // Another app holds the records: this one never read or saved
+            // any, so none acts here, and it must not write over that app's.
+            Err(message) if message == LEASED => return Ok(()),
+            // Unchecked, the records may be this app's: the clear is owed.
+            Err(message) => {
+                let keychain = self.keychain.clone();
+                let recorded = tokio::task::spawn_blocking(move || keychain.set_owed(true).is_ok())
+                    .await
+                    .unwrap_or(false);
+                return Err(Unrevoked { recorded, message });
+            }
         }
         let keychain = self.keychain.clone();
         tokio::task::spawn_blocking(move || {

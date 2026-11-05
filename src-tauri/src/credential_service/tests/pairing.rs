@@ -790,3 +790,46 @@ async fn a_second_app_over_the_same_pairings_serves_none_of_them() {
     let reply = ask(&fixture, &token, "get_public_key", &[]).await;
     assert_eq!(error(&reply), (StatusCode::UNAUTHORIZED, "revoked"));
 }
+
+/// A second app refused the lease never advertised, so quitting leaves the
+/// first app's advertisement, which that app removes when it quits.
+#[cfg(unix)]
+#[tokio::test]
+async fn only_the_app_that_advertised_removes_the_advertisement() {
+    let fixture = fixture();
+    let home = tempfile::tempdir().unwrap();
+    let file = super::super::advertise::path(home.path(), "xyz.block.buzz.test");
+    fixture
+        .service
+        .start_in(Some(home.path().to_owned()))
+        .await
+        .unwrap();
+    let second = service_over(
+        &fixture.host,
+        &fixture.identity,
+        &fixture.keychain,
+        &fixture.notices,
+        IdentityHost::fixture(),
+    );
+    assert!(second.start_in(Some(home.path().to_owned())).await.is_err());
+    second.stop();
+    assert!(file.exists(), "the first app is still discoverable");
+    fixture.service.stop();
+    assert!(!file.exists());
+}
+
+/// A lease that cannot be taken or checked is not another app's: the clear
+/// is not reported done, and with no owed marker sign-out refuses it.
+#[tokio::test]
+async fn a_lease_that_cannot_be_checked_does_not_clear_the_pairings() {
+    let fixture = fixture();
+    fixture.keychain.fail_lease.store(true, Ordering::SeqCst);
+    fixture.keychain.fail_owed.store(true, Ordering::SeqCst);
+    let cleared = fixture.service.clear_pairings().await;
+    assert!(matches!(cleared, Err(ref unrevoked) if !unrevoked.recorded));
+    assert!(!crate::sign_out::pairings_allow(&cleared, false));
+    fixture.keychain.fail_owed.store(false, Ordering::SeqCst);
+    let cleared = fixture.service.clear_pairings().await;
+    assert!(matches!(cleared, Err(ref unrevoked) if unrevoked.recorded));
+    assert!(fixture.keychain.owed.load(Ordering::SeqCst));
+}

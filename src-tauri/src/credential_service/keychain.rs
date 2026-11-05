@@ -20,21 +20,30 @@ pub(crate) trait Keychain: Send + Sync {
 /// Held for as long as this app serves the records; see [`Keychain::lease`].
 pub(crate) type Lease = Box<dyn Send + Sync>;
 pub(crate) const LEASED: &str = "Another Buzz is serving paired tools; quit it, then retry";
+/// The lease could not be taken or checked, so no other app is known to hold it.
+pub(crate) const UNLEASED: &str = "Paired tools could not be checked";
 
 /// The lease on the records an owed-clear marker at `marker` belongs to: an
 /// exclusive lock on a file beside it, released when its process exits.
 #[cfg_attr(test, allow(dead_code))]
 fn lease_at(marker: &std::path::Path) -> Result<Lease, String> {
     if let Some(dir) = marker.parent() {
-        std::fs::create_dir_all(dir).map_err(|_| LEASED.to_string())?;
+        std::fs::create_dir_all(dir).map_err(|_| UNLEASED.to_string())?;
     }
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(marker.with_extension("lease"))
-        .map_err(|_| LEASED.to_string())?;
-    fs2::FileExt::try_lock_exclusive(&file).map_err(|_| LEASED.to_string())?;
+        .map_err(|_| UNLEASED.to_string())?;
+    fs2::FileExt::try_lock_exclusive(&file).map_err(|e| {
+        if e.kind() == fs2::lock_contended_error().kind() {
+            LEASED
+        } else {
+            UNLEASED
+        }
+        .to_string()
+    })?;
     Ok(Box::new(file))
 }
 
@@ -152,6 +161,7 @@ pub(crate) struct Memory {
     pub(crate) fail_read: std::sync::atomic::AtomicBool,
     pub(crate) fail_write: std::sync::atomic::AtomicBool,
     pub(crate) fail_owed: std::sync::atomic::AtomicBool,
+    pub(crate) fail_lease: std::sync::atomic::AtomicBool,
     /// Whether a service holds its lease.
     pub(crate) leased: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Taken by the next write: it reports entering, then waits for release.
@@ -194,6 +204,9 @@ impl Keychain for std::sync::Arc<Memory> {
     }
     fn lease(&self) -> Result<Lease, String> {
         use std::sync::atomic::Ordering::SeqCst;
+        if self.fail_lease.load(SeqCst) {
+            return Err(UNLEASED.into());
+        }
         struct Held(std::sync::Arc<std::sync::atomic::AtomicBool>);
         impl Drop for Held {
             fn drop(&mut self) {
