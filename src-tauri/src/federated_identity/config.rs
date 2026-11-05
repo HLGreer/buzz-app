@@ -62,10 +62,11 @@ const MAX_SERVERS: usize = 16;
 /// Unset: the built-in server only. Empty: none. A descriptor or a list of
 /// them: those servers, then the built-in one. A Builderlab URL for another
 /// deployment turns the built-in server off when nothing is added, so that
-/// build has no Builderlab sign-in outside live development. The first server
-/// is the build's Builderlab, used by the Builderlab plugin. A development
-/// build with a pinned viewer (`dev_viewer`) and nothing added keeps the
-/// development broker's Builderlab sign-in, as before the built-in server.
+/// build has no first-run Builderlab sign-in, and none at all outside live
+/// development. The first server is the build's Builderlab, used by the
+/// Builderlab plugin. A development build with a pinned viewer (`dev_viewer`)
+/// and nothing added keeps the development broker's Builderlab sign-in for the
+/// Builderlab plugin, as before the built-in server; first run never uses it.
 #[allow(dead_code)] // Called by build.rs.
 pub(crate) fn compiled(
     added: Option<&str>,

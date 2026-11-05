@@ -46,8 +46,10 @@ end reads native's compiled server list and matches with native's own rules
 exact host, or one label under a wildcard on the default port. A relay's NIP-11
 `self` key never decides. A build without a sign-in server (FI set empty,
 another or an empty `BUZZ_BUILDERLAB_URL`, or `tauri dev` with the development
-broker pinned) has no Builderlab sign-in, so it hosts none, whatever its
-Builderlab URL. The answer applies only to the lookup that
+broker pinned) has no first-run Builderlab sign-in, so it hosts none, whatever
+its Builderlab URL. In live development the Builderlab plugin still signs in
+through the development broker (unless `BUZZ_BUILDERLAB_URL` is empty), but
+first run never uses that sign-in. The answer applies only to the lookup that
 asked: Cancel, another address or leaving the screen discards it. Such a
 community requires Builderlab sign-in, so it starts at once there, exactly as
 the welcome screen's own button does, and the welcome screen shows it pending
@@ -69,8 +71,8 @@ signed in, continues from there with no link step and no backup offer (once the
 app opens, the key's backup choice is
 [filled in like any missing one](#automatic-backup-consent-hooks)); **Back**
 returns to the welcome screen with the address kept. A build without a sign-in
-server skips that page: with no Builderlab sign-in to offer, every found
-community opens **Enter your private key**, whose **Back** returns to the
+server skips that page: with no first-run Builderlab sign-in to offer, every
+found community opens **Enter your private key**, whose **Back** returns to the
 welcome screen with the address kept.
 
 Success continues to **Getting ready**, with an animated bee. Detailed operation

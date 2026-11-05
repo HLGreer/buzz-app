@@ -96,8 +96,10 @@ another deployment, add its sign-in server below, such as the
 or in the process running `bin/pnpm build` / `bin/pnpm tauri build` for
 packaging. Unset or set to `https://app.builderlab.xyz`, it keeps the built-in
 server. Another origin, or an empty value, turns it off when nothing is added;
-such a build has no Builderlab, except that live development signs in to this
-origin through the development broker. Alongside an added sign-in server, a
+such a build has no Builderlab. Live development is the exception for another
+origin: the Builderlab plugin still signs in to it through the development
+broker, but the welcome screen never offers that sign-in. An empty value leaves
+even that unconfigured. Alongside an added sign-in server, a
 nonempty `BUZZ_BUILDERLAB_URL` fails the build.
 
 ## Federated identity build input
