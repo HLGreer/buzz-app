@@ -4,6 +4,7 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -44,8 +45,9 @@ impl Drop for Attempt {
         self.task.abort();
     }
 }
+/// One pending attempt per owner, keyed by the caller's owner key.
 #[derive(Clone, Default)]
-pub(crate) struct OAuthCallbackHost(Arc<Mutex<Option<Attempt>>>);
+pub(crate) struct OAuthCallbackHost(Arc<Mutex<HashMap<String, Attempt>>>);
 
 impl OAuthCallbackHost {
     pub(crate) fn document_load(
@@ -55,27 +57,30 @@ impl OAuthCallbackHost {
     ) -> Result<(), String> {
         if label == "main" && event == tauri::webview::PageLoadEvent::Started {
             // The new document cannot recover the previous plugin's attempt ID.
-            self.0.lock().map_err(|_| "Sign-in unavailable")?.take();
+            self.0.lock().map_err(|_| "Sign-in unavailable")?.clear();
         }
         Ok(())
     }
 
     pub(crate) fn begin(
         &self,
+        owner: &str,
         request: OAuthRequest,
         open: impl FnOnce(&str) -> Result<(), String>,
     ) -> Result<OAuthAttempt, String> {
-        self.begin_with_parameter(request, "redirect_uri", open)
+        self.begin_with_parameter(owner, request, "redirect_uri", open)
     }
 
     /// NIP-FA binds its handoff secret instead of requiring echoed OAuth state.
     /// The attempt and all callback values stay inside the native session owner.
     pub(crate) fn begin_federated(
         &self,
+        owner: &str,
         authorization_url: String,
         open: impl FnOnce(&str) -> Result<(), String>,
     ) -> Result<OAuthAttempt, String> {
         self.begin_with_parameter(
+            owner,
             OAuthRequest {
                 authorization_url,
                 callback_path: format!("/federated/{}", uuid::Uuid::new_v4()),
@@ -88,6 +93,7 @@ impl OAuthCallbackHost {
 
     fn begin_with_parameter(
         &self,
+        owner: &str,
         request: OAuthRequest,
         callback_parameter: &str,
         open: impl FnOnce(&str) -> Result<(), String>,
@@ -119,9 +125,9 @@ impl OAuthCallbackHost {
         {
             return Err("Invalid callback path".into());
         }
-        let mut current = self.0.lock().map_err(|_| "Sign-in unavailable")?;
-        if current
-            .as_ref()
+        let mut attempts = self.0.lock().map_err(|_| "Sign-in unavailable")?;
+        if attempts
+            .get(owner)
             .is_some_and(|attempt| attempt.retain_result || !attempt.task.is_finished())
         {
             return Err("An OAuth callback is already pending".into());
@@ -172,15 +178,18 @@ impl OAuthCallbackHost {
             let _ = send.send(result);
         });
         let id = uuid::Uuid::new_v4().to_string();
-        *current = Some(Attempt {
-            id: id.clone(),
-            result: Some(receive),
-            task,
-            // A native FI login retains its completed handoff until wait/cancel.
-            // Generic OAuth keeps its existing finished-task replacement rule.
-            retain_result: callback_parameter == "return_to",
-        });
-        drop(current);
+        attempts.insert(
+            owner.to_owned(),
+            Attempt {
+                id: id.clone(),
+                result: Some(receive),
+                task,
+                // A native FI login retains its completed handoff until wait/cancel.
+                // Generic OAuth keeps its existing finished-task replacement rule.
+                retain_result: callback_parameter == "return_to",
+            },
+        );
+        drop(attempts);
         if open(authorization.as_str()).is_err() {
             self.cancel(&id)?;
             return Err("Could not open the sign-in browser".into());
@@ -192,29 +201,26 @@ impl OAuthCallbackHost {
     }
 
     pub(crate) async fn wait(&self, id: &str) -> CallbackResult {
-        let receiver = {
-            let mut current = self.0.lock().map_err(|_| "Sign-in unavailable")?;
-            current
-                .as_mut()
-                .filter(|attempt| attempt.id == id)
-                .and_then(|attempt| attempt.result.take())
-                .ok_or("Sign-in is no longer available")?
-        };
+        let receiver = self
+            .0
+            .lock()
+            .map_err(|_| "Sign-in unavailable")?
+            .values_mut()
+            .find(|attempt| attempt.id == id)
+            .and_then(|attempt| attempt.result.take())
+            .ok_or("Sign-in is no longer available")?;
         let result = receiver
             .await
             .unwrap_or_else(|_| Err("Sign-in canceled.".into()));
-        let mut current = self.0.lock().map_err(|_| "Sign-in unavailable")?;
-        if current.as_ref().is_some_and(|attempt| attempt.id == id) {
-            current.take();
-        }
+        self.cancel(id)?;
         result
     }
 
     pub(crate) fn cancel(&self, id: &str) -> Result<(), String> {
-        let mut current = self.0.lock().map_err(|_| "Sign-in unavailable")?;
-        if current.as_ref().is_some_and(|attempt| attempt.id == id) {
-            *current = None;
-        }
+        self.0
+            .lock()
+            .map_err(|_| "Sign-in unavailable")?
+            .retain(|_, attempt| attempt.id != id);
         Ok(())
     }
 }

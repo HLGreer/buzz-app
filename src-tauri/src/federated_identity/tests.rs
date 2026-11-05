@@ -211,9 +211,16 @@ async fn restored_snapshots_do_not_wait_for_an_interactive_operation() {
 #[tokio::test]
 async fn cancel_releases_the_native_callback_before_a_replacement_login() {
     let owner = host(Arc::new(Memory::default()));
+    let server = owner.0.fingerprint.as_str();
     let callbacks = crate::oauth_callback::OAuthCallbackHost::default();
     let url = "https://identity.example/v1/login/start";
-    let attempt = callbacks.begin_federated(url.into(), |_| Ok(())).unwrap();
+    let attempt = callbacks
+        .begin_federated(server, url.into(), |_| Ok(()))
+        .unwrap();
+    // A peer server's sign-in has its own slot and survives this server's cleanup.
+    let peer = callbacks
+        .begin_federated("peer", url.into(), |_| Ok(()))
+        .unwrap();
     let guard = CallbackGuard(callbacks.clone(), attempt.id);
     {
         let mut state = owner.state();
@@ -222,10 +229,31 @@ async fn cancel_releases_the_native_callback_before_a_replacement_login() {
         state.callback = Some(guard.clone());
     }
     owner.cancel_sign_in();
-    let replacement = callbacks.begin_federated(url.into(), |_| Ok(())).unwrap();
+    let replacement = callbacks
+        .begin_federated(server, url.into(), |_| Ok(()))
+        .unwrap();
     drop(guard); // The old future's cleanup cannot cancel the replacement.
-    assert!(callbacks.begin_federated(url.into(), |_| Ok(())).is_err());
+    assert!(callbacks
+        .begin_federated(server, url.into(), |_| Ok(()))
+        .is_err());
     callbacks.cancel(&replacement.id).unwrap();
+    let peer_url = url::Url::parse(&peer.callback_url).unwrap();
+    let mut stream = tokio::net::TcpStream::connect(peer_url.authority())
+        .await
+        .unwrap();
+    tokio::io::AsyncWriteExt::write_all(
+        &mut stream,
+        format!(
+            "GET {}?code=peer HTTP/1.1\r\nHost: {}\r\n\r\n",
+            peer_url.path(),
+            peer_url.authority()
+        )
+        .as_bytes(),
+    )
+    .await
+    .unwrap();
+    let parameters = callbacks.wait(&peer.id).await.unwrap().parameters;
+    assert_eq!(parameters, [("code".to_string(), "peer".to_string())]);
 }
 
 #[tokio::test]

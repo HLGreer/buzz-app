@@ -526,6 +526,7 @@ async fn recover_with(service: &Service, host: &NsecBackupHost) -> Result<Restor
     let capture = authorization.clone();
     let oauth = callback
         .begin(
+            RESTORE_CALLBACK_OWNER,
             OAuthRequest {
                 authorization_url: "https://signin.example/login".into(),
                 callback_path: "/synthetic".into(),

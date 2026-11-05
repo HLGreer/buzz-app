@@ -17,11 +17,13 @@ each performing its own code exchange and verification:
   artwork, or focus return; their CSP permits only the embedded stylesheet by
   hash and self-contained data assets.
 
-A pending callback cannot be replaced by a new consumer.
+Each caller passes an owner key: native FI uses its server's fingerprint and
+restore a fixed key. An owner's pending attempt cannot be replaced by that owner.
 
 ## Attempts
 
-`begin` validates the request, generates an attempt ID, binds `127.0.0.1` on an
+`begin` validates the request, refuses an owner whose attempt is still pending,
+generates an attempt ID, binds `127.0.0.1` on an
 ephemeral port, inserts the callback URL as `redirect_uri` and optional state,
 and launches the external browser through the caller's opener. Launch failure
 cleans up before returning an error. `wait` consumes the matching attempt's
@@ -41,9 +43,11 @@ request. A caller using standard OAuth must send it unchanged as `redirect_uri`
 during token exchange, as required by
 [RFC 6749 §4.1.3](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1.3).
 
-Only one listener can be pending at a time. Callers serialize their complete
-begin/wait/cancel sequence: starting another attempt after a listener finishes
-can replace its unconsumed result.
+Each owner has one slot. Attempts from different owners may be pending at once,
+each on its own port and path, and end only through their own wait, cancel,
+timeout, launch failure, or a main-document load. An owner serializes its own
+begin/wait/cancel sequence: after its generic listener finishes, its next attempt
+can replace the unconsumed result. A native FI result stays until wait or cancel.
 
 ## State protection
 

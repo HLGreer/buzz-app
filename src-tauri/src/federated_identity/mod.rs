@@ -809,7 +809,7 @@ impl FederatedIdentity {
             .append_pair("handoff_challenge_method", "S256");
         let callback = app.state::<crate::oauth_callback::OAuthCallbackHost>();
         let attempt = callback
-            .begin_federated(login.to_string(), |url| {
+            .begin_federated(&self.0.fingerprint, login.to_string(), |url| {
                 app.opener()
                     .open_url(url, None::<&str>)
                     .map_err(|_| "browser-unavailable".into())

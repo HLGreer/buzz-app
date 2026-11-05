@@ -31,6 +31,8 @@ const CANCELED: &str = "Restore was canceled. Try again.";
 // (`recoveryOff` in `src/features/identity/service.ts`).
 const UNAVAILABLE: &str = "Backup recovery is unavailable.";
 const REFUSED: &str = "Backup recovery is not offered for this account.";
+/// Restore's own callback slot, so it never waits on a server's FI sign-in.
+const RESTORE_CALLBACK_OWNER: &str = "nsec-restore";
 type Result<T> = std::result::Result<T, String>;
 
 struct Candidate {
@@ -700,6 +702,7 @@ impl NsecBackupHost {
             return Err("A restore is already in progress".into());
         }
         let oauth = callback.begin(
+            RESTORE_CALLBACK_OWNER,
             OAuthRequest {
                 authorization_url: login.into(),
                 callback_path: format!("/callback/{}", uuid::Uuid::new_v4()),
