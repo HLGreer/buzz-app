@@ -19,6 +19,7 @@ import { hasTag, tag } from "../relay/events";
 import { ownSolo, soloLabels } from "../solo/labels";
 import { regionLabels, soloRegionLabel } from "../solo/region-labels";
 import { soloDraftTarget } from "./routes";
+import { leadUnavailableMessage } from "../relay/solo-preferences";
 import { createSoloWorkspaces } from "./solo-workspaces";
 import {
   projectSoloRegions,
@@ -498,7 +499,10 @@ export class SoloNavigationService extends Service implements SoloNavigation {
       label,
       async workspaceLead(binding, workspaceId) {
         const session = current(binding);
-        await session.soloPreferences.refresh();
+        await Promise.all([
+          session.soloPreferences.refresh(),
+          session.soloPreferences.leads.refresh(),
+        ]);
         current(binding);
         const catalog = host.workspaces.snapshot(binding);
         if (catalog.status !== "ready")
@@ -507,6 +511,9 @@ export class SoloNavigationService extends Service implements SoloNavigation {
           ({ id }) => id === workspaceId,
         );
         if (!workspace) throw new Error("The workspace is unavailable.");
+        // An unread Lead is not an absent one: a draft could duplicate it.
+        if (session.soloPreferences.leads.snapshot().status !== "ready")
+          throw new Error(leadUnavailableMessage);
         if (!workspace.lead) return;
         if (workspace.lead.region !== label)
           throw new Error(
@@ -531,7 +538,10 @@ export class SoloNavigationService extends Service implements SoloNavigation {
           throw new Error(
             "Only your own task in this region can lead a workspace.",
           );
-        await session.soloPreferences.refresh();
+        await Promise.all([
+          session.soloPreferences.refresh(),
+          session.soloPreferences.leads.refresh(),
+        ]);
         current(binding);
         const catalog = host.workspaces.snapshot(binding);
         if (catalog.status !== "ready")
@@ -540,6 +550,8 @@ export class SoloNavigationService extends Service implements SoloNavigation {
           ({ id }) => id === workspaceId,
         );
         if (!workspace) return;
+        if (session.soloPreferences.leads.snapshot().status !== "ready")
+          throw new Error(leadUnavailableMessage);
         const previous = workspace.lead;
         if (previous && previous.channelId !== channelId) {
           if (previous.region !== label)
@@ -562,9 +574,14 @@ export class SoloNavigationService extends Service implements SoloNavigation {
         return saved ? channelId : undefined;
       },
       openDraft(binding, input) {
-        current(binding);
+        const session = current(binding);
         if (input.mode !== "task" || !host.taskSource(label))
           throw new Error("Task drafts are unavailable for this region");
+        if (
+          input.seed?.project?.lead &&
+          session.soloPreferences.leads.snapshot().status !== "ready"
+        )
+          throw new Error(leadUnavailableMessage);
         const primary = input.seed?.primary;
         if (primary !== undefined && !/^[0-9a-f]{64}$/.test(primary))
           throw new Error("Invalid primary agent");

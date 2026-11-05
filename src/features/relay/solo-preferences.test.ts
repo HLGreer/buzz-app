@@ -3,15 +3,19 @@ import { TEAM_MANIFEST_TAG } from "../channel-templates/team-payload";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "./session";
 import {
-  coordinate,
   KIT_TAG,
+  LEADS_TAG,
+  leadsCoordinate,
   ME_KIT_TAG,
-  kitTag,
   kitRecordFits,
   parseKitRecord,
+  privateCoordinate,
+  privateTag,
   type Groups,
   type KitRecord,
+  type PrivateRecord,
 } from "../channel-templates/model";
+import leadCases from "../channel-templates/workspace-leads-admission-contract.json";
 import { matchesEvent } from "./projection";
 import { flush, keypair, roster, scriptedTransport, signed } from "./testing";
 import type { ReadFilter, RelayEvent } from "./events";
@@ -41,25 +45,35 @@ function fixture() {
     starred: [],
     muted: [],
   };
-  const install = (value: Groups, deleted = false) => {
-    const record: KitRecord = { version: 1, community, deleted, value };
+  const installRecord = (record: PrivateRecord) =>
     events.push(
       signed(viewer, {
         kind: 30078,
         created_at: time++,
         tags: [
-          ["d", coordinate(record)],
-          ["t", kitTag(record)],
+          ["d", privateCoordinate(record)],
+          ["t", privateTag(record)],
         ],
         content: JSON.stringify(record),
       }),
     );
+  const install = (value: Groups, deleted = false) => {
+    const record: KitRecord = { version: 1, community, deleted, value };
+    installRecord(record);
   };
-  const query = vi.fn(async (filters: readonly ReadFilter[]) =>
-    events.filter((event) =>
+  const leadReads = { fail: false };
+  const query = vi.fn(async (filters: readonly ReadFilter[]) => {
+    if (
+      leadReads.fail &&
+      filters.some((filter) =>
+        filter["#d"]?.includes(leadsCoordinate(community)),
+      )
+    )
+      throw new Error("Leads read failed");
+    return events.filter((event) =>
       filters.some((filter) => matchesEvent(event, filter)),
-    ),
-  );
+    );
+  });
   const assignment = vi.fn(async (intent) => {
     const assignments = { ...legacy.assignments };
     if (intent.sectionId) assignments[intent.channelId] = intent.sectionId;
@@ -126,6 +140,8 @@ function fixture() {
     publish,
     prepare,
     install,
+    installRecord,
+    leadReads,
     events,
     preferences: owner.session.sidebarPreferences,
   };
@@ -394,10 +410,26 @@ it("checks the exact project capacity before saving and reclaims a removed filin
   }
 });
 
-it("keeps the optional workspace lead through filing and reload, fencing conflicting replacements", async () => {
+const lead = { region: "buzz.region:nexus:tasks", channelId: channel };
+const leadsRecord = (
+  leads: Record<string, Record<string, unknown>>,
+  extra: Record<string, unknown> = {},
+) =>
+  ({
+    version: 1,
+    community,
+    deleted: false,
+    value: { type: "workspace-leads", id: "me", leads, ...extra },
+  }) as PrivateRecord;
+const written = (f: ReturnType<typeof fixture>, tag: string) =>
+  f.publish.mock.calls
+    .map(([event]) => event)
+    .filter((event) => event.tags.some((t) => t[0] === "t" && t[1] === tag))
+    .map((event) => JSON.parse(event.content));
+
+it("keeps Leads in their own record, fencing conflicting replacements and leaving Groups at main's fields", async () => {
   const f = fixture();
   const preferences = f.session.soloPreferences;
-  const lead = { region: "buzz.region:nexus:tasks", channelId: channel };
   try {
     f.install(groups);
     await preferences.refresh();
@@ -405,22 +437,39 @@ it("keeps the optional workspace lead through filing and reload, fencing conflic
       { workspaceId: "work", lead },
       new AbortController().signal,
     );
-    expect(preferences.snapshot().data?.sections[0]?.lead).toEqual(lead);
-    await preferences.assign(other, undefined);
-    await preferences.refresh();
-    expect(preferences.snapshot().data?.sections[0]?.lead).toEqual(lead);
+    expect(preferences.leads.snapshot()).toEqual({
+      status: "ready",
+      leads: { work: lead },
+    });
+    const [saved] = written(f, LEADS_TAG);
+    expect(saved).toEqual(leadsRecord({ work: lead }));
+    expect(
+      f.publish.mock.calls[0]?.[0].tags.find((t) => t[0] === "d")?.[1],
+    ).toBe(leadsCoordinate(community));
+    // The catalog never fetches the Leads record; older clients cannot either.
+    await f.session.channelKit.refresh();
+    expect(
+      f.query.mock.calls.some(([filters]) =>
+        filters.some((filter) => filter["#t"]?.includes(LEADS_TAG)),
+      ),
+    ).toBe(false);
     const writes = f.publish.mock.calls.length;
     await preferences.setWorkspaceLead(
       { workspaceId: "work", lead },
       new AbortController().signal,
     );
     expect(f.publish).toHaveBeenCalledTimes(writes);
-    await expect(
-      preferences.setWorkspaceLead(
-        { workspaceId: "work", lead: { ...lead, channelId: other } },
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("already has a lead");
+    for (const expected of [undefined, "stale"])
+      await expect(
+        preferences.setWorkspaceLead(
+          {
+            workspaceId: "work",
+            lead: { ...lead, channelId: other },
+            ...(expected ? { expected } : {}),
+          },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow("already has a lead");
     expect(f.publish).toHaveBeenCalledTimes(writes);
     expect(
       await preferences.setWorkspaceLead(
@@ -428,16 +477,6 @@ it("keeps the optional workspace lead through filing and reload, fencing conflic
         new AbortController().signal,
       ),
     ).toBe(false);
-    await expect(
-      preferences.setWorkspaceLead(
-        {
-          workspaceId: "work",
-          lead: { ...lead, channelId: other },
-          expected: "stale",
-        },
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("already has a lead");
     await preferences.setWorkspaceLead(
       {
         workspaceId: "work",
@@ -446,12 +485,124 @@ it("keeps the optional workspace lead through filing and reload, fencing conflic
       },
       new AbortController().signal,
     );
-    expect(preferences.snapshot().data?.sections[0]?.lead?.channelId).toBe(
-      other,
+    expect(preferences.leads.snapshot().leads.work?.channelId).toBe(other);
+    await preferences.assign(other, undefined);
+    await preferences.createSection({ id: "next", name: "Next" });
+    // Every Groups record this change emits keeps main's strict workspace
+    // fields; the shared corpus runs the same shape through native admission.
+    const emitted = written(f, ME_KIT_TAG);
+    expect(emitted.length).toBeGreaterThan(1);
+    for (const record of emitted)
+      for (const group of record.value.groups)
+        expect(Object.keys(group).sort()).toEqual([
+          "defaultTemplateId",
+          "id",
+          "name",
+        ]);
+    const oracle = leadCases.find((item) =>
+      item.name.startsWith("groups emitted beside leads"),
+    );
+    expect(oracle?.accepted).toBe(true);
+    expect(Object.keys(oracle?.record.value.groups?.[0] ?? {}).sort()).toEqual([
+      "defaultTemplateId",
+      "id",
+      "name",
+    ]);
+  } finally {
+    f.dispose();
+  }
+});
+
+it("keeps unknown Leads fields, hides and prunes orphans, and best-effort removes a deleted workspace's Lead", async () => {
+  const f = fixture();
+  const preferences = f.session.soloPreferences;
+  try {
+    f.install({
+      ...groups,
+      groups: [
+        ...groups.groups,
+        { id: "next", name: "Next", defaultTemplateId: "" },
+      ],
+    });
+    f.installRecord(
+      leadsRecord(
+        {
+          work: { ...lead, pinnedAt: 1 },
+          gone: lead,
+        },
+        { future: { kept: true } },
+      ),
+    );
+    await preferences.refresh();
+    await f.session.soloPreferences.leads.refresh();
+    await preferences.setWorkspaceLead(
+      { workspaceId: "next", lead: { ...lead, channelId: other } },
+      new AbortController().signal,
+    );
+    expect(written(f, LEADS_TAG).at(-1)).toEqual(
+      leadsRecord(
+        {
+          work: { ...lead, pinnedAt: 1 },
+          next: { ...lead, channelId: other },
+        },
+        { future: { kept: true } },
+      ),
     );
     await preferences.removeSection("work");
-    expect(preferences.snapshot().data?.sections).toEqual([]);
-    expect(f.assignment).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(written(f, LEADS_TAG).at(-1)?.value.leads).toEqual({
+        next: { ...lead, channelId: other },
+      }),
+    );
+    expect(written(f, LEADS_TAG).at(-1)?.value.future).toEqual({ kept: true });
+    // A failed cleanup read keeps the Lead and never fails the deletion.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const writes = f.publish.mock.calls.length;
+    f.leadReads.fail = true;
+    await preferences.removeSection("next");
+    expect(preferences.snapshot().data?.sections.map(({ id }) => id)).toEqual(
+      [],
+    );
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(f.publish).toHaveBeenCalledTimes(writes + 1);
+    expect(written(f, LEADS_TAG).at(-1)?.value.leads).toHaveProperty("next");
+  } finally {
+    f.dispose();
+  }
+});
+
+it("isolates an unreadable Leads record from workspaces and the catalog, and never writes over it", async () => {
+  const f = fixture();
+  const preferences = f.session.soloPreferences;
+  try {
+    f.install(groups);
+    f.installRecord(leadsRecord({ work: { ...lead, channelId: "invalid" } }));
+    await preferences.refresh();
+    await preferences.leads.refresh();
+    expect(preferences.leads.snapshot()).toMatchObject({
+      status: "error",
+      error: expect.stringContaining("Invalid workspace lead"),
+    });
+    expect(f.session.channelKit.snapshot().status).toBe("ready");
+    expect(preferences.snapshot().status).toBe("ready");
+    await expect(
+      preferences.setWorkspaceLead(
+        { workspaceId: "work", lead },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Invalid workspace lead");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await preferences.createSection({ id: "next", name: "Next" });
+    await preferences.removeSection("work");
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(written(f, LEADS_TAG)).toEqual([]);
+    // A readable record recovers on the next read.
+    f.installRecord(leadsRecord({ next: lead }));
+    await preferences.leads.refresh();
+    expect(preferences.leads.snapshot()).toEqual({
+      status: "ready",
+      leads: { next: lead },
+    });
   } finally {
     f.dispose();
   }

@@ -441,6 +441,64 @@ it("shares a workspace frame while keeping lead selection, disclosure and chat c
   }
 });
 
+it("selects a Lead workspace only after its separate Leads record is read, with Retry beside a failed read", async () => {
+  const h = fixture();
+  const store = h.store();
+  const onSelect = vi.fn();
+  let ready = false;
+  let release: ((ready: boolean) => void) | undefined;
+  const refresh = vi.fn(
+    () =>
+      new Promise<boolean>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const leads = {
+    get ready() {
+      return ready;
+    },
+    refresh,
+  };
+  await store.queries.ensure();
+  render(
+    h.view(store.queries, "workspace-leads", undefined, undefined, (parts) => (
+      <WorkspaceCompositionContext value={{ ...parts, leads }}>
+        <RegionWorkspace id="work" leadTokenId="lead" onSelect={onSelect} />
+      </WorkspaceCompositionContext>
+    )),
+  );
+  const user = userEvent.setup();
+  try {
+    const title = await screen.findByRole("button", { name: "Work" });
+    await user.click(title);
+    try {
+      expect(refresh).toHaveBeenCalledOnce();
+      // A pending read is not an absent Lead, so no draft opens yet.
+      await user.click(title);
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(onSelect).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => release?.(false));
+    }
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Lead unavailable.");
+    expect(onSelect).not.toHaveBeenCalled();
+    const card = title.closest("[data-navigation-card]");
+    expect(card).toContainElement(alert);
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    expect(refresh).toHaveBeenCalledTimes(2);
+    ready = true;
+    await act(async () => release?.(true));
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await user.click(title);
+    expect(onSelect).toHaveBeenCalledTimes(2);
+    expect(refresh).toHaveBeenCalledTimes(2);
+  } finally {
+    store.dispose();
+  }
+});
+
 it("marks a chat read from its row menu and reports a failed save", async () => {
   const h = fixture();
   const store = h.store();

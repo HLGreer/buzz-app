@@ -139,7 +139,10 @@ that agent in Buzz; they do not notify the external app through this connection.
   that composer establishes the lead. Only the chevron expands or collapses
   the workspace. Hover Solo or a workspace and use **New task**, beside **…**, for another task. The button also appears with keyboard focus. Chat creation
   is available only in **Chats**. The workspace itself stays selected while its Lead
-  conversation is open; the Lead has no separate task row. New task's agent picker
+  conversation is open; the Lead has no separate task row. Lead links are saved
+  apart from workspaces. If they cannot be read, the title shows **Lead
+  unavailable** with **Retry** instead of opening a composer; chats and tasks
+  stay usable. New task's agent picker
   lists agents eligible to run the task on this device.
   Without Nexus, chat creation remains available in the global **+** menu,
   Solo and each workspace; creating a workspace opens a chat draft filed there.

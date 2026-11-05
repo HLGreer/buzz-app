@@ -4,6 +4,7 @@ import { createSoloRegionFixture } from "./solo-navigation-testing";
 import { keypair, signed } from "../relay/testing";
 import { SOLO_LABEL } from "../solo/labels";
 import { createSoloWorkspaces } from "./solo-workspaces";
+import type { LeadsSnapshot } from "../relay/solo-preferences";
 
 it("projects the existing Solo catalog and writer, preserving uncertainty and fencing ended bindings", async () => {
   const binding = { scope: "community", viewer: "owner", incarnation: "first" };
@@ -33,13 +34,35 @@ it("projects the existing Solo catalog and writer, preserving uncertainty and fe
       return { sections, assignments: {}, starred: [], muted: [] };
     },
   });
+  const lead = {
+    region: "buzz.region:example:work",
+    channelId: "11111111-1111-4111-8111-111111111111",
+  };
+  let leads: LeadsSnapshot = { status: "idle", leads: {} };
+  const leadListeners = new Set<() => void>();
   const preferences = Object.assign(
     Object.defineProperties(
       {},
       Object.getOwnPropertyDescriptors(store.queries),
     ) as typeof store.queries,
-    { setWorkspaceLead: async () => true },
+    {
+      setWorkspaceLead: async () => true,
+      leads: {
+        snapshot: () => leads,
+        subscribe(listener: () => void) {
+          leadListeners.add(listener);
+          return () => {
+            leadListeners.delete(listener);
+          };
+        },
+        refresh: async () => {},
+      },
+    },
   );
+  const showLeads = (next: LeadsSnapshot) => {
+    leads = next;
+    for (const listener of leadListeners) listener();
+  };
   const api = createSoloWorkspaces(
     (current) => (connected && current === binding ? preferences : undefined),
     (listener) => {
@@ -73,6 +96,17 @@ it("projects the existing Solo catalog and writer, preserving uncertainty and fe
       { id: "stable", name: "Demo" },
     ]);
     expect(notifications).toBeGreaterThan(0);
+    // Leads join by ID: an orphan never shows, and their failure never
+    // decides the catalog's status.
+    const seen = notifications;
+    showLeads({ status: "ready", leads: { stable: lead, removed: lead } });
+    expect(notifications).toBe(seen + 1);
+    expect(api.snapshot(binding).workspaces).toEqual([
+      { id: "existing", name: "Existing" },
+      { id: "stable", name: "Demo", lead },
+    ]);
+    showLeads({ ...leads, status: "error", error: "Invalid Leads" });
+    expect(api.snapshot(binding).status).toBe("ready");
     connected = false;
     for (const listener of connectionListeners) listener();
     expect(api.snapshot(binding)).toMatchObject({
@@ -89,6 +123,7 @@ it("projects the existing Solo catalog and writer, preserving uncertainty and fe
     store.dispose();
   }
   expect(connectionListeners.size).toBe(0);
+  expect(leadListeners.size).toBe(0);
 });
 
 it("resolves archived lead history and replaces only an authoritatively absent lead, fencing source ownership and binding", async () => {
@@ -98,10 +133,11 @@ it("resolves archived lead history and replaces only an authoritatively absent l
   const second = "22222222-2222-4222-8222-222222222222";
   const label = "buzz.region:example:work";
   let lead = { region: label, channelId: first };
+  let leadsStatus: LeadsSnapshot["status"] = "ready";
   const snapshot = () => ({
     status: "ready" as const,
     data: {
-      sections: [{ id: "work", name: "Work", order: 0, lead }],
+      sections: [{ id: "work", name: "Work", order: 0 }],
       assignments: {},
       starred: [],
       muted: [],
@@ -144,6 +180,14 @@ it("resolves archived lead history and replaces only an authoritatively absent l
       snapshot,
       refresh: async () => {},
       setWorkspaceLead: save,
+      leads: {
+        snapshot: (): LeadsSnapshot => ({
+          status: leadsStatus,
+          leads: { work: lead },
+        }),
+        subscribe: () => () => {},
+        refresh: async () => {},
+      },
     },
   });
   const source = await h.register({
@@ -190,6 +234,22 @@ it("resolves archived lead history and replaces only an authoritatively absent l
       },
       expect.any(AbortSignal),
     );
+    // An unread Lead is not an absent one: never report "no Lead".
+    leadsStatus = "error";
+    await expect(
+      source.handle.workspaceLead(source.binding(), "work"),
+    ).rejects.toThrow("Lead unavailable");
+    await expect(
+      source.handle.setWorkspaceLead(source.binding(), "work", second),
+    ).rejects.toThrow("Lead unavailable");
+    expect(() =>
+      source.handle.openDraft(source.binding(), {
+        mode: "task",
+        seed: { project: { id: "work", label: "Work", lead: true } },
+      }),
+    ).toThrow("Lead unavailable");
+    expect(save).toHaveBeenCalledOnce();
+    leadsStatus = "ready";
     creator = "b".repeat(64);
     await expect(
       source.handle.workspaceLead(source.binding(), "work"),

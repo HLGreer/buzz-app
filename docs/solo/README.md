@@ -51,6 +51,14 @@ behavior on the label, so a rename touches copy only.
   account/community-scoped `groups:me` preference record. Messages groups remain
   independent. Records from before the label also list a `channels` placement
   array; it is ignored and dropped on the next workspace write.
+- Optional workspace Leads use their own encrypted record (`t`
+  `buzz-workspace-leads-v1`, `d`
+  `buzz-workspace-leads-v1:<community>:workspace-leads:me`), never `groups:me`
+  or a catalog tag. It is read and written apart from the recipe catalog, so a
+  failed read affects only Lead selection. Entries are keyed by workspace ID;
+  readers keep unknown record and entry fields. Leads of deleted workspaces are
+  hidden, removed on a best-effort basis after deletion, and pruned on the next
+  Leads write. Nothing writes Leads after a failed read.
 - **Label only:** a private channel without `buzz.solo` is an ordinary Team
   channel, whatever its `about` text. No code reads the retired
   `Buzz session (buzz.sessions/v1)` marker, and there is no migration,

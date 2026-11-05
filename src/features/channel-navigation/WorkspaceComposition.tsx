@@ -1,14 +1,18 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useLayoutEffect,
   useEffectEvent,
+  useRef,
+  useState,
   type ReactNode,
 } from "react";
 import {
   NavigationCard,
   NavigationItem,
 } from "../../shared/design-system/ui/NavigationItem";
+import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { PencilSimpleIcon } from "../../shared/design-system/icons";
 import { SoloDisclosure } from "./SoloDisclosure";
@@ -18,6 +22,8 @@ import styles from "./WorkspaceComposition.module.css";
 /** The existing Solo inventory retains every row, menu, mutation and disclosure. */
 export type WorkspaceComposition = Readonly<{
   leadDraft?: string;
+  /** The separate Leads record. Until it is read, a Lead workspace is not selected. */
+  leads?: Readonly<{ ready: boolean; refresh(): Promise<boolean> }>;
   ordinary: ReactNode;
   chats: ReactNode;
   workspaces: readonly Readonly<{
@@ -55,6 +61,34 @@ export function RegionWorkspace(props: SoloWorkspaceProps) {
   useLayoutEffect(() => {
     if (props.reveal) reveal();
   }, [props.reveal]);
+  const [leadFailed, setLeadFailed] = useState(false);
+  const reading = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const leads = props.leadTokenId ? parts?.leads : undefined;
+  // An unread Lead is not an absent one: its draft could duplicate the Lead.
+  const select = async () => {
+    if (!leads || leads.ready) {
+      setLeadFailed(false);
+      props.onSelect?.();
+      return;
+    }
+    if (reading.current) return;
+    reading.current = true;
+    try {
+      const ready = await leads.refresh();
+      if (!mounted.current) return;
+      setLeadFailed(!ready);
+      if (ready) props.onSelect?.();
+    } finally {
+      reading.current = false;
+    }
+  };
   if (!workspace || !props.id) return null;
   const title = props.id ? workspace.name : "Unfiled";
   const disclosure = (
@@ -75,7 +109,7 @@ export function RegionWorkspace(props: SoloWorkspaceProps) {
           (!!props.leadTokenId && parts?.leadDraft === props.leadTokenId)
         }
         data-solo-workspace-id={workspace.id}
-        onClick={props.onSelect}
+        onClick={() => void select()}
       />
       {disclosure}
       {props.onNewTask && (
@@ -98,6 +132,21 @@ export function RegionWorkspace(props: SoloWorkspaceProps) {
       <NavigationCard
         tone="tonal"
         data-drop-target={props.dropTarget || undefined}
+        footer={
+          leadFailed &&
+          !leads?.ready && (
+            <p role="alert" className="text-body-sm text-danger">
+              Lead unavailable.{" "}
+              <Button
+                variant="plain"
+                size="inline"
+                onClick={() => void select()}
+              >
+                Retry
+              </Button>
+            </p>
+          )
+        }
         body={workspace.panel(props.children)}
       >
         {workspace.header(primary)}

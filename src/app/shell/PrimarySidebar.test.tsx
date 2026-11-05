@@ -998,7 +998,9 @@ it("keeps ordinary Buzz creation controls until a workspace source opts in and r
     }),
   });
   await preferences.queries.ensure();
-  Object.assign(h.session, { soloPreferences: preferences.queries });
+  Object.assign(h.session, {
+    soloPreferences: h.withLeads(preferences.queries),
+  });
   h.roster(
     h.session.channels
       .list()
@@ -1108,7 +1110,9 @@ it.each(["New", "Solo actions"])(
       },
     });
     await preferences.queries.ensure();
-    Object.assign(h.session, { soloPreferences: preferences.queries });
+    Object.assign(h.session, {
+      soloPreferences: h.withLeads(preferences.queries),
+    });
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -1208,7 +1212,7 @@ it("keeps an ordinary chat editor and pending save through task-source recovery"
     throw new Error("Couldn’t save the name. Try again.");
   });
   Object.assign(h.session, {
-    soloPreferences: preferences.queries,
+    soloPreferences: h.withLeads(preferences.queries),
     channelDetails: {
       ...h.session.channelDetails,
       available: true,
