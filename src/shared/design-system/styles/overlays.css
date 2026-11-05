@@ -707,6 +707,11 @@ html[data-keyboard-navigation]
     }
 
     > .buzz-dialog-actions {
+      /* Let the gradient gutter pass clicks through to the form beneath it. */
+      pointer-events: none;
+      > :not(.buzz-dialog-bar-material) {
+        pointer-events: auto;
+      }
       /* Preserve access to oversized actions at narrow widths/enlarged text. */
       overflow-x: auto;
       bottom: calc(-1 * var(--dialog-padding));
