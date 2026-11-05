@@ -569,8 +569,8 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
   await expect(
     reacted.getByRole("button", { name: /👍/ }).last(),
   ).toBeVisible();
-  // The chip is optimistic. Keep the production subscription alive until the
-  // signed reaction reaches the relay, or its delivery faults after close.
+  // The chip renders optimistically; confirm a signed kind-7 tagged with this
+  // reply's id actually reached the relay before the journey moves on.
   await expect
     .poll(() =>
       app.report.publications.some(
