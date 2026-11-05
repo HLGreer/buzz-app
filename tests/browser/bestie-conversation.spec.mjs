@@ -160,3 +160,176 @@ test("Bestie profile tabs restore with history and explicit Close retires their 
     page.getByRole("tab", { name: "Profile", exact: true }),
   ).toHaveCount(0);
 });
+
+test("Bestie stays within a block host with multiline history at narrow widths", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 480, height: 950 });
+  await page.goto("/tests/fixtures/bestie-conversation.html?long");
+  const composer = page.getByRole("textbox", { name: "Message Bestie" });
+  await expect(composer).toBeInViewport();
+  await page
+    .getByRole("button", { name: "View thread: 1 reply" })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Reply to thread" }),
+  ).toBeInViewport();
+  expect(
+    await page
+      .getByRole("region", { name: "Chat with Bestie" })
+      .evaluate((el) => el.getBoundingClientRect().height),
+  ).toBeLessThanOrEqual(884);
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-panel-dock]")
+        .evaluate((el) => el.getAnimations().length),
+    )
+    .toBe(0);
+  await expect
+    .poll(async () =>
+      Math.round((await page.locator("[data-panel-dock]").boundingBox()).x),
+    )
+    .toBe(0);
+  await expect(
+    page.getByRole("textbox", { name: "Reply to thread" }),
+  ).toBeInViewport({ ratio: 1 });
+  if (process.env.BESTIE_SHOTS && testInfo.project.name === "chromium")
+    await page.screenshot({
+      path: `${process.env.BESTIE_SHOTS}/p2-block-host-long-thread-settled.png`,
+    });
+});
+
+test("the agent tabs API and Bestie operate on the same workspace", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/bestie-conversation.html");
+  await expect(
+    page.getByRole("textbox", { name: "Message Bestie" }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    const f = window.bestieFixture;
+    f.tabs.open(f.channelId, f.rootIds[0]);
+    f.tabs.rename(f.channelId, f.rootIds[0], "Agent-opened thread");
+  });
+  await page.getByRole("button", { name: "Toggle tab pane" }).click();
+  const tab = page.getByRole("tab", {
+    name: "Agent-opened thread",
+    exact: true,
+  });
+  await expect(tab).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const f = window.bestieFixture;
+        return f.tabs.list(f.channelId).map((item) => item.name);
+      }),
+    )
+    .toContain("Agent-opened thread");
+  await page.getByRole("button", { name: "Toggle tab pane" }).click();
+  await page.evaluate(() => {
+    const f = window.bestieFixture;
+    f.tabs.close(f.channelId, f.rootIds[0]);
+  });
+  await expect(tab).toHaveCount(0);
+});
+
+test("collapsing the pane preserves inline panel state", async ({ page }) => {
+  await page.goto("/tests/fixtures/bestie-conversation.html");
+  await page
+    .getByRole("button", { name: "View thread: 1 reply" })
+    .first()
+    .click();
+  await page.getByRole("link", { name: "View profile" }).click();
+  const note = page.getByRole("textbox", { name: "Profile note" });
+  await note.fill("Keep this panel state");
+  const handle = await note.elementHandle();
+  await page.getByRole("button", { name: "Toggle tab pane" }).click();
+  await expect(note).not.toBeVisible();
+  await expect(page.locator("[data-panel-dock]:not([hidden])")).toHaveCount(0);
+  expect(await handle.evaluate((el) => el.isConnected)).toBe(true);
+  await page.getByRole("button", { name: "Toggle tab pane" }).click();
+  await expect(note).toHaveValue("Keep this panel state");
+  expect(await handle.evaluate((el) => el.isConnected)).toBe(true);
+});
+
+test("application Close All closes Bestie tabs but leaves modal ownership intact", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/bestie-conversation.html");
+  await page
+    .getByRole("button", { name: "View thread: 1 reply" })
+    .first()
+    .click();
+  await page.getByRole("link", { name: "View profile" }).click();
+  const note = page.getByRole("textbox", { name: "Profile note" });
+  await expect(note).toBeVisible();
+  // A modal must retain ownership of the application command.
+  expect(
+    await page.evaluate(() => {
+      const modal = document.createElement("div");
+      modal.setAttribute("aria-modal", "true");
+      document.body.append(modal);
+      const event = new Event("buzz:close-all-tabs", { cancelable: true });
+      window.dispatchEvent(event);
+      modal.remove();
+      return event.defaultPrevented;
+    }),
+  ).toBe(false);
+  await expect(note).toBeVisible();
+  expect(
+    await page.evaluate(() => {
+      const event = new Event("buzz:close-all-tabs", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    }),
+  ).toBe(true);
+  await expect(
+    page.getByRole("tab", { name: "Profile", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("tab", { name: "Planning the day", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Message Bestie" }),
+  ).toBeInViewport();
+});
+
+test("pointer pane moves show the shared drag preview and drop indicator", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/tests/fixtures/bestie-conversation.html");
+  await page
+    .getByRole("button", { name: "View thread: 1 reply" })
+    .first()
+    .click();
+  const tab = page.getByRole("tab", { name: "Planning the day", exact: true });
+  // The entering pane moves the tab; begin the gesture only at its settled geometry.
+  await expect
+    .poll(async () => {
+      const dock = await page.locator("[data-panel-dock]").boundingBox();
+      return Math.round(dock.x + dock.width);
+    })
+    .toBe(page.viewportSize().width);
+  const start = await tab.boundingBox();
+  const main = await page.locator("[data-main-workspace]").boundingBox();
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(main.x + 200, main.y + 20, { steps: 10 });
+    await expect(page.locator(".buzz-tab-drag-title")).toBeVisible();
+    await expect(page.locator(".buzz-tab-drag-insertion")).toBeVisible();
+    if (process.env.BESTIE_SHOTS && testInfo.project.name === "chromium")
+      await page.screenshot({
+        path: `${process.env.BESTIE_SHOTS}/p2-tab-drag-feedback.png`,
+      });
+  } finally {
+    await page.mouse.up();
+  }
+  await expect(
+    page
+      .locator("[data-main-workspace]")
+      .getByRole("tab", { name: "Planning the day", exact: true }),
+  ).toBeVisible();
+});

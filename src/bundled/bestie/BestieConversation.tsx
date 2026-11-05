@@ -40,7 +40,11 @@ import {
 } from "../../features/profiles/target";
 import { ConversationPresentation } from "../../features/conversation/ConversationPresentation";
 import { Panel } from "../../shared/design-system/ui/Panel";
-import { PanelFrame } from "../../features/panels/PanelFrame";
+import { COMPANION_SPLIT } from "../../features/panels/PanelFrame";
+import { PanelDock } from "../../features/panels/PanelDock";
+import { usePanelSplit } from "../../features/panels/usePanelSplit";
+import panelStyles from "../../features/panels/Panels.module.css";
+import { flushSync } from "react-dom";
 import { PanelWorkspace } from "../../features/panels/PanelWorkspace";
 import type { ChannelSummary } from "../../features/relay/contracts";
 import type { RelaySession } from "../../features/relay/session";
@@ -101,7 +105,7 @@ export function BestieConversation({
   }
   const preserveNavigation =
     !!navigation && dismissedTo.current?.arrival?.signal === navigation.signal;
-  const state = useChannelTabState(session, channel.id, "bestie", navigator);
+  const state = useChannelTabState(session, channel.id, "messages", navigator);
   const routed =
     navigation?.target.kind === "page"
       ? bestieRoute(navigation.target.route?.params)
@@ -342,12 +346,40 @@ export function BestieConversation({
       );
   };
   const media = useMediaReview();
+  const split = usePanelSplit(
+    scope,
+    COMPANION_SPLIT.name,
+    COMPANION_SPLIT.defaultWidth,
+    COMPANION_SPLIT.min,
+  );
   const paneOpen = state.paneOpen && secondary.items.length > 0;
   const tabMenu = {
     key: `bestie:${scope}:${channel.id}`,
     closeAll: secondary.closeAllTabs,
     closeOthers: secondary.closeOtherTabs,
   };
+  useLayoutEffect(() => {
+    const close = (event: Event) => {
+      const workspace = main.current;
+      if (
+        event.defaultPrevented ||
+        !ownsCurrentVisit() ||
+        !workspace?.isConnected ||
+        workspace.closest('[hidden], [inert], [aria-hidden="true"]') ||
+        !workspace.getClientRects().length ||
+        document.querySelector('dialog[open], [aria-modal="true"]')
+      )
+        return;
+      flushSync(() => {
+        if (secondary.closeAllTabs()) {
+          event.preventDefault();
+          focusComposer((value) => value + 1);
+        }
+      });
+    };
+    window.addEventListener("buzz:close-all-tabs", close);
+    return () => window.removeEventListener("buzz:close-all-tabs", close);
+  });
   const toggle = (expanded: boolean) => (
     <IconButton
       ref={secondary.splitTrigger}
@@ -385,10 +417,74 @@ export function BestieConversation({
           ref={main}
           tabIndex={-1}
         >
-          <PanelFrame
-            scope={scope}
-            companion={
-              paneOpen && (
+          <div
+            ref={split.ref}
+            style={split.style}
+            className={`${panelStyles.frame} ${panelStyles.splitMotion}`}
+          >
+            <div className={panelStyles.page}>
+              <Panel>
+                <PanelWorkspace
+                  main
+                  label="Bestie conversation tabs"
+                  focusOnMount={false}
+                  value={secondary.selectedMain}
+                  select={(id) =>
+                    state.selectMain(id === "conversation" ? undefined : id)
+                  }
+                  tabMenu={tabMenu}
+                  drag={secondary.drag.main}
+                  actions={
+                    !paneOpen && secondary.items.length > 0
+                      ? toggle(false)
+                      : undefined
+                  }
+                  items={[
+                    {
+                      id: "conversation",
+                      label: bestie,
+                      icon,
+                      content: (
+                        <ConversationPresentation
+                          value={secondary.selectedMain === "conversation"}
+                        >
+                          <section
+                            className={styles.work}
+                            data-attachment-drop-zone=""
+                          >
+                            <MessageManagementStatus />
+                            <ChannelBody
+                              viewer={session.viewer}
+                              cached={!!channel.cached}
+                              revealMessageId={sent}
+                              marksRead
+                              onOpenThread={openThread}
+                            />
+                            <ConversationComposer
+                              label={`Message ${bestie}`}
+                              shown={secondary.selectedMain === "conversation"}
+                              focusRequest={composerFocus}
+                              onSend={setSent}
+                            />
+                          </section>
+                        </ConversationPresentation>
+                      ),
+                    },
+                    ...secondary.mainItems,
+                  ]}
+                />
+              </Panel>
+            </div>
+            <PanelDock
+              open={paneOpen}
+              keepMounted={
+                state.entries.length > 0 ||
+                (secondary.items.length > 0 && !state.paneOpen)
+              }
+              className={panelStyles.dock}
+              resizeHandle={split.handle}
+            >
+              {secondary.items.length > 0 && (
                 <Panel>
                   <PanelWorkspace
                     label="Bestie panel tabs"
@@ -400,61 +496,10 @@ export function BestieConversation({
                     drag={secondary.drag.side}
                   />
                 </Panel>
-              )
-            }
-          >
-            <Panel>
-              <PanelWorkspace
-                main
-                label="Bestie conversation tabs"
-                focusOnMount={false}
-                value={secondary.selectedMain}
-                select={(id) =>
-                  state.selectMain(id === "conversation" ? undefined : id)
-                }
-                tabMenu={tabMenu}
-                drag={secondary.drag.main}
-                actions={
-                  !paneOpen && secondary.items.length > 0
-                    ? toggle(false)
-                    : undefined
-                }
-                items={[
-                  {
-                    id: "conversation",
-                    label: bestie,
-                    icon,
-                    content: (
-                      <ConversationPresentation
-                        value={secondary.selectedMain === "conversation"}
-                      >
-                        <section
-                          className={styles.work}
-                          data-attachment-drop-zone=""
-                        >
-                          <MessageManagementStatus />
-                          <ChannelBody
-                            viewer={session.viewer}
-                            cached={!!channel.cached}
-                            revealMessageId={sent}
-                            marksRead
-                            onOpenThread={openThread}
-                          />
-                          <ConversationComposer
-                            label={`Message ${bestie}`}
-                            shown={secondary.selectedMain === "conversation"}
-                            focusRequest={composerFocus}
-                            onSend={setSent}
-                          />
-                        </section>
-                      </ConversationPresentation>
-                    ),
-                  },
-                  ...secondary.mainItems,
-                ]}
-              />
-            </Panel>
-          </PanelFrame>
+              )}
+            </PanelDock>
+          </div>
+          {secondary.drag.feedback}
           {secondary.hosts}
           <span role="status" className="sr-only">
             {secondary.announcement}

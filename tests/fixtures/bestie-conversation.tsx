@@ -1,6 +1,7 @@
 // Controlled UI proof: real conversation/workspace owners, disposable signed data.
-import { StrictMode, useSyncExternalStore } from "react";
+import { StrictMode, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
+import { channelTabs } from "../../src/bundled/channels/useChannelTabState";
 import { BestieConversation } from "../../src/bundled/bestie/BestieConversation";
 import { createNavigationController } from "../../src/features/navigation/controller";
 import { createMemoryHistory } from "../../src/features/navigation/history";
@@ -27,11 +28,23 @@ const viewer = keypair(),
   authority = keypair();
 const id = "11111111-1111-4111-8111-111111111111";
 const scope = `https://test.example:${viewer.pubkey}`;
+const long = new URLSearchParams(location.search).has("long");
 const roots = [
   "Planning the day",
   "A second conversation",
   "[View profile](https://profile.test/person)",
-].map((text, index) => message(viewer, id, text, 1700000000 + index));
+]
+  .concat(long ? ["A fourth planning message"] : [])
+  .map((text, index) =>
+    message(
+      viewer,
+      id,
+      long
+        ? `${text}\n${"More planning details for the day.\n".repeat(8)}`
+        : text,
+      1700000000 + index,
+    ),
+  );
 const replies = roots.map((root, index) =>
   message(agent, id, `Reply ${index + 1}`, 1700000010 + index, [
     ["e", root.id, "", "reply"],
@@ -156,6 +169,18 @@ const relay = {
 } as unknown as RelayData;
 const empty: readonly never[] = [];
 const contribution = { snapshot: () => empty, subscribe: () => () => {} };
+function ProfileContent() {
+  const [note, setNote] = useState("");
+  return (
+    <>
+      <p>Fixture profile</p>
+      <label>
+        Profile note
+        <input value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+    </>
+  );
+}
 const profilePanel = {
   id: "profile",
   key: "buzz.profiles/profile",
@@ -163,7 +188,7 @@ const profilePanel = {
   revision: "fixture",
   title: "Profile",
   matches: (target: string) => target.startsWith("https://profile.test/"),
-  component: () => <p>Fixture profile</p>,
+  component: ProfileContent,
 };
 const availablePanels = [profilePanel];
 const panels = {
@@ -178,6 +203,9 @@ Object.assign(window, {
     forward: navigator.forward,
     target: () => navigator.snapshot().entry.target,
     open: navigator.open,
+    tabs: channelTabs(owner.session, navigator),
+    channelId: id,
+    rootIds: roots.map((root) => root.id),
   },
 });
 function Fixture() {
@@ -199,8 +227,8 @@ function Fixture() {
     <ToastProvider>
       <div
         style={{
-          height: "100%",
-          display: "flex",
+          height: long ? "calc(100% - 66px)" : "100%",
+          overflow: "hidden",
           color: "var(--text-standard)",
         }}
       >
