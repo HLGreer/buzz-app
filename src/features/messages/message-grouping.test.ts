@@ -2,7 +2,6 @@ import { expect, it } from "vitest";
 import type { ChannelMessage } from "../relay/contracts";
 import {
   continuesMessageGroup,
-  calendarDay,
   publicMessageNeighbor,
 } from "./message-grouping";
 
@@ -102,27 +101,3 @@ it.each([-1, 1] as const)(
     );
   },
 );
-it("memoizes the local calendar day without changing midnight semantics", () => {
-  const late = new Date(2026, 8, 28, 23, 59, 59);
-  const early = new Date(2026, 8, 29, 0, 0, 0);
-  for (const date of [late, early, late]) {
-    expect(calendarDay(date.getTime() / 1000)).toBe(date.toDateString());
-  }
-  expect(calendarDay(late.getTime() / 1000)).not.toBe(
-    calendarDay(early.getTime() / 1000),
-  );
-});
-it("drops memoized calendar days when the time zone changes", async () => {
-  const zone = process.env.TZ;
-  const createdAt = Date.UTC(2026, 10, 4, 3) / 1000;
-  try {
-    process.env.TZ = "America/Los_Angeles";
-    expect(calendarDay(createdAt)).toBe("Tue Nov 03 2026");
-    // The zone is checked once per task.
-    await Promise.resolve();
-    process.env.TZ = "Asia/Tokyo";
-    expect(calendarDay(createdAt)).toBe("Wed Nov 04 2026");
-  } finally {
-    process.env.TZ = zone;
-  }
-});

@@ -1,31 +1,5 @@
 import type { ChannelMessage } from "../relay/contracts";
-
-const days = new Map<number, string>();
-let zone: string | undefined;
-let zoneChecked = false;
-/** Local calendar day of a unix-seconds timestamp. Every row compares days on
- * each render, so days are memoized until the time zone changes, which is
- * checked once per task. */
-export function calendarDay(createdAt: number) {
-  if (!zoneChecked) {
-    zoneChecked = true;
-    queueMicrotask(() => {
-      zoneChecked = false;
-    });
-    const { timeZone } = new Intl.DateTimeFormat().resolvedOptions();
-    if (timeZone !== zone) {
-      zone = timeZone;
-      days.clear();
-    }
-  }
-  let day = days.get(createdAt);
-  if (day === undefined) {
-    if (days.size >= 8192) days.clear();
-    day = new Date(createdAt * 1000).toDateString();
-    days.set(createdAt, day);
-  }
-  return day;
-}
+import { calendarDay } from "../../shared/datetime";
 
 export function continuesMessageGroup(
   previous: ChannelMessage | undefined,

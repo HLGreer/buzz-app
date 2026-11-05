@@ -37,9 +37,9 @@ import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { MessageRow, type MessageLinkOrigin } from "./MessageRow";
 import {
   continuesMessageGroup,
-  calendarDay,
   publicMessageNeighbor,
 } from "./message-grouping";
+import { calendarDay } from "../../shared/datetime";
 import type {
   Attachment,
   ChannelMessage,
