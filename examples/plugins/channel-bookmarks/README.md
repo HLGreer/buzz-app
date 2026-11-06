@@ -14,14 +14,18 @@ grants of its own. React is supplied by Buzz, not bundled with the plugin.
 
 ## Use
 
-Open the panel and enter a name and HTTP(S) URL. Edit, remove, and move links up
-or down using the controls beside each entry. Choose **Refresh bookmarks** to
-load other members’ changes. Each URL appears once per channel.
+Choose **Add bookmark** to open the name and HTTP(S) URL form. Each compact row
+shows the bookmark title and domain; its **⋯** menu offers **Edit** and **Remove**.
+Cancel closes the form without saving. Drag its handle onto another bookmark to reorder; Escape
+cancels a drag. You can also focus the handle and press Arrow Up or Arrow Down.
+Links reload automatically whenever the panel opens. Failed loads offer
+**Retry loading bookmarks**. Each URL appears once per channel.
 
 Links are stored under `## Channel bookmarks` in the shared Canvas. Other Canvas
 sections are preserved. Canvas permissions, its size limit, and its restriction
-to one save per second apply. Conflicts require a refresh and preserve typed
-input. Disabling the plugin hides the button/panel and keeps saved links.
+to one save per second apply. Conflicts reload the latest links and preserve typed
+input for review before resubmitting. Disabling the plugin hides the button/panel
+and keeps saved links.
 
 ## Build and test
 

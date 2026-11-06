@@ -35,12 +35,11 @@ export function apply(ctx) {
       </button>
     );
   }
-  function Launcher({ context, toggle, pressed, available }) {
-    const trigger = React.useRef(null);
+  function useHint(trigger, text, disabled = false, available) {
     const tooltipId = React.useId();
     React.useEffect(() => {
       const button = trigger.current;
-      if (!button || pressed) return;
+      if (!button || disabled) return;
       let timer;
       let popup;
       let dismissed = false;
@@ -51,7 +50,8 @@ export function apply(ctx) {
         button.removeAttribute("aria-describedby");
       };
       const show = () => {
-        if (!enabled || !available() || dismissed || popup) return;
+        if (!enabled || (available && !available()) || dismissed || popup)
+          return;
         popup = document.createElement("div");
         popup.className = "buzz-tooltip-positioner";
         Object.assign(popup.style, {
@@ -63,7 +63,7 @@ export function apply(ctx) {
         bubble.className = "buzz-tooltip";
         bubble.setAttribute("role", "tooltip");
         bubble.setAttribute("data-buzz-ui", "");
-        bubble.textContent = "Bookmarks";
+        bubble.textContent = text;
         popup.append(bubble);
         document.body.append(popup);
         const anchor = button.getBoundingClientRect();
@@ -131,7 +131,179 @@ export function apply(ctx) {
         window.removeEventListener("scroll", hide, true);
         window.removeEventListener("resize", hide);
       };
-    }, [pressed, available, tooltipId]);
+    }, [trigger, text, disabled, available, tooltipId]);
+  }
+  const iconProps = {
+    type: "button",
+    className: "buzz-button",
+    "data-buzz-ui": "",
+    "data-size": "sm",
+    "data-icon-variant": "ghost",
+    "data-icon-size": "sm",
+    "data-icon-shape": "control",
+    "data-variant": "ghost",
+  };
+  function QuietHandle({ children, ...props }) {
+    const trigger = React.useRef(null);
+    useHint(trigger, "Drag to reorder · Arrow Up/Down", props["aria-disabled"]);
+    return (
+      <button {...iconProps} {...props} ref={trigger}>
+        {children}
+      </button>
+    );
+  }
+  function Actions({ item, disabled, edit, remove }) {
+    const [open, setOpen] = React.useState(false);
+    const [highlighted, setHighlighted] = React.useState(0);
+    const trigger = React.useRef(null);
+    const popup = React.useRef(null);
+    const id = React.useId();
+    const close = () => {
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    React.useLayoutEffect(() => {
+      if (!open) return;
+      const menu = popup.current;
+      menu.showPopover?.();
+      const anchor = trigger.current.getBoundingClientRect();
+      const bounds = menu.getBoundingClientRect();
+      Object.assign(menu.style, {
+        left: `${Math.max(8, Math.min(anchor.right - bounds.width, window.innerWidth - bounds.width - 8))}px`,
+        top: `${anchor.bottom + 4 + bounds.height <= window.innerHeight - 8 ? anchor.bottom + 4 : Math.max(8, anchor.top - bounds.height - 4)}px`,
+      });
+      menu.querySelector("button")?.focus();
+      const dismiss = () => setOpen(false);
+      window.addEventListener("resize", dismiss);
+      window.addEventListener("scroll", dismiss, true);
+      return () => {
+        window.removeEventListener("resize", dismiss);
+        window.removeEventListener("scroll", dismiss, true);
+      };
+    }, [open]);
+    React.useEffect(() => {
+      if (disabled) setOpen(false);
+    }, [disabled]);
+    return (
+      <>
+        <button
+          {...iconProps}
+          ref={trigger}
+          aria-label={`Actions for ${item.label}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? id : undefined}
+          disabled={disabled}
+          onClick={() => setOpen(!open)}
+          onKeyDown={(event) => {
+            if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            {[5, 12, 19].map((x) => (
+              <circle key={x} cx={x} cy="12" r="1" />
+            ))}
+          </svg>
+        </button>
+        {open && (
+          <div
+            id={id}
+            ref={popup}
+            popover="auto"
+            role="menu"
+            aria-label={`Actions for ${item.label}`}
+            className="buzz-menu-popup text-body-sm"
+            data-buzz-ui=""
+            data-size="compact"
+            style={{
+              position: "fixed",
+              margin: 0,
+              inset: "auto",
+              "--available-width": "calc(100vw - 16px)",
+              "--available-height": "calc(100vh - 16px)",
+            }}
+            onToggle={(event) => {
+              if (event.newState === "closed") setOpen(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                close();
+              } else if (event.key === "Tab") close();
+              else if (
+                ["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)
+              ) {
+                event.preventDefault();
+                const items = [
+                  ...event.currentTarget.querySelectorAll("button"),
+                ];
+                const i = items.indexOf(document.activeElement);
+                items[
+                  event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? items.length - 1
+                      : (i +
+                          (event.key === "ArrowDown" ? 1 : -1) +
+                          items.length) %
+                        items.length
+                ]?.focus();
+              }
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="buzz-menu-item"
+              data-buzz-ui=""
+              style={{ width: "100%" }}
+              data-highlighted={highlighted === 0 ? "" : undefined}
+              onFocus={() => setHighlighted(0)}
+              onPointerEnter={() => setHighlighted(0)}
+              onClick={() => {
+                close();
+                edit();
+              }}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="buzz-menu-item"
+              data-buzz-ui=""
+              data-tone="danger"
+              style={{ width: "100%" }}
+              data-highlighted={highlighted === 1 ? "" : undefined}
+              onFocus={() => setHighlighted(1)}
+              onPointerEnter={() => setHighlighted(1)}
+              onClick={() => {
+                close();
+                remove();
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
+  function Launcher({ context, toggle, pressed, available }) {
+    const trigger = React.useRef(null);
+    useHint(trigger, "Bookmarks", pressed, available);
     return (
       <button
         ref={trigger}
@@ -185,17 +357,24 @@ export function apply(ctx) {
     const [saved, setSaved] = React.useState();
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState("");
-    const [conflict, setConflict] = React.useState(false);
     const [editing, setEditing] = React.useState();
+    const [formOpen, setFormOpen] = React.useState(false);
     const [label, setLabel] = React.useState("");
     const [url, setUrl] = React.useState("");
+    const dragging = React.useRef(null);
+    const [dropTarget, setDropTarget] = React.useState(null);
+    const [announcement, setAnnouncement] = React.useState("");
     const nameId = React.useId();
     const urlId = React.useId();
     const operation = React.useRef(0);
     const working = React.useRef(false);
     const current = React.useRef({ active, canRead, canWrite });
     current.current = { active, canRead, canWrite };
-    const refreshButton = React.useRef(null);
+    const nameInput = React.useRef(null);
+    const addButton = React.useRef(null);
+    React.useLayoutEffect(() => {
+      if (formOpen) nameInput.current?.focus();
+    }, [formOpen, editing]);
     const origin = React.useRef(null);
     React.useLayoutEffect(() => {
       if (
@@ -203,7 +382,7 @@ export function apply(ctx) {
         !origin.current.isConnected &&
         document.activeElement === document.body
       )
-        refreshButton.current?.focus();
+        (nameInput.current ?? addButton.current)?.focus();
       origin.current = null;
     });
     const valid = React.useCallback(
@@ -230,7 +409,7 @@ export function apply(ctx) {
         if (!valid(generation)) return;
         setSaved({ content: head?.content ?? "", id: head?.id, items });
         setEditing(undefined);
-        setConflict(false);
+        return true;
       } catch (reason) {
         if (valid(generation)) {
           setSaved(undefined);
@@ -254,7 +433,6 @@ export function apply(ctx) {
       if (
         !saved ||
         working.current ||
-        conflict ||
         !current.current.active() ||
         !current.current.canWrite
       )
@@ -277,19 +455,26 @@ export function apply(ctx) {
           items: readBookmarks(head.content).items,
         });
         setEditing(undefined);
+        setAnnouncement("Bookmarks saved.");
         if (clear) {
           setLabel("");
           setUrl("");
+          setFormOpen(false);
         }
       } catch (reason) {
         if (valid(generation)) {
-          const changed = reason?.name === "CanvasConflictError";
-          setConflict(changed);
-          setError(
-            changed
-              ? "Canvas changed elsewhere. Refresh before saving again. Your input is kept."
-              : `Couldn’t save. ${reason?.message ?? String(reason)}`,
-          );
+          setAnnouncement("");
+          if (reason?.name === "CanvasConflictError") {
+            working.current = false;
+            const loaded = await load();
+            if (current.current.active() && current.current.canRead)
+              setError(
+                loaded
+                  ? "Bookmarks changed elsewhere. The latest links are loaded and your input is kept. Review them before trying again."
+                  : "Couldn’t load the latest bookmarks. Retry before saving. Your input is kept.",
+              );
+          } else
+            setError(`Couldn’t save. ${reason?.message ?? String(reason)}`);
         }
       } finally {
         if (generation === operation.current) {
@@ -298,12 +483,25 @@ export function apply(ctx) {
         }
       }
     }
-    function move(index, direction) {
+    function reorder(from, to) {
+      if (
+        from === to ||
+        to < 0 ||
+        to >= saved.items.length ||
+        editing !== undefined
+      )
+        return;
       const items = [...saved.items];
-      const other = items[index + direction];
-      if (!other) return;
-      [items[index], items[index + direction]] = [other, items[index]];
+      const [item] = items.splice(from, 1);
+      items.splice(to, 0, item);
+      setAnnouncement(
+        `Moving ${item.label} to position ${to + 1} of ${items.length}.`,
+      );
       void save(items);
+    }
+    function cancelDrag() {
+      dragging.current = null;
+      setDropTarget(null);
     }
     if (!canRead)
       return (
@@ -311,85 +509,195 @@ export function apply(ctx) {
           Bookmarks are unavailable until channel access is confirmed.
         </p>
       );
-    const disabled = busy || !saved || conflict || !canWrite;
+    const disabled = busy || !saved || !canWrite;
     return (
       <section
         aria-label="Channel bookmarks"
         aria-busy={busy}
         style={{ ...gap, padding: "var(--space-panel-inset)", minWidth: 0 }}
       >
-        <p>
-          Shared links for this channel. Refresh to load other members’ changes.
-        </p>
-        <div style={row}>
-          <Button
-            ref={refreshButton}
-            disabled={busy}
-            onClick={() => void load()}
-          >
-            Refresh bookmarks
-          </Button>
-        </div>
         {busy && <p role="status">Loading or saving bookmarks…</p>}
         {error && <p role="alert">{error}</p>}
-        {saved && !saved.items.length && (
-          <p>No bookmarks yet. Add a link below.</p>
+        {!busy && !saved && error && (
+          <Button onClick={() => void load()}>Retry loading bookmarks</Button>
         )}
+        {saved && !saved.items.length && <p>No bookmarks yet.</p>}
+        <span role="status" className="sr-only">
+          {announcement}
+        </span>
         {saved?.items.map((item, index) => (
-          <div key={item.url} style={gap}>
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ overflowWrap: "anywhere" }}
-            >
-              {item.label}
-            </a>
-            {canWrite && (
-              <div style={row}>
-                <Button
-                  disabled={disabled}
-                  aria-label={`Edit ${item.label}`}
-                  onClick={() => {
-                    setEditing(index);
-                    setLabel(item.label);
-                    setUrl(item.url);
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  disabled={disabled || editing !== undefined || index === 0}
-                  aria-label={`Move ${item.label} up`}
-                  onClick={() => move(index, -1)}
-                >
-                  Move up
-                </Button>
-                <Button
-                  disabled={
+          <div
+            key={item.url}
+            data-bookmark-index={index}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+              paddingBlock: "var(--space-2)",
+              borderBottom: "1px solid var(--border-standard)",
+              background:
+                dropTarget === index ? "var(--surface-inset)" : undefined,
+            }}
+          >
+            {canWrite && saved.items.length > 1 && (
+              <QuietHandle
+                aria-label={`Reorder ${item.label}`}
+                aria-description="Drag to reorder, or use Arrow Up and Arrow Down."
+                aria-disabled={disabled || editing !== undefined}
+                style={{
+                  touchAction: "none",
+                  cursor:
+                    disabled || editing !== undefined ? "default" : "grab",
+                  userSelect: "none",
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && dragging.current) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancelDrag();
+                    return;
+                  }
+                  if (
                     disabled ||
                     editing !== undefined ||
-                    index === saved.items.length - 1
-                  }
-                  aria-label={`Move ${item.label} down`}
-                  onClick={() => move(index, 1)}
+                    dragging.current ||
+                    !["ArrowUp", "ArrowDown"].includes(event.key)
+                  )
+                    return;
+                  event.preventDefault();
+                  reorder(index, index + (event.key === "ArrowUp" ? -1 : 1));
+                }}
+                onPointerDown={(event) => {
+                  if (
+                    disabled ||
+                    editing !== undefined ||
+                    event.button !== 0 ||
+                    !event.isPrimary
+                  )
+                    return;
+                  event.currentTarget.focus();
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  dragging.current = {
+                    from: index,
+                    to: index,
+                    head: saved,
+                    pointerId: event.pointerId,
+                  };
+                }}
+                onPointerMove={(event) => {
+                  const drag = dragging.current;
+                  if (!drag || drag.pointerId !== event.pointerId) return;
+                  const target = document
+                    .elementFromPoint(event.clientX, event.clientY)
+                    ?.closest("[data-bookmark-index]");
+                  const section = event.currentTarget.closest("section");
+                  const next =
+                    target && section?.contains(target)
+                      ? Number(target.dataset.bookmarkIndex)
+                      : null;
+                  drag.to = next;
+                  setDropTarget(next);
+                }}
+                onPointerUp={(event) => {
+                  const drag = dragging.current;
+                  if (!drag || drag.pointerId !== event.pointerId) return;
+                  cancelDrag();
+                  if (drag.head === saved && drag.to !== null && !disabled)
+                    reorder(drag.from, drag.to);
+                }}
+                onPointerCancel={cancelDrag}
+                onLostPointerCapture={cancelDrag}
+                onBlur={cancelDrag}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
                 >
-                  Move down
-                </Button>
-                <Button
-                  disabled={disabled || editing !== undefined}
-                  aria-label={`Remove ${item.label}`}
-                  onClick={() =>
-                    void save(saved.items.filter((_, i) => i !== index))
-                  }
-                >
-                  Remove
-                </Button>
-              </div>
+                  {[5, 12, 19].flatMap((y) =>
+                    [9, 15].map((x) => (
+                      <circle key={`${x}-${y}`} cx={x} cy={y} r="1" />
+                    )),
+                  )}
+                </svg>
+              </QuietHandle>
+            )}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--space-1)",
+                minWidth: 0,
+                flex: 1,
+              }}
+            >
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  overflowWrap: "anywhere",
+                  color: "var(--text-link)",
+                  textDecoration: "underline",
+                  fontSize: "var(--text-label)",
+                  lineHeight: "var(--text-label--line-height)",
+                  letterSpacing: "var(--text-label--letter-spacing)",
+                  fontWeight: "var(--text-label--font-weight)",
+                }}
+              >
+                {item.label}
+              </a>
+              <span
+                title={item.url}
+                style={{
+                  overflowWrap: "anywhere",
+                  color: "var(--text-metadata)",
+                  fontSize: "var(--text-caption)",
+                  lineHeight: "var(--text-caption--line-height)",
+                  letterSpacing: "var(--text-caption--letter-spacing)",
+                  fontWeight: "var(--text-caption--font-weight)",
+                }}
+              >
+                {new URL(item.url).host}
+              </span>
+            </div>
+            {canWrite && (
+              <Actions
+                item={item}
+                disabled={disabled || editing !== undefined}
+                edit={() => {
+                  setEditing(index);
+                  setLabel(item.label);
+                  setUrl(item.url);
+                  setFormOpen(true);
+                }}
+                remove={() =>
+                  void save(saved.items.filter((_, i) => i !== index))
+                }
+              />
             )}
           </div>
         ))}
-        {canWrite && (
+        {canWrite && !formOpen && (
+          <Button
+            ref={addButton}
+            primary
+            disabled={disabled}
+            onClick={() => {
+              setEditing(undefined);
+              setLabel("");
+              setUrl("");
+              setFormOpen(true);
+            }}
+          >
+            Add bookmark
+          </Button>
+        )}
+        {canWrite && formOpen && (
           <form
             style={gap}
             onSubmit={(event) => {
@@ -411,6 +719,7 @@ export function apply(ctx) {
                 Bookmark name
               </label>
               <input
+                ref={nameInput}
                 id={nameId}
                 className="buzz-input"
                 data-buzz-ui=""
@@ -435,18 +744,20 @@ export function apply(ctx) {
               />
             </div>
             <div style={row}>
-              {editing !== undefined && (
-                <Button
-                  disabled={busy}
-                  onClick={() => {
-                    setEditing(undefined);
-                    setLabel("");
-                    setUrl("");
-                  }}
-                >
-                  Cancel edit
-                </Button>
-              )}
+              <Button
+                disabled={busy}
+                onClick={(event) => {
+                  origin.current = event.currentTarget;
+                  setFormOpen(false);
+                  setEditing(undefined);
+                  setLabel("");
+                  setUrl("");
+                  setError("");
+                  addButton.current?.focus();
+                }}
+              >
+                Cancel
+              </Button>
               <Button type="submit" primary disabled={disabled}>
                 {editing === undefined ? "Add bookmark" : "Save bookmark"}
               </Button>

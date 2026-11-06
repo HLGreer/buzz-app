@@ -377,9 +377,9 @@ function H(e, t) {
 //#region node_modules/.pnpm/micromark-core-commonmark@2.0.3/node_modules/micromark-core-commonmark/lib/autolink.js
 var U = {
 	name: "autolink",
-	tokenize: ee
+	tokenize: W
 };
-function ee(e, t, n) {
+function W(e, t, n) {
 	let r = 0;
 	return i;
 	function i(t) {
@@ -416,11 +416,11 @@ function ee(e, t, n) {
 }
 //#endregion
 //#region node_modules/.pnpm/micromark-core-commonmark@2.0.3/node_modules/micromark-core-commonmark/lib/blank-line.js
-var W = {
+var G = {
 	partial: !0,
-	tokenize: te
+	tokenize: ee
 };
-function te(e, t, n) {
+function ee(e, t, n) {
 	return r;
 	function r(t) {
 		return E(t) ? A(e, i, "linePrefix")(t) : i(t);
@@ -431,13 +431,13 @@ function te(e, t, n) {
 }
 //#endregion
 //#region node_modules/.pnpm/micromark-core-commonmark@2.0.3/node_modules/micromark-core-commonmark/lib/block-quote.js
-var ne = {
-	continuation: { tokenize: ie },
-	exit: ae,
+var te = {
+	continuation: { tokenize: re },
+	exit: ie,
 	name: "blockQuote",
-	tokenize: re
+	tokenize: ne
 };
-function re(e, t, n) {
+function ne(e, t, n) {
 	let r = this;
 	return i;
 	function i(t) {
@@ -451,26 +451,26 @@ function re(e, t, n) {
 		return E(n) ? (e.enter("blockQuotePrefixWhitespace"), e.consume(n), e.exit("blockQuotePrefixWhitespace"), e.exit("blockQuotePrefix"), t) : (e.exit("blockQuotePrefix"), t(n));
 	}
 }
-function ie(e, t, n) {
+function re(e, t, n) {
 	let r = this;
 	return i;
 	function i(t) {
 		return E(t) ? A(e, a, "linePrefix", r.parser.constructs.disable.null.includes("codeIndented") ? void 0 : 4)(t) : a(t);
 	}
 	function a(r) {
-		return e.attempt(ne, t, n)(r);
+		return e.attempt(te, t, n)(r);
 	}
 }
-function ae(e) {
+function ie(e) {
 	e.exit("blockQuote");
 }
 //#endregion
 //#region node_modules/.pnpm/micromark-core-commonmark@2.0.3/node_modules/micromark-core-commonmark/lib/character-escape.js
-var G = {
+var K = {
 	name: "characterEscape",
-	tokenize: oe
+	tokenize: ae
 };
-function oe(e, t, n) {
+function ae(e, t, n) {
 	return r;
 	function r(t) {
 		return e.enter("characterEscape"), e.enter("escapeMarker"), e.consume(t), e.exit("escapeMarker"), i;
@@ -481,11 +481,11 @@ function oe(e, t, n) {
 }
 //#endregion
 //#region node_modules/.pnpm/micromark-core-commonmark@2.0.3/node_modules/micromark-core-commonmark/lib/character-reference.js
-var se = {
+var oe = {
 	name: "characterReference",
-	tokenize: ce
+	tokenize: se
 };
-function ce(e, t, n) {
+function se(e, t, n) {
 	let r = this, i = 0, a, o;
 	return s;
 	function s(t) {
@@ -507,10 +507,10 @@ function ce(e, t, n) {
 }
 //#endregion
 //#region node_modules/.pnpm/micromark-core-commonmark@2.0.3/node_modules/micromark-core-commonmark/lib/code-fenced.js
-var K = {
+var q = {
 	partial: !0,
 	tokenize: ue
-}, q = {
+}, ce = {
 	concrete: !0,
 	name: "codeFenced",
 	tokenize: le
@@ -532,7 +532,7 @@ function le(e, t, n) {
 		return t === s ? (o++, e.consume(t), u) : o < 3 ? n(t) : (e.exit("codeFencedFenceSequence"), E(t) ? A(e, d, "whitespace")(t) : d(t));
 	}
 	function d(n) {
-		return n === null || w(n) ? (e.exit("codeFencedFence"), r.interrupt ? t(n) : e.check(K, h, b)(n)) : (e.enter("codeFencedFenceInfo"), e.enter("chunkString", { contentType: "string" }), f(n));
+		return n === null || w(n) ? (e.exit("codeFencedFence"), r.interrupt ? t(n) : e.check(q, h, b)(n)) : (e.enter("codeFencedFenceInfo"), e.enter("chunkString", { contentType: "string" }), f(n));
 	}
 	function f(t) {
 		return t === null || w(t) ? (e.exit("chunkString"), e.exit("codeFencedFenceInfo"), d(t)) : E(t) ? (e.exit("chunkString"), e.exit("codeFencedFenceInfo"), A(e, p, "whitespace")(t)) : t === 96 && t === s ? n(t) : (e.consume(t), f);
@@ -553,7 +553,7 @@ function le(e, t, n) {
 		return a > 0 && E(t) ? A(e, v, "linePrefix", a + 1)(t) : v(t);
 	}
 	function v(t) {
-		return t === null || w(t) ? e.check(K, h, b)(t) : (e.enter("codeFlowValue"), y(t));
+		return t === null || w(t) ? e.check(q, h, b)(t) : (e.enter("codeFlowValue"), y(t));
 	}
 	function y(t) {
 		return t === null || w(t) ? (e.exit("codeFlowValue"), v(t)) : (e.consume(t), y);
@@ -1148,7 +1148,7 @@ function Ge(e, t, n) {
 function Ke(e, t, n) {
 	return r;
 	function r(r) {
-		return e.enter("lineEnding"), e.consume(r), e.exit("lineEnding"), e.attempt(W, t, n);
+		return e.enter("lineEnding"), e.consume(r), e.exit("lineEnding"), e.attempt(G, t, n);
 	}
 }
 //#endregion
@@ -1499,7 +1499,7 @@ function mt(e, t, n) {
 		return x(t) && ++o < 10 ? (e.consume(t), c) : (!r.interrupt || o < 2) && (r.containerState.marker ? t === r.containerState.marker : t === 41 || t === 46) ? (e.exit("listItemValue"), l(t)) : n(t);
 	}
 	function l(t) {
-		return e.enter("listItemMarker"), e.consume(t), e.exit("listItemMarker"), r.containerState.marker = r.containerState.marker || t, e.check(W, r.interrupt ? n : u, e.attempt(ft, f, d));
+		return e.enter("listItemMarker"), e.consume(t), e.exit("listItemMarker"), r.containerState.marker = r.containerState.marker || t, e.check(G, r.interrupt ? n : u, e.attempt(ft, f, d));
 	}
 	function u(e) {
 		return r.containerState.initialBlankLine = !0, a++, f(e);
@@ -1513,7 +1513,7 @@ function mt(e, t, n) {
 }
 function ht(e, t, n) {
 	let r = this;
-	return r.containerState._closeFlow = void 0, e.check(W, i, a);
+	return r.containerState._closeFlow = void 0, e.check(G, i, a);
 	function i(n) {
 		return r.containerState.furtherBlankLines = r.containerState.furtherBlankLines || r.containerState.initialBlankLine, A(e, t, "listItemIndent", r.containerState.size + 1)(n);
 	}
@@ -1603,7 +1603,7 @@ function xt(e, t, n) {
 //#region node_modules/.pnpm/micromark@4.0.2/node_modules/micromark/lib/initialize/flow.js
 var St = { tokenize: Ct };
 function Ct(e) {
-	let t = this, n = e.attempt(W, r, e.attempt(this.parser.constructs.flowInitial, i, A(e, e.attempt(this.parser.constructs.flow, i, e.attempt(xe, i)), "linePrefix")));
+	let t = this, n = e.attempt(G, r, e.attempt(this.parser.constructs.flowInitial, i, A(e, e.attempt(this.parser.constructs.flow, i, e.attempt(xe, i)), "linePrefix")));
 	return n;
 	function r(r) {
 		if (r === null) {
@@ -1731,7 +1731,7 @@ var At = /* @__PURE__ */ t({
 	55: Q,
 	56: Q,
 	57: Q,
-	62: ne
+	62: te
 }, Mt = { 91: ke }, Nt = {
 	[-2]: J,
 	[-1]: J,
@@ -1743,21 +1743,21 @@ var At = /* @__PURE__ */ t({
 	60: Be,
 	61: yt,
 	95: Z,
-	96: q,
-	126: q
+	96: ce,
+	126: ce
 }, Ft = {
-	38: se,
-	92: G
+	38: oe,
+	92: K
 }, It = {
 	[-5]: lt,
 	[-4]: lt,
 	[-3]: lt,
 	33: at,
-	38: se,
+	38: oe,
 	42: z,
 	60: [U, qe],
 	91: st,
-	92: [Ne, G],
+	92: [Ne, K],
 	93: Ye,
 	95: z,
 	96: me
@@ -2041,25 +2041,25 @@ function nn(e) {
 			autolink: o(J),
 			autolinkProtocol: k,
 			autolinkEmail: k,
-			atxHeading: o(K),
-			blockQuote: o(ae),
+			atxHeading: o(q),
+			blockQuote: o(ie),
 			characterEscape: k,
 			characterReference: k,
-			codeFenced: o(G),
+			codeFenced: o(K),
 			codeFencedFenceInfo: s,
 			codeFencedFenceMeta: s,
-			codeIndented: o(G, s),
-			codeText: o(oe, s),
+			codeIndented: o(K, s),
+			codeText: o(ae, s),
 			codeTextData: k,
 			data: k,
 			codeFlowValue: k,
-			definition: o(se),
+			definition: o(oe),
 			definitionDestinationString: s,
 			definitionLabelString: s,
 			definitionTitleString: s,
-			emphasis: o(ce),
-			hardBreakEscape: o(q),
-			hardBreakTrailing: o(q),
+			emphasis: o(se),
+			hardBreakEscape: o(ce),
+			hardBreakTrailing: o(ce),
 			htmlFlow: o(le, s),
 			htmlFlowData: k,
 			htmlText: o(le, s),
@@ -2076,7 +2076,7 @@ function nn(e) {
 			referenceString: s,
 			resourceDestinationString: s,
 			resourceTitleString: s,
-			setextHeading: o(K),
+			setextHeading: o(q),
 			strong: o(me),
 			thematicBreak: o(ge)
 		},
@@ -2084,14 +2084,14 @@ function nn(e) {
 			atxHeading: u(),
 			atxHeadingSequence: T,
 			autolink: u(),
-			autolinkEmail: ie,
-			autolinkProtocol: re,
+			autolinkEmail: re,
+			autolinkProtocol: ne,
 			blockQuote: u(),
 			characterEscapeValue: A,
-			characterReferenceMarkerHexadecimal: W,
-			characterReferenceMarkerNumeric: W,
-			characterReferenceValue: te,
-			characterReference: ne,
+			characterReferenceMarkerHexadecimal: G,
+			characterReferenceMarkerNumeric: G,
+			characterReferenceValue: ee,
+			characterReference: te,
 			codeFenced: u(b),
 			codeFencedFence: y,
 			codeFencedFenceInfo: _,
@@ -2121,7 +2121,7 @@ function nn(e) {
 			listOrdered: u(),
 			listUnordered: u(),
 			paragraph: u(),
-			referenceString: ee,
+			referenceString: W,
 			resourceDestinationString: B,
 			resourceTitleString: V,
 			resource: H,
@@ -2388,40 +2388,40 @@ function nn(e) {
 	function U() {
 		this.data.referenceType = "collapsed";
 	}
-	function ee(e) {
+	function W(e) {
 		let t = this.resume(), n = this.stack[this.stack.length - 1];
 		n.label = t, n.identifier = g(this.sliceSerialize(e)).toLowerCase(), this.data.referenceType = "full";
 	}
-	function W(e) {
+	function G(e) {
 		this.data.characterReferenceType = e.type;
 	}
-	function te(e) {
+	function ee(e) {
 		let t = this.sliceSerialize(e), n = this.data.characterReferenceType, r;
 		n ? (r = h(t, n === "characterReferenceMarkerNumeric" ? 10 : 16), this.data.characterReferenceType = void 0) : r = c(t);
 		let i = this.stack[this.stack.length - 1];
 		i.value += r;
 	}
-	function ne(e) {
+	function te(e) {
 		let t = this.stack.pop();
 		t.position.end = $(e.end);
 	}
-	function re(e) {
+	function ne(e) {
 		A.call(this, e);
 		let t = this.stack[this.stack.length - 1];
 		t.url = this.sliceSerialize(e);
 	}
-	function ie(e) {
+	function re(e) {
 		A.call(this, e);
 		let t = this.stack[this.stack.length - 1];
 		t.url = "mailto:" + this.sliceSerialize(e);
 	}
-	function ae() {
+	function ie() {
 		return {
 			type: "blockquote",
 			children: []
 		};
 	}
-	function G() {
+	function K() {
 		return {
 			type: "code",
 			lang: null,
@@ -2429,13 +2429,13 @@ function nn(e) {
 			value: ""
 		};
 	}
-	function oe() {
+	function ae() {
 		return {
 			type: "inlineCode",
 			value: ""
 		};
 	}
-	function se() {
+	function oe() {
 		return {
 			type: "definition",
 			identifier: "",
@@ -2444,20 +2444,20 @@ function nn(e) {
 			url: ""
 		};
 	}
-	function ce() {
+	function se() {
 		return {
 			type: "emphasis",
 			children: []
 		};
 	}
-	function K() {
+	function q() {
 		return {
 			type: "heading",
 			depth: 0,
 			children: []
 		};
 	}
-	function q() {
+	function ce() {
 		return { type: "break" };
 	}
 	function le() {
@@ -2648,59 +2648,191 @@ function pn(e) {
 			...r
 		}, /* @__PURE__ */ t.createElement("span", { className: "buzz-button-label" }, e));
 	}
-	function o({ context: e, toggle: r, pressed: i, available: a }) {
-		let o = t.useRef(null), s = t.useId();
-		return t.useEffect(() => {
-			let e = o.current;
-			if (!e || i) return;
-			let t, r, c = !1, l = () => {
-				clearTimeout(t), r?.remove(), r = void 0, e.removeAttribute("aria-describedby");
-			}, u = () => {
-				if (!n || !a() || c || r) return;
-				r = document.createElement("div"), r.className = "buzz-tooltip-positioner", Object.assign(r.style, {
+	function o(e, r, i = !1, a) {
+		let o = t.useId();
+		t.useEffect(() => {
+			let t = e.current;
+			if (!t || i) return;
+			let s, c, l = !1, u = () => {
+				clearTimeout(s), c?.remove(), c = void 0, t.removeAttribute("aria-describedby");
+			}, d = () => {
+				if (!n || a && !a() || l || c) return;
+				c = document.createElement("div"), c.className = "buzz-tooltip-positioner", Object.assign(c.style, {
 					position: "fixed",
 					pointerEvents: "none"
 				});
-				let t = document.createElement("div");
-				t.id = s, t.className = "buzz-tooltip", t.setAttribute("role", "tooltip"), t.setAttribute("data-buzz-ui", ""), t.textContent = "Bookmarks", r.append(t), document.body.append(r);
-				let i = e.getBoundingClientRect(), o = r.getBoundingClientRect(), l = Math.max(8, Math.min(i.left + (i.width - o.width) / 2, window.innerWidth - o.width - 8)), u = i.bottom + 4, d = u + o.height <= window.innerHeight - 8 ? u : Math.max(8, i.top - o.height - 4);
-				Object.assign(r.style, {
-					left: `${l}px`,
-					top: `${d}px`
-				}), e.setAttribute("aria-describedby", s);
-			}, d = () => {
-				!r && !c && (clearTimeout(t), t = setTimeout(u, 250));
+				let e = document.createElement("div");
+				e.id = o, e.className = "buzz-tooltip", e.setAttribute("role", "tooltip"), e.setAttribute("data-buzz-ui", ""), e.textContent = r, c.append(e), document.body.append(c);
+				let i = t.getBoundingClientRect(), s = c.getBoundingClientRect(), u = Math.max(8, Math.min(i.left + (i.width - s.width) / 2, window.innerWidth - s.width - 8)), d = i.bottom + 4, f = d + s.height <= window.innerHeight - 8 ? d : Math.max(8, i.top - s.height - 4);
+				Object.assign(c.style, {
+					left: `${u}px`,
+					top: `${f}px`
+				}), t.setAttribute("aria-describedby", o);
 			}, f = () => {
-				c = !1, d();
+				!c && !l && (clearTimeout(s), s = setTimeout(d, 250));
 			}, p = () => {
-				c = !1, l();
+				l = !1, f();
 			}, m = () => {
-				c || u();
+				l = !1, u();
 			}, h = () => {
-				c = !0, l();
-			}, g = (e) => {
-				e.key === "Tab" && (c = !1), e.key === "Escape" && h();
-			}, _ = {
-				pointerenter: f,
-				pointermove: d,
-				pointerleave: p,
-				focus: m,
-				blur: l,
-				pointerdown: h,
-				click: h
+				l || d();
+			}, g = () => {
+				l = !0, u();
+			}, _ = (e) => {
+				e.key === "Tab" && (l = !1), e.key === "Escape" && g();
+			}, v = {
+				pointerenter: p,
+				pointermove: f,
+				pointerleave: m,
+				focus: h,
+				blur: u,
+				pointerdown: g,
+				click: g
 			};
-			for (let [t, n] of Object.entries(_)) e.addEventListener(t, n);
-			return window.addEventListener("keydown", g), window.addEventListener("scroll", l, !0), window.addEventListener("resize", l), () => {
-				l();
-				for (let [t, n] of Object.entries(_)) e.removeEventListener(t, n);
-				window.removeEventListener("keydown", g), window.removeEventListener("scroll", l, !0), window.removeEventListener("resize", l);
+			for (let [e, n] of Object.entries(v)) t.addEventListener(e, n);
+			return window.addEventListener("keydown", _), window.addEventListener("scroll", u, !0), window.addEventListener("resize", u), () => {
+				u();
+				for (let [e, n] of Object.entries(v)) t.removeEventListener(e, n);
+				window.removeEventListener("keydown", _), window.removeEventListener("scroll", u, !0), window.removeEventListener("resize", u);
 			};
 		}, [
+			e,
+			r,
 			i,
 			a,
-			s
-		]), /* @__PURE__ */ t.createElement("button", {
-			ref: o,
+			o
+		]);
+	}
+	let s = {
+		type: "button",
+		className: "buzz-button",
+		"data-buzz-ui": "",
+		"data-size": "sm",
+		"data-icon-variant": "ghost",
+		"data-icon-size": "sm",
+		"data-icon-shape": "control",
+		"data-variant": "ghost"
+	};
+	function c({ children: e, ...n }) {
+		let r = t.useRef(null);
+		return o(r, "Drag to reorder · Arrow Up/Down", n["aria-disabled"]), /* @__PURE__ */ t.createElement("button", {
+			...s,
+			...n,
+			ref: r
+		}, e);
+	}
+	function l({ item: e, disabled: n, edit: r, remove: i }) {
+		let [a, o] = t.useState(!1), [c, l] = t.useState(0), u = t.useRef(null), d = t.useRef(null), f = t.useId(), p = () => {
+			o(!1), u.current?.focus();
+		};
+		return t.useLayoutEffect(() => {
+			if (!a) return;
+			let e = d.current;
+			e.showPopover?.();
+			let t = u.current.getBoundingClientRect(), n = e.getBoundingClientRect();
+			Object.assign(e.style, {
+				left: `${Math.max(8, Math.min(t.right - n.width, window.innerWidth - n.width - 8))}px`,
+				top: `${t.bottom + 4 + n.height <= window.innerHeight - 8 ? t.bottom + 4 : Math.max(8, t.top - n.height - 4)}px`
+			}), e.querySelector("button")?.focus();
+			let r = () => o(!1);
+			return window.addEventListener("resize", r), window.addEventListener("scroll", r, !0), () => {
+				window.removeEventListener("resize", r), window.removeEventListener("scroll", r, !0);
+			};
+		}, [a]), t.useEffect(() => {
+			n && o(!1);
+		}, [n]), /* @__PURE__ */ t.createElement(t.Fragment, null, /* @__PURE__ */ t.createElement("button", {
+			...s,
+			ref: u,
+			"aria-label": `Actions for ${e.label}`,
+			"aria-haspopup": "menu",
+			"aria-expanded": a,
+			"aria-controls": a ? f : void 0,
+			disabled: n,
+			onClick: () => o(!a),
+			onKeyDown: (e) => {
+				["ArrowDown", "ArrowUp"].includes(e.key) && (e.preventDefault(), o(!0));
+			}
+		}, /* @__PURE__ */ t.createElement("svg", {
+			width: "16",
+			height: "16",
+			viewBox: "0 0 24 24",
+			fill: "none",
+			stroke: "currentColor",
+			strokeWidth: "2",
+			"aria-hidden": "true"
+		}, [
+			5,
+			12,
+			19
+		].map((e) => /* @__PURE__ */ t.createElement("circle", {
+			key: e,
+			cx: e,
+			cy: "12",
+			r: "1"
+		})))), a && /* @__PURE__ */ t.createElement("div", {
+			id: f,
+			ref: d,
+			popover: "auto",
+			role: "menu",
+			"aria-label": `Actions for ${e.label}`,
+			className: "buzz-menu-popup text-body-sm",
+			"data-buzz-ui": "",
+			"data-size": "compact",
+			style: {
+				position: "fixed",
+				margin: 0,
+				inset: "auto",
+				"--available-width": "calc(100vw - 16px)",
+				"--available-height": "calc(100vh - 16px)"
+			},
+			onToggle: (e) => {
+				e.newState === "closed" && o(!1);
+			},
+			onKeyDown: (e) => {
+				if (e.key === "Escape") e.preventDefault(), e.stopPropagation(), p();
+				else if (e.key === "Tab") p();
+				else if ([
+					"ArrowUp",
+					"ArrowDown",
+					"Home",
+					"End"
+				].includes(e.key)) {
+					e.preventDefault();
+					let t = [...e.currentTarget.querySelectorAll("button")], n = t.indexOf(document.activeElement);
+					t[e.key === "Home" ? 0 : e.key === "End" ? t.length - 1 : (n + (e.key === "ArrowDown" ? 1 : -1) + t.length) % t.length]?.focus();
+				}
+			}
+		}, /* @__PURE__ */ t.createElement("button", {
+			type: "button",
+			role: "menuitem",
+			className: "buzz-menu-item",
+			"data-buzz-ui": "",
+			style: { width: "100%" },
+			"data-highlighted": c === 0 ? "" : void 0,
+			onFocus: () => l(0),
+			onPointerEnter: () => l(0),
+			onClick: () => {
+				p(), r();
+			}
+		}, "Edit"), /* @__PURE__ */ t.createElement("button", {
+			type: "button",
+			role: "menuitem",
+			className: "buzz-menu-item",
+			"data-buzz-ui": "",
+			"data-tone": "danger",
+			style: { width: "100%" },
+			"data-highlighted": c === 1 ? "" : void 0,
+			onFocus: () => l(1),
+			onPointerEnter: () => l(1),
+			onClick: () => {
+				p(), i();
+			}
+		}, "Remove")));
+	}
+	function u({ context: e, toggle: r, pressed: i, available: a }) {
+		let s = t.useRef(null);
+		return o(s, "Bookmarks", i, a), /* @__PURE__ */ t.createElement("button", {
+			ref: s,
 			tabIndex: 0,
 			type: "button",
 			className: "buzz-button",
@@ -2727,119 +2859,210 @@ function pn(e) {
 			"aria-hidden": "true"
 		}, /* @__PURE__ */ t.createElement("path", { d: "M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4" })));
 	}
-	function s({ session: e, channelId: n, active: o }) {
-		let s = t.useSyncExternalStore(e.channels.subscribeList, e.channels.list).channels.find((e) => e.id === n), c = !!s && !s.cached && !!s.members?.includes(e.viewer ?? ""), l = c && !s.archived && !s.readOnly && e.canvas.available, [u, d] = t.useState(), [f, p] = t.useState(!1), [m, h] = t.useState(""), [g, _] = t.useState(!1), [v, y] = t.useState(), [b, x] = t.useState(""), [S, C] = t.useState(""), w = t.useId(), T = t.useId(), E = t.useRef(0), D = t.useRef(!1), O = t.useRef({
+	function d({ session: e, channelId: n, active: o }) {
+		let s = t.useSyncExternalStore(e.channels.subscribeList, e.channels.list).channels.find((e) => e.id === n), u = !!s && !s.cached && !!s.members?.includes(e.viewer ?? ""), d = u && !s.archived && !s.readOnly && e.canvas.available, [f, p] = t.useState(), [m, h] = t.useState(!1), [g, _] = t.useState(""), [v, y] = t.useState(), [b, x] = t.useState(!1), [S, C] = t.useState(""), [w, T] = t.useState(""), E = t.useRef(null), [D, O] = t.useState(null), [k, A] = t.useState(""), j = t.useId(), M = t.useId(), N = t.useRef(0), P = t.useRef(!1), F = t.useRef({
 			active: o,
-			canRead: c,
-			canWrite: l
+			canRead: u,
+			canWrite: d
 		});
-		O.current = {
+		F.current = {
 			active: o,
-			canRead: c,
-			canWrite: l
+			canRead: u,
+			canWrite: d
 		};
-		let k = t.useRef(null), A = t.useRef(null);
+		let I = t.useRef(null), L = t.useRef(null);
 		t.useLayoutEffect(() => {
-			A.current && !A.current.isConnected && document.activeElement === document.body && k.current?.focus(), A.current = null;
+			b && I.current?.focus();
+		}, [b, v]);
+		let R = t.useRef(null);
+		t.useLayoutEffect(() => {
+			R.current && !R.current.isConnected && document.activeElement === document.body && (I.current ?? L.current)?.focus(), R.current = null;
 		});
-		let j = t.useCallback((e) => E.current === e && O.current.active() && O.current.canRead, []), M = t.useCallback(async () => {
-			if (D.current || !O.current.active() || !O.current.canRead) return;
-			let t = ++E.current;
-			D.current = !0, p(!0), h("");
+		let z = t.useCallback((e) => N.current === e && F.current.active() && F.current.canRead, []), B = t.useCallback(async () => {
+			if (P.current || !F.current.active() || !F.current.canRead) return;
+			let t = ++N.current;
+			P.current = !0, h(!0), _("");
 			try {
 				let r = await e.canvas.read(n), i = un(r?.content ?? "").items;
-				if (!j(t)) return;
-				d({
+				return z(t) ? (p({
 					content: r?.content ?? "",
 					id: r?.id,
 					items: i
-				}), y(void 0), _(!1);
+				}), y(void 0), !0) : void 0;
 			} catch (e) {
-				j(t) && (d(void 0), h(String(e)));
+				z(t) && (p(void 0), _(String(e)));
 			} finally {
-				t === E.current && (D.current = !1, p(!1));
+				t === N.current && (P.current = !1, h(!1));
 			}
 		}, [
 			e,
 			n,
-			j
+			z
 		]);
-		t.useEffect(() => (c && M(), () => {
-			E.current++, D.current = !1;
-		}), [M, c]);
-		async function N(t, r = !1) {
-			if (!u || D.current || g || !O.current.active() || !O.current.canWrite) return;
-			let i = document.activeElement, a = ++E.current;
-			D.current = !0, p(!0), h("");
+		t.useEffect(() => (u && B(), () => {
+			N.current++, P.current = !1;
+		}), [B, u]);
+		async function V(t, r = !1) {
+			if (!f || P.current || !F.current.active() || !F.current.canWrite) return;
+			let i = document.activeElement, a = ++N.current;
+			P.current = !0, h(!0), _("");
 			try {
-				let o = dn(u.content, t), s = await e.canvas.save(n, o, u.id, { preserveApproval: !0 });
-				if (!j(a)) return;
-				A.current = i, d({
+				let o = dn(f.content, t), s = await e.canvas.save(n, o, f.id, { preserveApproval: !0 });
+				if (!z(a)) return;
+				R.current = i, p({
 					content: s.content,
 					id: s.id,
 					items: un(s.content).items
-				}), y(void 0), r && (x(""), C(""));
+				}), y(void 0), A("Bookmarks saved."), r && (C(""), T(""), x(!1));
 			} catch (e) {
-				if (j(a)) {
-					let t = e?.name === "CanvasConflictError";
-					_(t), h(t ? "Canvas changed elsewhere. Refresh before saving again. Your input is kept." : `Couldn’t save. ${e?.message ?? String(e)}`);
+				if (z(a)) {
+					if (A(""), e?.name === "CanvasConflictError") {
+						P.current = !1;
+						let e = await B();
+						F.current.active() && F.current.canRead && _(e ? "Bookmarks changed elsewhere. The latest links are loaded and your input is kept. Review them before trying again." : "Couldn’t load the latest bookmarks. Retry before saving. Your input is kept.");
+					} else _(`Couldn’t save. ${e?.message ?? String(e)}`);
 				}
 			} finally {
-				a === E.current && (D.current = !1, p(!1));
+				a === N.current && (P.current = !1, h(!1));
 			}
 		}
-		function P(e, t) {
-			let n = [...u.items], r = n[e + t];
-			r && ([n[e], n[e + t]] = [r, n[e]], N(n));
+		function H(e, t) {
+			if (e === t || t < 0 || t >= f.items.length || v !== void 0) return;
+			let n = [...f.items], [r] = n.splice(e, 1);
+			n.splice(t, 0, r), A(`Moving ${r.label} to position ${t + 1} of ${n.length}.`), V(n);
 		}
-		if (!c) return /* @__PURE__ */ t.createElement("p", { role: "status" }, "Bookmarks are unavailable until channel access is confirmed.");
-		let F = f || !u || g || !l;
+		function U() {
+			E.current = null, O(null);
+		}
+		if (!u) return /* @__PURE__ */ t.createElement("p", { role: "status" }, "Bookmarks are unavailable until channel access is confirmed.");
+		let W = m || !f || !d;
 		return /* @__PURE__ */ t.createElement("section", {
 			"aria-label": "Channel bookmarks",
-			"aria-busy": f,
+			"aria-busy": m,
 			style: {
 				...r,
 				padding: "var(--space-panel-inset)",
 				minWidth: 0
 			}
-		}, /* @__PURE__ */ t.createElement("p", null, "Shared links for this channel. Refresh to load other members’ changes."), /* @__PURE__ */ t.createElement("div", { style: i }, /* @__PURE__ */ t.createElement(a, {
-			ref: k,
-			disabled: f,
-			onClick: () => void M()
-		}, "Refresh bookmarks")), f && /* @__PURE__ */ t.createElement("p", { role: "status" }, "Loading or saving bookmarks…"), m && /* @__PURE__ */ t.createElement("p", { role: "alert" }, m), u && !u.items.length && /* @__PURE__ */ t.createElement("p", null, "No bookmarks yet. Add a link below."), u?.items.map((e, n) => /* @__PURE__ */ t.createElement("div", {
+		}, m && /* @__PURE__ */ t.createElement("p", { role: "status" }, "Loading or saving bookmarks…"), g && /* @__PURE__ */ t.createElement("p", { role: "alert" }, g), !m && !f && g && /* @__PURE__ */ t.createElement(a, { onClick: () => void B() }, "Retry loading bookmarks"), f && !f.items.length && /* @__PURE__ */ t.createElement("p", null, "No bookmarks yet."), /* @__PURE__ */ t.createElement("span", {
+			role: "status",
+			className: "sr-only"
+		}, k), f?.items.map((e, n) => /* @__PURE__ */ t.createElement("div", {
 			key: e.url,
-			style: r
-		}, /* @__PURE__ */ t.createElement("a", {
+			"data-bookmark-index": n,
+			style: {
+				display: "flex",
+				alignItems: "center",
+				gap: "var(--space-2)",
+				paddingBlock: "var(--space-2)",
+				borderBottom: "1px solid var(--border-standard)",
+				background: D === n ? "var(--surface-inset)" : void 0
+			}
+		}, d && f.items.length > 1 && /* @__PURE__ */ t.createElement(c, {
+			"aria-label": `Reorder ${e.label}`,
+			"aria-description": "Drag to reorder, or use Arrow Up and Arrow Down.",
+			"aria-disabled": W || v !== void 0,
+			style: {
+				touchAction: "none",
+				cursor: W || v !== void 0 ? "default" : "grab",
+				userSelect: "none"
+			},
+			onKeyDown: (e) => {
+				if (e.key === "Escape" && E.current) {
+					e.preventDefault(), e.stopPropagation(), U();
+					return;
+				}
+				W || v !== void 0 || E.current || !["ArrowUp", "ArrowDown"].includes(e.key) || (e.preventDefault(), H(n, n + (e.key === "ArrowUp" ? -1 : 1)));
+			},
+			onPointerDown: (e) => {
+				!W && v === void 0 && e.button === 0 && e.isPrimary && (e.currentTarget.focus(), e.currentTarget.setPointerCapture(e.pointerId), E.current = {
+					from: n,
+					to: n,
+					head: f,
+					pointerId: e.pointerId
+				});
+			},
+			onPointerMove: (e) => {
+				let t = E.current;
+				if (!t || t.pointerId !== e.pointerId) return;
+				let n = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-bookmark-index]"), r = e.currentTarget.closest("section"), i = n && r?.contains(n) ? Number(n.dataset.bookmarkIndex) : null;
+				t.to = i, O(i);
+			},
+			onPointerUp: (e) => {
+				let t = E.current;
+				t && t.pointerId === e.pointerId && (U(), t.head === f && t.to !== null && !W && H(t.from, t.to));
+			},
+			onPointerCancel: U,
+			onLostPointerCapture: U,
+			onBlur: U
+		}, /* @__PURE__ */ t.createElement("svg", {
+			width: "16",
+			height: "16",
+			viewBox: "0 0 24 24",
+			fill: "none",
+			stroke: "currentColor",
+			strokeWidth: "2",
+			"aria-hidden": "true"
+		}, [
+			5,
+			12,
+			19
+		].flatMap((e) => [9, 15].map((n) => /* @__PURE__ */ t.createElement("circle", {
+			key: `${n}-${e}`,
+			cx: n,
+			cy: e,
+			r: "1"
+		}))))), /* @__PURE__ */ t.createElement("div", { style: {
+			display: "flex",
+			flexDirection: "column",
+			gap: "var(--space-1)",
+			minWidth: 0,
+			flex: 1
+		} }, /* @__PURE__ */ t.createElement("a", {
 			href: e.url,
 			target: "_blank",
 			rel: "noopener noreferrer",
-			style: { overflowWrap: "anywhere" }
-		}, e.label), l && /* @__PURE__ */ t.createElement("div", { style: i }, /* @__PURE__ */ t.createElement(a, {
-			disabled: F,
-			"aria-label": `Edit ${e.label}`,
-			onClick: () => {
-				y(n), x(e.label), C(e.url);
+			style: {
+				overflowWrap: "anywhere",
+				color: "var(--text-link)",
+				textDecoration: "underline",
+				fontSize: "var(--text-label)",
+				lineHeight: "var(--text-label--line-height)",
+				letterSpacing: "var(--text-label--letter-spacing)",
+				fontWeight: "var(--text-label--font-weight)"
 			}
-		}, "Edit"), /* @__PURE__ */ t.createElement(a, {
-			disabled: F || v !== void 0 || n === 0,
-			"aria-label": `Move ${e.label} up`,
-			onClick: () => P(n, -1)
-		}, "Move up"), /* @__PURE__ */ t.createElement(a, {
-			disabled: F || v !== void 0 || n === u.items.length - 1,
-			"aria-label": `Move ${e.label} down`,
-			onClick: () => P(n, 1)
-		}, "Move down"), /* @__PURE__ */ t.createElement(a, {
-			disabled: F || v !== void 0,
-			"aria-label": `Remove ${e.label}`,
-			onClick: () => void N(u.items.filter((e, t) => t !== n))
-		}, "Remove")))), l && /* @__PURE__ */ t.createElement("form", {
+		}, e.label), /* @__PURE__ */ t.createElement("span", {
+			title: e.url,
+			style: {
+				overflowWrap: "anywhere",
+				color: "var(--text-metadata)",
+				fontSize: "var(--text-caption)",
+				lineHeight: "var(--text-caption--line-height)",
+				letterSpacing: "var(--text-caption--letter-spacing)",
+				fontWeight: "var(--text-caption--font-weight)"
+			}
+		}, new URL(e.url).host)), d && /* @__PURE__ */ t.createElement(l, {
+			item: e,
+			disabled: W || v !== void 0,
+			edit: () => {
+				y(n), C(e.label), T(e.url), x(!0);
+			},
+			remove: () => void V(f.items.filter((e, t) => t !== n))
+		}))), d && !b && /* @__PURE__ */ t.createElement(a, {
+			ref: L,
+			primary: !0,
+			disabled: W,
+			onClick: () => {
+				y(void 0), C(""), T(""), x(!0);
+			}
+		}, "Add bookmark"), d && b && /* @__PURE__ */ t.createElement("form", {
 			style: r,
 			onSubmit: (e) => {
-				if (e.preventDefault(), !F && u) try {
-					let e = ln(b, S), t = [...u.items];
-					v === void 0 ? t.push(e) : t[v] = e, N(t, !0);
+				if (e.preventDefault(), !W && f) try {
+					let e = ln(S, w), t = [...f.items];
+					v === void 0 ? t.push(e) : t[v] = e, V(t, !0);
 				} catch (e) {
-					h(String(e));
+					_(String(e));
 				}
 			}
 		}, /* @__PURE__ */ t.createElement("div", {
@@ -2847,45 +3070,46 @@ function pn(e) {
 			"data-buzz-ui": "",
 			style: r
 		}, /* @__PURE__ */ t.createElement("label", {
-			htmlFor: w,
+			htmlFor: j,
 			className: "buzz-field-label"
 		}, "Bookmark name"), /* @__PURE__ */ t.createElement("input", {
-			id: w,
+			ref: I,
+			id: j,
 			className: "buzz-input",
 			"data-buzz-ui": "",
 			"data-size": "md",
-			value: b,
-			disabled: f,
-			onChange: (e) => x(e.target.value)
+			value: S,
+			disabled: m,
+			onChange: (e) => C(e.target.value)
 		})), /* @__PURE__ */ t.createElement("div", {
 			className: "buzz-field",
 			"data-buzz-ui": "",
 			style: r
 		}, /* @__PURE__ */ t.createElement("label", {
-			htmlFor: T,
+			htmlFor: M,
 			className: "buzz-field-label"
 		}, "Bookmark URL"), /* @__PURE__ */ t.createElement("input", {
-			id: T,
+			id: M,
 			className: "buzz-input",
 			"data-buzz-ui": "",
 			"data-size": "md",
-			value: S,
-			disabled: f,
-			onChange: (e) => C(e.target.value)
-		})), /* @__PURE__ */ t.createElement("div", { style: i }, v !== void 0 && /* @__PURE__ */ t.createElement(a, {
-			disabled: f,
-			onClick: () => {
-				y(void 0), x(""), C("");
+			value: w,
+			disabled: m,
+			onChange: (e) => T(e.target.value)
+		})), /* @__PURE__ */ t.createElement("div", { style: i }, /* @__PURE__ */ t.createElement(a, {
+			disabled: m,
+			onClick: (e) => {
+				R.current = e.currentTarget, x(!1), y(void 0), C(""), T(""), _(""), L.current?.focus();
 			}
-		}, "Cancel edit"), /* @__PURE__ */ t.createElement(a, {
+		}, "Cancel"), /* @__PURE__ */ t.createElement(a, {
 			type: "submit",
 			primary: !0,
-			disabled: F
+			disabled: W
 		}, v === void 0 ? "Add bookmark" : "Save bookmark"))));
 	}
-	function c({ channelContext: r }) {
+	function f({ channelContext: r }) {
 		let i = t.useSyncExternalStore(e.relay.subscribe, e.relay.snapshot), a = t.useCallback(() => n && e.relay.snapshot() === i, [i]);
-		return !r || i.status !== "ready" || i.scope !== r.scope ? /* @__PURE__ */ t.createElement("p", { role: "status" }, "Connect to this channel to view bookmarks.") : /* @__PURE__ */ t.createElement(s, {
+		return !r || i.status !== "ready" || i.scope !== r.scope ? /* @__PURE__ */ t.createElement("p", { role: "status" }, "Connect to this channel to view bookmarks.") : /* @__PURE__ */ t.createElement(d, {
 			key: `${i.scope}:${i.generation}:${r.channelId}`,
 			session: i.session,
 			channelId: r.channelId,
@@ -2896,9 +3120,9 @@ function pn(e) {
 		id: "bookmarks",
 		title: "Bookmarks",
 		matches: () => !1,
-		channelLauncher: o,
+		channelLauncher: u,
 		channelPlacement: "side",
-		component: c
+		component: f
 	});
 }
 //#endregion

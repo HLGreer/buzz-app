@@ -10,18 +10,36 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { apply } from "../dist/plugin.js";
 import { readBookmarks } from "./model";
 
 afterEach(cleanup);
-function fixture() {
+// jsdom supplies popover's hidden default but not its native opening API.
+const nativeShowPopover = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "showPopover",
+);
+beforeAll(() => {
+  if (!nativeShowPopover)
+    Object.defineProperty(HTMLElement.prototype, "showPopover", {
+      configurable: true,
+      value() {
+        this.style.display = "block";
+      },
+    });
+});
+afterAll(() => {
+  if (!nativeShowPopover) delete HTMLElement.prototype.showPopover;
+});
+function fixture(extraLinks = "") {
   let registration;
   let dispose;
   let head = {
     id: "one",
     content:
-      "# Notes\nKeep me.\n\n## Channel bookmarks\n- [Docs](https://example.com/docs)\n",
+      "# Notes\nKeep me.\n\n## Channel bookmarks\n- [Docs](https://example.com/docs)\n" +
+      extraLinks,
   };
   let list = {
     channels: [
@@ -94,6 +112,8 @@ function fixture() {
   };
 }
 async function fill(user, label, url) {
+  if (!screen.queryByRole("textbox", { name: "Bookmark name" }))
+    await user.click(screen.getByRole("button", { name: "Add bookmark" }));
   await user.clear(screen.getByRole("textbox", { name: "Bookmark name" }));
   await user.type(
     screen.getByRole("textbox", { name: "Bookmark name" }),
@@ -133,25 +153,26 @@ it("adds, edits, reorders, and removes shared links while preserving other Canva
   await fill(user, "API", "https://example.com/api");
   await user.click(screen.getByRole("button", { name: "Add bookmark" }));
   await screen.findByRole("link", { name: "API" });
-  await user.click(screen.getByRole("button", { name: "Edit API" }));
+  await user.click(screen.getByRole("button", { name: "Actions for API" }));
+  await user.click(screen.getByRole("menuitem", { name: "Edit" }));
   await fill(user, "Reference", "https://example.com/ref");
   await user.click(screen.getByRole("button", { name: "Save bookmark" }));
   await screen.findByRole("link", { name: "Reference" });
-  await user.click(screen.getByRole("button", { name: "Move Reference up" }));
+  screen.getByRole("button", { name: "Reorder Reference" }).focus();
+  await user.keyboard("{ArrowUp}");
   await waitFor(() =>
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
       ["Reference", "Docs"],
     ),
   );
-  await user.click(screen.getByRole("button", { name: "Remove Docs" }));
+  await user.click(screen.getByRole("button", { name: "Actions for Docs" }));
+  await user.click(screen.getByRole("menuitem", { name: "Remove" }));
   await waitFor(() =>
     expect(
       screen.queryByRole("link", { name: "Docs" }),
     ).not.toBeInTheDocument(),
   );
-  expect(
-    screen.getByRole("button", { name: "Refresh bookmarks" }),
-  ).toHaveFocus();
+  expect(screen.getByRole("button", { name: "Add bookmark" })).toHaveFocus();
   expect(readBookmarks(f.head().content).items).toEqual([
     { label: "Reference", url: "https://example.com/ref" },
   ]);
@@ -168,13 +189,11 @@ it("preserves typed input on conflict and reloads the latest Canvas before resub
   f.changeHead();
   await user.click(screen.getByRole("button", { name: "Add bookmark" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Canvas changed elsewhere",
+    "Bookmarks changed elsewhere",
   );
   expect(screen.getByRole("textbox", { name: "Bookmark name" })).toHaveValue(
     "API",
   );
-  expect(screen.getByRole("button", { name: "Add bookmark" })).toBeDisabled();
-  await user.click(screen.getByRole("button", { name: "Refresh bookmarks" }));
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Add bookmark" })).toBeEnabled(),
   );
@@ -192,7 +211,7 @@ it("keeps read-only links but hides editing and revoked data", async () => {
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
   expect(f.canvas.save).not.toHaveBeenCalled();
 });
-it("keeps failed input and ignores a detached read", async () => {
+it("keeps failed input after a save failure", async () => {
   const f = fixture();
   const user = userEvent.setup();
   await screen.findByRole("link", { name: "Docs" });
@@ -203,17 +222,6 @@ it("keeps failed input and ignores a detached read", async () => {
   expect(screen.getByRole("textbox", { name: "Bookmark name" })).toHaveValue(
     "API",
   );
-  let release;
-  f.canvas.read.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        release = resolve;
-      }),
-  );
-  await user.click(screen.getByRole("button", { name: "Refresh bookmarks" }));
-  cleanup();
-  await act(async () => release(f.head()));
-  expect(screen.queryByRole("region")).not.toBeInTheDocument();
 });
 
 it("uses the host tooltip bubble and dismisses it on leave, Escape, click, and unmount", async () => {
@@ -276,4 +284,111 @@ it("cancels a pending hint when its launcher unmounts", () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("reloads on reopening, supports retry after a failed load, and ignores a detached read", async () => {
+  const f = fixture();
+  await screen.findByRole("link", { name: "Docs" });
+  expect(
+    screen.queryByRole("button", { name: "Refresh bookmarks" }),
+  ).not.toBeInTheDocument();
+  const Panel = f.registration.component;
+  cleanup();
+  f.canvas.read.mockRejectedValueOnce(new Error("Offline"));
+  const props = {
+    channelContext: { scope: "primary:viewer", channelId: "alpha" },
+  };
+  render(<Panel {...props} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Offline");
+  const user = userEvent.setup();
+  await user.click(
+    screen.getByRole("button", { name: "Retry loading bookmarks" }),
+  );
+  await screen.findByRole("link", { name: "Docs" });
+  expect(f.canvas.read).toHaveBeenCalledTimes(3);
+  cleanup();
+  let release;
+  f.canvas.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  render(<Panel {...props} />);
+  expect(f.canvas.read).toHaveBeenCalledTimes(4);
+  cleanup();
+  await act(async () => release(f.head()));
+  expect(screen.queryByRole("region")).not.toBeInTheDocument();
+});
+
+it("drops across positions once and cancels Escape, pointer cancellation, and outside drops", async () => {
+  const f = fixture(
+    "- [API](https://example.com/api)\n- [Guide](https://example.com/guide)\n",
+  );
+  await screen.findByRole("link", { name: "Guide" });
+  const handle = screen.getByRole("button", { name: "Reorder Docs" });
+  handle.setPointerCapture = vi.fn();
+  const original = document.elementFromPoint;
+  const hit = vi.fn(() => screen.getByRole("link", { name: "Guide" }));
+  document.elementFromPoint = hit;
+  const start = () => {
+    fireEvent.pointerDown(handle, { pointerId: 1, isPrimary: true, button: 0 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 20, clientY: 30 });
+  };
+  try {
+    start();
+    const cancelKey = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(handle, cancelKey);
+    expect(cancelKey.defaultPrevented).toBe(true);
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(f.canvas.save).not.toHaveBeenCalled();
+    start();
+    fireEvent.pointerCancel(handle, { pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(f.canvas.save).not.toHaveBeenCalled();
+    start();
+    hit.mockReturnValueOnce(null);
+    fireEvent.pointerMove(handle, { pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(f.canvas.save).not.toHaveBeenCalled();
+    start();
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    await waitFor(() =>
+      expect(readBookmarks(f.head().content).items.map((x) => x.label)).toEqual(
+        ["API", "Guide", "Docs"],
+      ),
+    );
+    expect(f.canvas.save).toHaveBeenCalledTimes(1);
+  } finally {
+    document.elementFromPoint = original;
+  }
+});
+
+it("keeps the editor collapsed, displays domains, and restores focus after cancelling and closing actions", async () => {
+  fixture();
+  await screen.findByRole("link", { name: "Docs" });
+  expect(screen.getByText("example.com")).toBeVisible();
+  expect(
+    screen.queryByText("https://example.com/docs"),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Drag a handle/)).not.toBeInTheDocument();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Add bookmark" }));
+  expect(screen.getByRole("textbox", { name: "Bookmark name" })).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Add bookmark" })).toHaveFocus();
+  const actions = screen.getByRole("button", { name: "Actions for Docs" });
+  await user.click(actions);
+  expect(screen.getByRole("menuitem", { name: "Edit" })).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  expect(screen.getByRole("menuitem", { name: "Remove" })).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(actions).toHaveFocus();
 });
