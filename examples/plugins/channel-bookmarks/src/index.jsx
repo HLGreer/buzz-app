@@ -20,7 +20,7 @@ export function apply(ctx) {
     gap: "var(--space-1)",
   };
   // External plugins use the host's exposed control roles and layout tokens.
-  function Button({ children, primary = false, ...props }) {
+  function Button({ children, primary = false, disabled = false, ...props }) {
     return (
       <button
         type="button"
@@ -30,6 +30,8 @@ export function apply(ctx) {
         data-variant={primary ? "prominent" : "subtle"}
         data-button-shape="capsule"
         {...props}
+        disabled={disabled}
+        data-disabled={disabled ? "" : undefined}
       >
         <span className="buzz-button-label">{children}</span>
       </button>
@@ -147,7 +149,14 @@ export function apply(ctx) {
     const trigger = React.useRef(null);
     useHint(trigger, "Drag to reorder · Arrow Up/Down", props["aria-disabled"]);
     return (
-      <button {...iconProps} {...props} ref={trigger}>
+      <button
+        {...iconProps}
+        {...props}
+        ref={trigger}
+        data-disabled={
+          props.disabled || props["aria-disabled"] ? "" : undefined
+        }
+      >
         {children}
       </button>
     );
@@ -194,6 +203,7 @@ export function apply(ctx) {
           aria-expanded={open}
           aria-controls={open ? id : undefined}
           disabled={disabled}
+          data-disabled={disabled ? "" : undefined}
           onClick={() => setOpen(!open)}
           onKeyDown={(event) => {
             if (["ArrowDown", "ArrowUp"].includes(event.key)) {
@@ -408,8 +418,7 @@ export function apply(ctx) {
         const items = readBookmarks(head?.content ?? "").items;
         if (!valid(generation)) return;
         setSaved({ content: head?.content ?? "", id: head?.id, items });
-        setEditing(undefined);
-        return true;
+        return items;
       } catch (reason) {
         if (valid(generation)) {
           setSaved(undefined);
@@ -470,7 +479,10 @@ export function apply(ctx) {
             if (current.current.active() && current.current.canRead)
               setError(
                 loaded
-                  ? "Bookmarks changed elsewhere. The latest links are loaded and your input is kept. Review them before trying again."
+                  ? editing !== undefined &&
+                    !loaded.some((item) => item.url === editing)
+                    ? "The bookmark you were editing no longer exists at its original URL. Your input is kept. Cancel this edit to add a new bookmark."
+                    : "Bookmarks changed elsewhere. The latest links are loaded and your input is kept. Review them before trying again."
                   : "Couldn’t load the latest bookmarks. Retry before saving. Your input is kept.",
               );
           } else
@@ -670,7 +682,7 @@ export function apply(ctx) {
                 item={item}
                 disabled={disabled || editing !== undefined}
                 edit={() => {
-                  setEditing(index);
+                  setEditing(item.url);
                   setLabel(item.label);
                   setUrl(item.url);
                   setFormOpen(true);
@@ -707,7 +719,16 @@ export function apply(ctx) {
                 const item = bookmark(label, url);
                 const items = [...saved.items];
                 if (editing === undefined) items.push(item);
-                else items[editing] = item;
+                else {
+                  const index = items.findIndex(
+                    (savedItem) => savedItem.url === editing,
+                  );
+                  if (index < 0)
+                    throw new Error(
+                      "The bookmark you were editing no longer exists. Cancel this edit to add a new bookmark.",
+                    );
+                  items[index] = item;
+                }
                 void save(items, true);
               } catch (reason) {
                 setError(String(reason));
@@ -767,7 +788,9 @@ export function apply(ctx) {
       </section>
     );
   }
-  function Panel({ channelContext }) {
+  function Panel({ channelContext, close }) {
+    const closeTrigger = React.useRef(null);
+    useHint(closeTrigger, "Close bookmarks");
     const state = React.useSyncExternalStore(
       ctx.relay.subscribe,
       ctx.relay.snapshot,
@@ -776,21 +799,67 @@ export function apply(ctx) {
       () => enabled && ctx.relay.snapshot() === state,
       [state],
     );
-    if (
-      !channelContext ||
-      state.status !== "ready" ||
-      state.scope !== channelContext.scope
-    )
-      return <p role="status">Connect to this channel to view bookmarks.</p>;
+    const connected =
+      channelContext &&
+      state.status === "ready" &&
+      state.scope === channelContext.scope;
     return (
-      <Editor
-        key={`${state.scope}:${state.generation}:${channelContext.channelId}`}
-        session={state.session}
-        channelId={channelContext.channelId}
-        active={active}
-      />
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          minHeight: 0,
+          minWidth: 0,
+        }}
+      >
+        <header data-buzz-ui="" className="panel-header">
+          <div className="panel-header-title">
+            <div className="panel-header-label">
+              <h2>Bookmarks</h2>
+            </div>
+          </div>
+          <div className="panel-header-actions">
+            <button
+              {...iconProps}
+              ref={closeTrigger}
+              aria-label="Close bookmarks"
+              onClick={close}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M18 6l-12 12M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </header>
+        <div
+          data-bookmarks-scroll=""
+          style={{ flex: 1, minHeight: 0, overflow: "auto" }}
+        >
+          {connected ? (
+            <Editor
+              key={`${state.scope}:${state.generation}:${channelContext.channelId}`}
+              session={state.session}
+              channelId={channelContext.channelId}
+              active={active}
+            />
+          ) : (
+            <p role="status">Connect to this channel to view bookmarks.</p>
+          )}
+        </div>
+      </div>
     );
   }
+
   ctx.panels.register({
     id: "bookmarks",
     title: "Bookmarks",

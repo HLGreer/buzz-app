@@ -95,12 +95,10 @@ function fixture(extraLinks = "") {
     registration,
     dispose: () => dispose(),
     head: () => head,
-    changeHead: () => {
-      head = {
-        ...head,
-        id: "external",
-        content: `${head.content}\n## Other\nConcurrent notes.\n`,
-      };
+    changeHead: (
+      transform = (content) => `${content}\n## Other\nConcurrent notes.\n`,
+    ) => {
+      head = { ...head, id: "external", content: transform(head.content) };
     },
     access: (change) =>
       act(() => {
@@ -391,4 +389,90 @@ it("keeps the editor collapsed, displays domains, and restores focus after cance
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   expect(actions).toHaveFocus();
+});
+
+it("preserves edit identity and changed URL after a conflicting reorder", async () => {
+  const f = fixture("- [Guide](https://example.com/guide)\n");
+  const user = userEvent.setup();
+  await screen.findByRole("link", { name: "Docs" });
+  await user.click(screen.getByRole("button", { name: "Actions for Docs" }));
+  await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+  await fill(user, "Reference", "https://example.com/reference");
+  f.changeHead(
+    () =>
+      "# Notes\nConcurrent notes.\n\n## Channel bookmarks\n- [Guide](https://example.com/guide)\n- [Docs](https://example.com/docs)\n",
+  );
+  await user.click(screen.getByRole("button", { name: "Save bookmark" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("latest links");
+  expect(screen.getByRole("textbox", { name: "Bookmark name" })).toHaveValue(
+    "Reference",
+  );
+  await user.click(screen.getByRole("button", { name: "Save bookmark" }));
+  await screen.findByRole("link", { name: "Reference" });
+  expect(readBookmarks(f.head().content).items.map((x) => x.label)).toEqual([
+    "Guide",
+    "Reference",
+  ]);
+  expect(f.head().content).toContain("Concurrent notes.");
+});
+it("keeps a removed edit as an edit and prevents adding it accidentally", async () => {
+  const f = fixture();
+  const user = userEvent.setup();
+  await screen.findByRole("link", { name: "Docs" });
+  await user.click(screen.getByRole("button", { name: "Actions for Docs" }));
+  await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+  await fill(user, "Reference", "https://example.com/reference");
+  f.changeHead(() => "# Notes\nConcurrent removal.\n");
+  await user.click(screen.getByRole("button", { name: "Save bookmark" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "no longer exists",
+  );
+  await user.click(screen.getByRole("button", { name: "Save bookmark" }));
+  expect(f.canvas.save).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("textbox", { name: "Bookmark name" })).toHaveValue(
+    "Reference",
+  );
+});
+it("supplies the shared disabled marker during a held save", async () => {
+  const f = fixture("- [Guide](https://example.com/guide)\n");
+  const user = userEvent.setup();
+  await screen.findByRole("link", { name: "Docs" });
+  await fill(user, "API", "https://example.com/api");
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const save = f.canvas.save.getMockImplementation();
+  f.canvas.save.mockImplementationOnce(async (...args) => {
+    await pending;
+    return save(...args);
+  });
+  try {
+    await user.click(screen.getByRole("button", { name: "Add bookmark" }));
+    expect(f.canvas.save).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "Add bookmark" }),
+    ).toHaveAttribute("data-disabled");
+    expect(
+      screen.getByRole("button", { name: "Actions for Docs" }),
+    ).toHaveAttribute("data-disabled");
+    expect(
+      screen.getByRole("button", { name: "Reorder Docs" }),
+    ).toHaveAttribute("data-disabled");
+  } finally {
+    release();
+  }
+  await screen.findByRole("link", { name: "API" });
+});
+it("always exposes the host close action, including disconnected panes", async () => {
+  const f = fixture();
+  await screen.findByRole("link", { name: "Docs" });
+  cleanup();
+  const close = vi.fn();
+  const Panel = f.registration.component;
+  render(<Panel close={close} />);
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: "Close bookmarks" }));
+  expect(close).toHaveBeenCalledTimes(1);
 });

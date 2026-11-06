@@ -2637,7 +2637,7 @@ function pn(e) {
 		alignItems: "center",
 		gap: "var(--space-1)"
 	};
-	function a({ children: e, primary: n = !1, ...r }) {
+	function a({ children: e, primary: n = !1, disabled: r = !1, ...i }) {
 		return /* @__PURE__ */ t.createElement("button", {
 			type: "button",
 			"data-buzz-ui": "",
@@ -2645,7 +2645,9 @@ function pn(e) {
 			"data-size": "sm",
 			"data-variant": n ? "prominent" : "subtle",
 			"data-button-shape": "capsule",
-			...r
+			...i,
+			disabled: r,
+			"data-disabled": r ? "" : void 0
 		}, /* @__PURE__ */ t.createElement("span", { className: "buzz-button-label" }, e));
 	}
 	function o(e, r, i = !1, a) {
@@ -2718,7 +2720,8 @@ function pn(e) {
 		return o(r, "Drag to reorder · Arrow Up/Down", n["aria-disabled"]), /* @__PURE__ */ t.createElement("button", {
 			...s,
 			...n,
-			ref: r
+			ref: r,
+			"data-disabled": n.disabled || n["aria-disabled"] ? "" : void 0
 		}, e);
 	}
 	function l({ item: e, disabled: n, edit: r, remove: i }) {
@@ -2748,6 +2751,7 @@ function pn(e) {
 			"aria-expanded": a,
 			"aria-controls": a ? f : void 0,
 			disabled: n,
+			"data-disabled": n ? "" : void 0,
 			onClick: () => o(!a),
 			onKeyDown: (e) => {
 				["ArrowDown", "ArrowUp"].includes(e.key) && (e.preventDefault(), o(!0));
@@ -2888,7 +2892,7 @@ function pn(e) {
 					content: r?.content ?? "",
 					id: r?.id,
 					items: i
-				}), y(void 0), !0) : void 0;
+				}), i) : void 0;
 			} catch (e) {
 				z(t) && (p(void 0), _(String(e)));
 			} finally {
@@ -2919,7 +2923,7 @@ function pn(e) {
 					if (A(""), e?.name === "CanvasConflictError") {
 						P.current = !1;
 						let e = await B();
-						F.current.active() && F.current.canRead && _(e ? "Bookmarks changed elsewhere. The latest links are loaded and your input is kept. Review them before trying again." : "Couldn’t load the latest bookmarks. Retry before saving. Your input is kept.");
+						F.current.active() && F.current.canRead && _(e ? v !== void 0 && !e.some((e) => e.url === v) ? "The bookmark you were editing no longer exists at its original URL. Your input is kept. Cancel this edit to add a new bookmark." : "Bookmarks changed elsewhere. The latest links are loaded and your input is kept. Review them before trying again." : "Couldn’t load the latest bookmarks. Retry before saving. Your input is kept.");
 					} else _(`Couldn’t save. ${e?.message ?? String(e)}`);
 				}
 			} finally {
@@ -3045,7 +3049,7 @@ function pn(e) {
 			item: e,
 			disabled: W || v !== void 0,
 			edit: () => {
-				y(n), C(e.label), T(e.url), x(!0);
+				y(e.url), C(e.label), T(e.url), x(!0);
 			},
 			remove: () => void V(f.items.filter((e, t) => t !== n))
 		}))), d && !b && /* @__PURE__ */ t.createElement(a, {
@@ -3060,7 +3064,13 @@ function pn(e) {
 			onSubmit: (e) => {
 				if (e.preventDefault(), !W && f) try {
 					let e = ln(S, w), t = [...f.items];
-					v === void 0 ? t.push(e) : t[v] = e, V(t, !0);
+					if (v === void 0) t.push(e);
+					else {
+						let n = t.findIndex((e) => e.url === v);
+						if (n < 0) throw Error("The bookmark you were editing no longer exists. Cancel this edit to add a new bookmark.");
+						t[n] = e;
+					}
+					V(t, !0);
 				} catch (e) {
 					_(String(e));
 				}
@@ -3107,14 +3117,46 @@ function pn(e) {
 			disabled: W
 		}, v === void 0 ? "Add bookmark" : "Save bookmark"))));
 	}
-	function f({ channelContext: r }) {
-		let i = t.useSyncExternalStore(e.relay.subscribe, e.relay.snapshot), a = t.useCallback(() => n && e.relay.snapshot() === i, [i]);
-		return !r || i.status !== "ready" || i.scope !== r.scope ? /* @__PURE__ */ t.createElement("p", { role: "status" }, "Connect to this channel to view bookmarks.") : /* @__PURE__ */ t.createElement(d, {
-			key: `${i.scope}:${i.generation}:${r.channelId}`,
-			session: i.session,
+	function f({ channelContext: r, close: i }) {
+		let a = t.useRef(null);
+		o(a, "Close bookmarks");
+		let c = t.useSyncExternalStore(e.relay.subscribe, e.relay.snapshot), l = t.useCallback(() => n && e.relay.snapshot() === c, [c]), u = r && c.status === "ready" && c.scope === r.scope;
+		return /* @__PURE__ */ t.createElement("div", { style: {
+			display: "flex",
+			flexDirection: "column",
+			height: "100%",
+			minHeight: 0,
+			minWidth: 0
+		} }, /* @__PURE__ */ t.createElement("header", {
+			"data-buzz-ui": "",
+			className: "panel-header"
+		}, /* @__PURE__ */ t.createElement("div", { className: "panel-header-title" }, /* @__PURE__ */ t.createElement("div", { className: "panel-header-label" }, /* @__PURE__ */ t.createElement("h2", null, "Bookmarks"))), /* @__PURE__ */ t.createElement("div", { className: "panel-header-actions" }, /* @__PURE__ */ t.createElement("button", {
+			...s,
+			ref: a,
+			"aria-label": "Close bookmarks",
+			onClick: i
+		}, /* @__PURE__ */ t.createElement("svg", {
+			width: "16",
+			height: "16",
+			viewBox: "0 0 24 24",
+			fill: "none",
+			stroke: "currentColor",
+			strokeWidth: "2",
+			strokeLinecap: "round",
+			"aria-hidden": "true"
+		}, /* @__PURE__ */ t.createElement("path", { d: "M18 6l-12 12M6 6l12 12" }))))), /* @__PURE__ */ t.createElement("div", {
+			"data-bookmarks-scroll": "",
+			style: {
+				flex: 1,
+				minHeight: 0,
+				overflow: "auto"
+			}
+		}, u ? /* @__PURE__ */ t.createElement(d, {
+			key: `${c.scope}:${c.generation}:${r.channelId}`,
+			session: c.session,
 			channelId: r.channelId,
-			active: a
-		});
+			active: l
+		}) : /* @__PURE__ */ t.createElement("p", { role: "status" }, "Connect to this channel to view bookmarks.")));
 	}
 	e.panels.register({
 		id: "bookmarks",
